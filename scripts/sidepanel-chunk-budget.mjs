@@ -95,9 +95,15 @@ if (requestedBrowsers.some((browser) => !browser)) {
 // baseline is set to the CI measurement per convention to stay green on both
 // runtimes. Same-build measurements under node@22.23.1: firstChatScreen gzip
 // 125600 (cap raised below from 125500), all other chunks inside budget.
+// Refreshed for the Browser Harness settings surface (P1-T3, e4dcc34): the 31
+// mirrored zh-CN/en labels join the shared locale resource tree, while the
+// interactive settings implementation remains a separate lazy route chunk.
+// Local Node-24 measurement: initial shell 384043 raw / 117312 gzip; first
+// chat screen 414299 raw / 127351 gzip; HarnessBridgeSubPage 9348 raw / 3194
+// gzip. Apply the existing encoder allowance to both shared-graph gzip caps.
 // The initial shell is sidepanel.html's entry script plus every static modulepreload.
 const BASELINE = Object.freeze({
-  initialShell: { raw: 378_292, gzip: 115_558 },
+  initialShell: { raw: 384_043, gzip: 117_312 },
   routeChunks: {
     ChatPage: { raw: 134_938, gzip: 40_056 },
     CapabilitiesPage: { raw: 160_137, gzip: 35_259 },
@@ -161,7 +167,10 @@ const BUDGET = Object.freeze({
     raw: BASELINE.initialShell.raw,
     gzip: BASELINE.initialShell.gzip + GZIP_ENCODER_VARIANCE_BYTES,
   },
-  firstChatScreen: { raw: 408_548, gzip: 125_600 },
+  firstChatScreen: {
+    raw: 414_299,
+    gzip: 127_351 + GZIP_ENCODER_VARIANCE_BYTES,
+  },
   richRendererIncrement: { raw: 120_000, gzip: 36_000 },
   routeChunks: {
     ChatPage: { raw: 25_000, gzip: 8_000 },
@@ -178,6 +187,7 @@ const BUDGET = Object.freeze({
     SettingsPage: { raw: 45_000, gzip: 14_000 },
     GeneralSubPage: { raw: 5_000, gzip: 2_500 },
     ApiSubPage: { raw: 8_000, gzip: 3_500 },
+    HarnessBridgeSubPage: { raw: 12_000, gzip: 5_000 },
     PromptSubPage: { raw: 14_000, gzip: 5_000 },
     VoiceSubPage: { raw: 5_000, gzip: 2_500 },
     AppearanceSubPage: { raw: 8_000, gzip: 3_500 },
