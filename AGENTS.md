@@ -23,6 +23,8 @@ Chrome, Edge, and Firefox on desktop are the only supported product targets. And
 - `docs/archives/deepseek-pp-reliability-compatibility-refactor/analysis/project-overview.md` — confirmed PC-only scope and compatibility boundary established by the completed refactor.
 - `docs/archives/deepseek-pp-reliability-compatibility-refactor/analysis/module-inventory.md` and `docs/archives/deepseek-pp-reliability-compatibility-refactor/analysis/risk-assessment.md` — final architecture evidence and risk basis for that run.
 - `docs/compatibility/README.md` and its linked registries — stable prompt, runtime, persistence, browser, integration, and historical-data contracts established by the completed refactor.
+- `docs/decisions/web-harness-model-broker.md` — accepted Mode A architecture: local DeepSeek Harness owns the agent loop while DeepSeek++ brokers the logged-in web model.
+- `docs/plan/` and `docs/progress/MASTER.md` — active `feature/web-harness` implementation plan and evidence-backed status. Planned behavior is not a released compatibility claim.
 - `docs/archives/deepseek-pp-reliability-compatibility-refactor/plan/task-breakdown.md` and `docs/archives/deepseek-pp-reliability-compatibility-refactor/plan/dependency-graph.md` — archived task ownership, dependencies, and execution lanes.
 - `package.json`, `wxt.config.ts`, and GitHub workflows — executable build, test, manifest, and release contracts.
 - `docs/releases/<version>.md` — exact public release/update notes for that version.
@@ -66,6 +68,16 @@ When prose and executable behavior disagree, verify the code and tests, then upd
 - **工具执行单一路径**：pi 桥接工具（`core/inline-agent/pi/tool-bridge.ts`）只通过注入的授权执行路径（background grant）向下调用；调用 source 必须携带与 grant 绑定的 requestId/chatSessionId；不得发明第二条执行路径。
 - **AGENT_* 事件协议受契约测试保护**：`tests/inline-agent-event-protocol-golden.test.ts` 是 inline agent 页面协议的逐字节基线（含全量工具记录载荷）；任何 loop 引擎变更必须保持该测试全绿。
 - **pi 生态技能只走现有导入管线（B3 起）**：pi/agentskills.io 生态的 SKILL.md 目录经既有 local-import 管线导入（`core/skill/local-importer.ts` 的 `parseSkillDoc` 是 SKILL.md 解析单一真源；`core/skill/pi-importer.ts` 是显式桥接面）；禁止 import `@earendil-works/*` harness（skill 加载器/prompt 格式化器零引用——pi 模板不得进入 wire，`tests/pi-skill-importer.test.ts` grep 断言）；技能内容只进现有 Skill 存储（无新持久化键）；`disable-model-invocation` 等 pi 字段仅 metadata 保留，启停语义归应用。
+
+### DeepSeek Web Harness 集成
+
+- Mode A 由本机 DeepSeek Harness 独占 agent loop、会话、工具、Skill、子 Agent 与取消生命周期；DeepSeek++ 仅代理当前已登录浏览器内的 DeepSeek 网页模型。既有浏览器内 Pi loop 是 Mode B，必须继续兼容，禁止用 Mode B 冒充 Mode A。
+- 浏览器代理必须复用 `DeepSeekAutomationClient` 与 `stream-codec`，不得复制网页 SSE、PoW、认证或会话逻辑；Cookie、Authorization、PoW 输入输出和网页私有请求不得离开扩展。
+- P0 传输固定为仅监听 `127.0.0.1` 的 authenticated WebSocket 和严格版本化、可关联、可取消、可恢复查询的流协议。不得改用 Cookie 抓取、CDP/UI 自动化、MCP wrapper、Native Messaging 或官方 API 回退来绕过该合同。
+- DSH 集成优先使用其公开 `LlmAdapter`、插件和 profile 扩展点，在本仓库维护 out-of-tree adapter/bundle；不把 `deepseek-harness` 设为 submodule，不修改其 fork `master`，不复制 Harness 核心。
+- 浏览器不可用时必须返回可恢复的 `waiting_for_browser`；结果不明的断线请求标为 ambiguous，不自动重放，不伪造完成。模式 A 的本地工具权限由 DSH 独占，Browser Broker 不新增 shell 或文件能力。
+- 每个实现任务必须交付对应代码、合同/单元测试和实际执行证据。不要把通用审计、无关重构、提前发布包装或 PR #568 混入模型代理主线；PR #568 只在独立 integration lane 验证。
+
 ## Security Baseline
 
 - Never hardcode secrets, API keys, credentials, or tokens.
