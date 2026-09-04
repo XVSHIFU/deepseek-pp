@@ -72,7 +72,7 @@
 |:--|:--|:--|:--|
 | M0 Protocol + fake Broker | 纯 TypeScript 版本化协议、严格 codec、fake browser/fake Broker 纵切片 | `verified` | 握手/认证、生成、增量、唯一终态、幂等取消、状态查询、预算和未知字段拒绝均有自动化测试 |
 | M1 Browser Broker | DeepSeek++ 建立 authenticated loopback WebSocket，并委托现有网页客户端 | `verified` | 只连 `127.0.0.1`；凭据不越界；模式 B 行为/chunk 不变 |
-| M2 DSH adapter + profile | out-of-tree `deepseek-web` LLM adapter、profile 与最小安装 bundle | `not_started` | DSH 可显式选择 `provider=deepseek-web`；无隐式 provider fallback；不修改 DSH `master` |
+| M2 DSH adapter + profile | out-of-tree `deepseek-web` LLM adapter、profile 与最小安装 bundle | `in_progress` | DSH 可显式选择 `provider=deepseek-web`；无隐式 provider fallback；不修改 DSH `master` |
 | M3 Real one-turn | 本机 DSH 经已登录浏览器完成一次真实网页模型回合 | `not_started` | 无 DeepSeek API key/其他 provider；流正常结束；最终文本进入同一 DSH session |
 | M4 Local-tool multi-turn | 网页模型请求 DSH 本地只读搜索/读取工具，结果进入下一模型回合并返回最终结果 | `not_started` | 首个完整 P0 验收通过；工具只执行一次且可审计，DSH 始终拥有 loop authority |
 | M5 Disconnect/cancel/recovery | 浏览器离线、取消、断连、重连查询和不明结果处理 | `not_started` | 离线=`waiting_for_browser`；取消幂等；`ambiguous` 不自动重放；唯一终态可重复查询 |
@@ -91,7 +91,7 @@
 | P1 | P1-T1 | DeepSeek++ Browser Broker 连接、配对与生命周期 | `—` | `—` | `release_gap_audit`; review: orchestration | `verified` |
 | P1 | P1-T2 | Broker 委托 `DeepSeekAutomationClient`/`stream-codec`，并隔离模式 B chunk | `—` | `—` | `deepseek_sampling_audit`, `release_gap_audit`; review: `protocol_v1_review` | `verified` |
 | P1 | P1-T3 | Browser Broker 组合、配置与可见状态 | `—` | `—` | `release_gap_audit`; review: `protocol_v1_review`, `p1_t3_final_review` | `verified` |
-| P2 | P2-T1 | out-of-tree DSH `deepseek-web` LLM adapter | `TBD` | `TBD` | `TBD` | `not_started` |
+| P2 | P2-T1 | out-of-tree DSH `deepseek-web` LLM adapter | `—` | `—` | `dsh_adapter_implement`; review: `dsh_api_surface` | `verified` |
 | P2 | P2-T2 | DSH profile、显式 provider 选择与最小安装 bundle | `TBD` | `TBD` | `TBD` | `not_started` |
 | P2 | P2-T3 | 实际 `dsh` 入口到 fake browser peer 的单轮闭环 | `TBD` | `TBD` | `TBD` | `not_started` |
 | P3 | P3-T1 | 无 API key 的真实网页单回合 E2E | `TBD` | `TBD` | `TBD` | `not_started` |
@@ -140,13 +140,13 @@
 
 ## 当前状态与下一步
 
-**当前状态**：架构决策 `docs/decisions/web-harness-model-broker.md` 已接受，模式 A 是唯一主开发线。M0 已由提交 `a9dab85`、`eaebb4a`、`9cbe43b` 完整冻结。P1-T1 已由提交 `4d111e6` 完成 MV3 可重建的 WebSocket client；P1-T2 已由提交 `ac87871` 完成不依赖 Pi 的网页模型 Turn Adapter；P1-T3 已由提交 `781d029`、`e4dcc34`、`e712fec` 将二者组合进 Background，并交付默认关闭、browser-local 配对设置、可见状态、显式重连、authority epoch 隔离和按需加载的设置页。M1 Browser Broker 已完成自动化、独立复核和 Chrome/Edge/Firefox 构建验证。当前尚未接入本机 DSH，也未执行真实网页模型 E2E。reasoning 不允许进入历史消息，只能在双边显式协商后作为 `retention: ephemeral` 的流事件出现。模式 B 只保持兼容，当前分支没有 release 授权。
+**当前状态**：架构决策 `docs/decisions/web-harness-model-broker.md` 已接受，模式 A 是唯一主开发线。M0 已由提交 `a9dab85`、`eaebb4a`、`9cbe43b` 完整冻结。P1-T1 已由提交 `4d111e6` 完成 MV3 可重建的 WebSocket client；P1-T2 已由提交 `ac87871` 完成不依赖 Pi 的网页模型 Turn Adapter；P1-T3 已由提交 `781d029`、`e4dcc34`、`e712fec` 将二者组合进 Background，并交付默认关闭、browser-local 配对设置、可见状态、显式重连、authority epoch 隔离和按需加载的设置页。M1 Browser Broker 已完成自动化、独立复核和 Chrome/Edge/Firefox 构建验证。P2-T1 已实现并验证 out-of-tree `deepseek-web/current-web-session` `LlmAdapter`：使用 Harness `0.1.2-rc.1` 正式 exports、零模型重试、严格 request digest、DSH chunk 映射，以及取消后的 Browser 权威终态和 cleanup gate。当前还未装配生产 Cordis Host service/profile，因此 M2 尚未完成，也未执行真实网页模型 E2E。reasoning 不允许进入历史消息，只能在双边显式协商后作为 `retention: ephemeral` 的流事件出现。模式 B 只保持兼容，当前分支没有 release 授权。
 
 **立即下一步**：
 
-1. 进入 P2-T1：实现 out-of-tree DSH `deepseek-web` LLM adapter，只依赖 Harness 正式 exports，并将 Broker 事件映射为 DSH stream。
-2. 完成 P2-T2：建立 allowlist 式独立 Harness bundle/profile，唯一 provider 为 `deepseek-web`，不修改 DSH `master`。
-3. 继续严格按 M2 → M3 → M4 推进假模型 DSH 纵切片、真实网页单回合和本地只读工具多回合。PR #568 与 release 工作继续隔离。
+1. 进入 P2-T2：建立 allowlist 式独立 Harness bundle/profile，提供生产 Cordis Host 生命周期，唯一 provider 为 `deepseek-web`，不修改 DSH `master`。
+2. 完成 P2-T3：从实际 `dsh` 入口经真实 loopback transport 到 fake browser peer，验证单轮 session durable flush。
+3. 继续严格按 M2 → M3 → M4 推进真实网页单回合和本地只读工具多回合。PR #568 与 release 工作继续隔离。
 
 ## 活动验证记录
 
@@ -178,3 +178,5 @@
 | 2026-09-04 | P1-T3 build | 提交 `e4dcc34` 的无特殊字符 detached worktree：`npm run build:all` | `passed` | Chrome MV3、Edge MV3、Firefox MV3 全部构建成功；复用同一锁定依赖，无产品代码差异 |
 | 2026-09-04 | P1-T3 build | `npm run verify:manifest-policy`; `npm run verify:extension-utf8`; `npm run verify:sidepanel-chunks` | `passed` | 三端 manifest、177 个构建文件编码和全部 Side Panel chunk 通过；Harness 设置独立 lazy chunk 为 9348 raw / 3194 gzip |
 | 2026-09-04 | Repository gate | `npm test` | `not_run` | P1-T3 按任务定向验证；Batch A 全仓门禁按计划在 P2-T3 合并后统一执行，上一条已记录的 4 个 Windows/基线问题仍未声称修复 |
+| 2026-09-04 | P2-T1 | `npx vitest run tests/dsh-llm-deepseek-web.test.ts` | `passed` | 根复验 1 file / 19 tests；覆盖正式 Cordis/LLM 注册、metadata、零重试、完整 digest golden、流块顺序、reasoning 丢弃、唯一 usage/terminal、工具终态一致性、Browser 权威取消终态、cleanup gate、无 API key 与禁止 deep import |
+| 2026-09-04 | P2-T1 | `npm run build --workspace @deepseek-pp/dsh-llm-deepseek-web --if-present`; `npm run compile`; `git diff --check` | `passed` | 精确锁定 `@deepseek-ai/dsh-llm@0.1.2-rc.1` 与 `@deepseek-ai/cordis@4.0.2`，lock 含 registry integrity；独立 reviewer 复核无 blocker/high/medium。生产 Host service、profile 和外部安装闭环按计划归 P2-T2 |

@@ -1,0 +1,28 @@
+{
+  "name": "@deepseek-pp/dsh-llm-deepseek-web",
+  "version": "0.0.0-private",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "4.0.2",
+    "@deepseek-ai/dsh-llm": "0.1.2-rc.1"
+  },
+  "dependencies": {
+    "@deepseek-pp/dsh-web-model-transport": "0.0.0-private",
+    "@deepseek-pp/web-model-protocol": "0.0.0-private"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.2",
+    "@deepseek-ai/dsh-llm": "0.1.2-rc.1"
+  }
+}
