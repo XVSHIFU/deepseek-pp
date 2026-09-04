@@ -13,13 +13,13 @@ import {
   MAX_TOOLS,
   MAX_VERSION_LENGTH,
   PROTOCOL_VERSION,
-} from "./constants";
+} from "./constants.ts";
 import type {
   BridgeCapabilities,
   ModelEvent,
   ModelTerminalEvent,
   WebModelFrame,
-} from "./types";
+} from "./types.ts";
 import {
   ProtocolValidationError,
   arrayValue,
@@ -35,7 +35,7 @@ import {
   record,
   stringValue,
   utf8ByteLength,
-} from "./validation";
+} from "./validation.ts";
 
 const hasOwn = (value: object, key: string): boolean => Object.prototype.hasOwnProperty.call(value, key);
 

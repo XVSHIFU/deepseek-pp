@@ -21,7 +21,7 @@ import {
 } from "@deepseek-pp/web-model-protocol";
 import WebSocket, { WebSocketServer, type RawData } from "ws";
 
-import { AsyncQueue, deferred, type Deferred } from "./async-queue.js";
+import { AsyncQueue, deferred, type Deferred } from "./async-queue.ts";
 import {
   BrokerError,
   type BrokerCancelRequest,
@@ -30,7 +30,7 @@ import {
   type BrokerQueryRequest,
   type BrokerQueryResult,
   type DeepSeekWebBroker,
-} from "./broker.js";
+} from "./broker.ts";
 import {
   LOOPBACK_HOST,
   WEB_MODEL_PATH,
@@ -39,7 +39,7 @@ import {
   assertPairingToken,
   pairingTokenMatches,
   validateUpgradeRequest,
-} from "./security.js";
+} from "./security.ts";
 
 const DEFAULT_AUTH_TIMEOUT_MS = 2_000;
 const DEFAULT_HEARTBEAT_TIMEOUT_MS = 30_000;

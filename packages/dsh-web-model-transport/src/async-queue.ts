@@ -1,9 +1,12 @@
 export class AsyncQueue<T> {
   private readonly values: T[] = [];
   private readonly waiters: Array<(result: IteratorResult<T>) => void> = [];
+  private readonly maximumBufferedValues: number;
   private closed = false;
 
-  constructor(private readonly maximumBufferedValues: number) {}
+  constructor(maximumBufferedValues: number) {
+    this.maximumBufferedValues = maximumBufferedValues;
+  }
 
   push(value: T): boolean {
     if (this.closed) return false;

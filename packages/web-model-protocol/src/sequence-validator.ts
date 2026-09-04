@@ -1,4 +1,4 @@
-import { decodeWebModelFrame, isTerminalEvent, validateWebModelFrame } from "./codec";
+import { decodeWebModelFrame, isTerminalEvent, validateWebModelFrame } from "./codec.ts";
 import type {
   BridgeCapabilities,
   ModelEvent,
@@ -7,7 +7,7 @@ import type {
   ModelStatusResponse,
   ModelTerminalEvent,
   WebModelFrame,
-} from "./types";
+} from "./types.ts";
 
 export type ProtocolSender = "browser" | "host";
 

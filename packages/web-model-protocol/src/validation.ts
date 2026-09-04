@@ -4,8 +4,8 @@ import {
   MAX_OBJECT_PROPERTIES,
   MAX_STRUCTURE_DEPTH,
   MAX_STRUCTURE_NODES,
-} from "./constants";
-import type { JsonObject, JsonValue } from "./types";
+} from "./constants.ts";
+import type { JsonObject, JsonValue } from "./types.ts";
 
 export type ProtocolValidationCode =
   | "ARRAY_TOO_LONG"
