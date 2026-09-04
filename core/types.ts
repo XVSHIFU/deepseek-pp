@@ -31,6 +31,7 @@ import type {
   MultimodalMediaAnalyzeRequest as MultimodalMediaAnalyzeRequestType,
 } from './multimodal/media';
 import type { VoiceSettings as VoiceSettingsType } from './voice/settings';
+import type { HarnessBridgeStatusResult } from './harness-bridge/coordinator';
 import type {
   ToolCall as GenericToolCall,
   ToolPayload,
@@ -653,6 +654,7 @@ export type MessageAction =
   | { type: 'SAVE_OFFICIAL_API_CHAT_CONFIG'; payload: Partial<OfficialApiChatConfigType> }
   | { type: 'TOOL_CALL_EXECUTED'; payload: ToolCall }
   | { type: 'MEMORIES_UPDATED' }
+  | { type: 'HARNESS_BRIDGE_STATUS_CHANGED'; payload: HarnessBridgeStatusResult }
   | { type: 'WEBDAV_TEST'; payload: SyncCommandTarget }
   | { type: 'WEBDAV_UPLOAD_LOCAL'; payload: SyncCommandTarget }
   | { type: 'WEBDAV_DOWNLOAD_REMOTE'; payload: SyncCommandTarget }

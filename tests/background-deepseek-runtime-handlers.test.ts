@@ -31,8 +31,11 @@ import {
   createMultimodalRuntimeHandlers,
   type MultimodalRuntimeHandlerDependencies,
 } from '../entrypoints/background/multimodal-handlers';
+import { createHarnessBridgeRuntimeHandlers } from '../entrypoints/background/harness-bridge-handlers';
 
 const R43_COMMANDS = [
+  'GET_HARNESS_BRIDGE_STATUS',
+  'UPDATE_HARNESS_BRIDGE_SETTINGS',
   'GET_DEEPSEEK_API_KEY_STATUS',
   'SAVE_DEEPSEEK_API_KEY',
   'CLEAR_DEEPSEEK_API_KEY',
@@ -52,6 +55,7 @@ const R43_COMMANDS = [
 ] as const;
 
 const R43_PAYLOAD_COMMANDS = [
+  'UPDATE_HARNESS_BRIDGE_SETTINGS',
   'SAVE_DEEPSEEK_API_KEY',
   'SAVE_MULTIMODAL_SETTINGS',
   'ANALYZE_MULTIMODAL_MEDIA',
@@ -73,8 +77,9 @@ const extensionContext: RuntimeMessageContext = {
 };
 
 describe('R4.3 DeepSeek runtime ownership', () => {
-  it('creates exactly the assigned 16 typed handlers and eight receiving decoders', () => {
+  it('creates exactly the assigned 18 typed handlers and nine receiving decoders', () => {
     const handlers = createDeepSeekRuntimeHandlers({
+      harnessBridge: createHarnessBridgeDependencies(),
       auth: createAuthDependencies(),
       multimodal: createMultimodalDependencies(),
       chat: {
@@ -86,8 +91,8 @@ describe('R4.3 DeepSeek runtime ownership', () => {
     });
     const types = handlers.map((handler) => handler.type);
 
-    expect(types).toHaveLength(16);
-    expect(new Set(types).size).toBe(16);
+    expect(types).toHaveLength(18);
+    expect(new Set(types).size).toBe(18);
     expect([...types].sort()).toEqual([...R43_COMMANDS].sort());
     expect(Object.keys(DEEPSEEK_RUNTIME_PAYLOAD_DECODERS).sort())
       .toEqual([...R43_PAYLOAD_COMMANDS].sort());
@@ -95,6 +100,26 @@ describe('R4.3 DeepSeek runtime ownership', () => {
 
     const background = readFileSync('entrypoints/background.ts', 'utf8');
     for (const type of R43_COMMANDS) expect(background).not.toContain(`case '${type}'`);
+  });
+
+  it('strictly decodes extension-only bridge updates and never returns the pairing token', async () => {
+    const dependencies = createHarnessBridgeDependencies();
+    const handlers = createHarnessBridgeRuntimeHandlers(dependencies);
+    const payload = { enabled: true, port: 43_123, pairingToken: 'A'.repeat(43) };
+
+    const response = await dispatch(handlers, { type: 'UPDATE_HARNESS_BRIDGE_SETTINGS', payload });
+    expect(dependencies.coordinator.updateSettings).toHaveBeenCalledWith(payload);
+    expect(JSON.stringify(response)).not.toContain(payload.pairingToken);
+    await expect(dispatch(handlers, {
+      type: 'UPDATE_HARNESS_BRIDGE_SETTINGS',
+      payload: { ...payload, host: 'localhost' },
+    })).rejects.toThrow('harness_bridge_settings_corrupt');
+
+    const contentContext = { ...extensionContext, surface: 'deepseek_content' as const };
+    await expect(dispatch(handlers, { type: 'GET_HARNESS_BRIDGE_STATUS' }, contentContext))
+      .resolves.toEqual({ ok: false, error: 'harness_bridge_extension_context_required' });
+    await expect(dispatch(handlers, { type: 'UPDATE_HARNESS_BRIDGE_SETTINGS', payload }, contentContext))
+      .resolves.toEqual({ ok: false, error: 'harness_bridge_extension_context_required' });
   });
 
   it('keeps malformed multimodal input in the released domain response family', async () => {
@@ -132,6 +157,7 @@ describe('R4.3 DeepSeek runtime ownership', () => {
     const chatDependencies = createChatDependencies();
     const service = createChatRuntimeService(chatDependencies);
     const handlers = createDeepSeekRuntimeHandlers({
+      harnessBridge: createHarnessBridgeDependencies(),
       auth: createAuthDependencies(),
       multimodal: createMultimodalDependencies(),
       chat: {
@@ -174,6 +200,7 @@ describe('R4.3 DeepSeek runtime ownership', () => {
     const chatDependencies = createChatDependencies();
     vi.mocked(chatDependencies.getChatEnabled).mockResolvedValue(false);
     const handlers = createDeepSeekRuntimeHandlers({
+      harnessBridge: createHarnessBridgeDependencies(),
       auth: createAuthDependencies(),
       multimodal: createMultimodalDependencies(),
       chat: {
@@ -820,6 +847,28 @@ function createExportDependencies(): ConversationExportRuntimeHandlerDependencie
     generatingMessage: vi.fn(() => 'Generating'),
     cancelledMessage: vi.fn(() => 'Export cancelled'),
     emptyHistoryMessage: vi.fn(() => 'Empty history'),
+  };
+}
+
+function createHarnessBridgeDependencies() {
+  return {
+    coordinator: {
+      getStatus: vi.fn(async () => ({
+        ok: true as const,
+        settings: { version: 1 as const, enabled: false, port: 43_123, pairingTokenConfigured: false },
+        state: { phase: 'stopped' as const, attempt: 0 },
+      })),
+      updateSettings: vi.fn(async (patch: { enabled: boolean; port: number; pairingToken?: string }) => ({
+        ok: true as const,
+        settings: {
+          version: 1 as const,
+          enabled: patch.enabled,
+          port: patch.port,
+          pairingTokenConfigured: patch.pairingToken !== undefined,
+        },
+        state: { phase: patch.enabled ? 'connecting' as const : 'stopped' as const, attempt: patch.enabled ? 1 : 0 },
+      })),
+    },
   };
 }
 

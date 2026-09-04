@@ -1,20 +1,20 @@
 # Runtime Command Name Inventory
 
-Compatibility-run baseline: v1.10.0, commit `165ec46`, with 119 live-router names and 89 `MessageAction` names. Current authority includes the MCP Capability Plane settings contract. This annex is the name-level authority for `RT-001`; it freezes the 129 live names and 98 declared names while documenting, rather than accepting, the router/union split.
+Compatibility-run baseline: v1.10.0, commit `165ec46`, with 119 live-router names and 89 `MessageAction` names. Current authority includes the MCP Capability Plane settings contract and the browser-local Harness bridge control plane. This annex is the name-level authority for `RT-001`; it freezes the 133 live names and 101 declared names while documenting, rather than accepting, the router/union split.
 
 ## Invariants
 
-- The production registry owns 129 live commands exactly once through typed handlers; no transitional case or legacy router remains.
-- `core/types.ts::MessageAction` declares 98 unique command names.
-- Ninety-six names are shared, 33 are live-router-only, and two are declared-only.
+- The production registry owns 133 live commands exactly once through typed handlers; no transitional case or legacy router remains.
+- `core/types.ts::MessageAction` declares 101 unique command and notification names.
+- Ninety-eight names are shared, 35 are live-router-only, and three are declared-only.
 - A live name and its legal behavior remain compatible until an explicit migration changes the contract.
 - `TOOL_CALL_EXECUTED` and `MEMORIES_UPDATED` are client-only notifications, not live background commands; direct background dispatch rejects them with `runtime_command_unknown`.
 - R3.1 / #351 establishes the typed handler seam and explicit unknown-command failure. R4.1–R4.4 migrate their exact `61 / 32 / 16 / 18` command slices without changing the frozen live-name surface.
 - The ownership ledger below is authoritative for cutover scope. A live command appears exactly once; a task must not absorb a command assigned to another Issue.
 
-The production ownership model and the cutover ledger serve different purposes. `core/messaging/runtime-command-contracts.ts` is the single 131-name metadata and current-owner authority (`129 typed / 0 legacy / 2 client-only`), consumed by the dispatch registry; the sections below retain historical migration ownership (`2 / 61 / 32 / 16 / 18`). Contract tests fail on a duplicate, missing, or cross-owner name.
+The production ownership model and the cutover ledger serve different purposes. `core/messaging/runtime-command-contracts.ts` is the single 136-name metadata and current-owner authority (`133 typed / 0 legacy / 3 client-only`), consumed by the dispatch registry; the sections below retain migration ownership (`2 / 63 / 32 / 18 / 18`). Contract tests fail on a duplicate, missing, or cross-owner name.
 
-## Replanned Cutover Ownership — 129 Live Commands
+## Replanned Cutover Ownership — 133 Live Commands
 
 ### R3.1 / #351 — Typed seam bootstrap (2)
 
@@ -128,9 +128,11 @@ CLEAR_TOOL_CALL_HISTORY
 GET_PLATFORM_CAPABILITIES
 ```
 
-### R4.3 / #362 — DeepSeek, chat, multimodal, and export (16)
+### R4.3 / #362 — DeepSeek, chat, multimodal, export, and Harness bridge (18)
 
 ```text
+GET_HARNESS_BRIDGE_STATUS
+UPDATE_HARNESS_BRIDGE_SETTINGS
 GET_DEEPSEEK_API_KEY_STATUS
 SAVE_DEEPSEEK_API_KEY
 CLEAR_DEEPSEEK_API_KEY
@@ -172,11 +174,13 @@ SCENARIOS_UPDATED
 EXPORT_DIAGNOSTIC_LOGS
 ```
 
-`TOOL_CALL_EXECUTED` and `MEMORIES_UPDATED` remain declared-only compatibility records. They are not counted in the 129 live command owners and R3.1 must classify them explicitly rather than invent handlers.
+`TOOL_CALL_EXECUTED` and `MEMORIES_UPDATED` remain declared-only compatibility records. They are not counted in the 133 live command owners and R3.1 must classify them explicitly rather than invent handlers.
 
-## Live Background Router — 131
+## Live Background Router — 133
 
 ```text
+GET_HARNESS_BRIDGE_STATUS
+UPDATE_HARNESS_BRIDGE_SETTINGS
 GET_MEMORIES
 GET_MEMORY_BY_ID
 SAVE_MEMORY
@@ -310,7 +314,7 @@ RUN_AUTOMATION_NOW
 SCENARIOS_UPDATED
 ```
 
-## Declared `MessageAction` Union — 100
+## Declared `MessageAction` Union — 101
 
 ```text
 GET_MEMORIES
@@ -399,6 +403,7 @@ GET_OFFICIAL_API_CHAT_CONFIG
 SAVE_OFFICIAL_API_CHAT_CONFIG
 TOOL_CALL_EXECUTED
 MEMORIES_UPDATED
+HARNESS_BRIDGE_STATUS_CHANGED
 WEBDAV_TEST
 WEBDAV_UPLOAD_LOCAL
 WEBDAV_DOWNLOAD_REMOTE
@@ -415,9 +420,11 @@ GET_MCP_REQUEST_TIMEOUT
 SET_MCP_REQUEST_TIMEOUT
 ```
 
-## Live Router Only — 33
+## Live Router Only — 35
 
 ```text
+GET_HARNESS_BRIDGE_STATUS
+UPDATE_HARNESS_BRIDGE_SETTINGS
 TOUCH_MEMORIES
 REQUEST_MCP_SERVER_PERMISSION
 TEST_MCP_SERVER_CONNECTION
@@ -453,13 +460,14 @@ RUN_AUTOMATION_NOW
 SCENARIOS_UPDATED
 ```
 
-## Declared Only — 2
+## Declared Only — 3
 
 ```text
 TOOL_CALL_EXECUTED
 MEMORIES_UPDATED
+HARNESS_BRIDGE_STATUS_CHANGED
 ```
 
 ## Validation Method
 
-`tests/runtime-command-contract.test.ts` derives the typed registry and literal `MessageAction` names, then compares them with this inventory and the production 131-name contract map. It freezes `129/98/96/33/2`, current `85/44` payload access, `129/0/2` ownership, and `85 decoded / 0 direct-cast / 0 delegated`; it also proves the historical `2/61/32/16/18` cutover partition. `SCENARIOS_UPDATED` is the only released payload-less command extended with an optional request, preserving its old call and response. Serializable specimens cover every request/response/error family without creating another command-name authority.
+`tests/runtime-command-contract.test.ts` derives the typed registry and literal `MessageAction` names, then compares them with this inventory and the production 136-name contract map. It freezes `133/101/98/35/3`, current `87/46` payload access, `133/0/3` ownership, and `87 decoded / 0 direct-cast / 0 delegated`; it also proves the `2/63/32/18/18` ownership partition. `SCENARIOS_UPDATED` is the only released payload-less command extended with an optional request, preserving its old call and response. Serializable specimens cover every request/response/error family without creating another command-name authority.

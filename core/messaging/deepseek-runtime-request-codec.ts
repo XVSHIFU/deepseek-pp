@@ -10,6 +10,10 @@ import type {
 import type { OfficialApiChatConfig } from '../chat/official-api-config-contract';
 import type { MultimodalMediaAnalyzeRequest } from '../multimodal/media';
 import { isPlainRuntimeRecord } from './runtime-boundary';
+import {
+  normalizeHarnessBridgeSettingsPatch,
+  type HarnessBridgeSettingsPatch,
+} from '../harness-bridge/settings';
 
 type DeepSeekRuntimeCommandType = keyof DeepSeekRuntimeCommandContracts;
 
@@ -35,6 +39,7 @@ export type DecodedMultimodalAnalyzeRequest =
   | { ok: false; error: string };
 
 interface DecodedDeepSeekRuntimePayloads {
+  UPDATE_HARNESS_BRIDGE_SETTINGS: HarnessBridgeSettingsPatch;
   SAVE_DEEPSEEK_API_KEY: { apiKey: string };
   SAVE_MULTIMODAL_SETTINGS: MultimodalSettingsPatch;
   ANALYZE_MULTIMODAL_MEDIA: DecodedMultimodalAnalyzeRequest;
@@ -62,6 +67,9 @@ type DeepSeekRuntimePayloadDecoderMap = {
 };
 
 export const DEEPSEEK_RUNTIME_PAYLOAD_DECODERS: DeepSeekRuntimePayloadDecoderMap = {
+  UPDATE_HARNESS_BRIDGE_SETTINGS(value) {
+    return normalizeHarnessBridgeSettingsPatch(value);
+  },
   SAVE_DEEPSEEK_API_KEY(value) {
     const payload = recordValue(value, 'SAVE_DEEPSEEK_API_KEY.payload');
     if (typeof payload.apiKey !== 'string') {

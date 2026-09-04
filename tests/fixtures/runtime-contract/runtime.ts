@@ -1,13 +1,13 @@
 export const RUNTIME_TOPOLOGY = {
-  liveCommands: 131,
-  declaredActions: 100,
+  liveCommands: 133,
+  declaredActions: 101,
   shared: 98,
-  liveOnly: 33,
-  declaredOnly: 2,
-  readsPayload: 86,
-  ignoresPayload: 45,
+  liveOnly: 35,
+  declaredOnly: 3,
+  readsPayload: 87,
+  ignoresPayload: 46,
   directPayloadCasts: 0,
-  decodedPayloads: 86,
+  decodedPayloads: 87,
   delegatedPayloads: 0,
 } as const;
 
@@ -205,6 +205,7 @@ export const RUNTIME_NOTIFICATION_TYPES = [
   'AUTOMATIONS_UPDATED',
   'AUTOMATION_RUNS_UPDATED',
   'AUTH_STATUS_CHANGED',
+  'HARNESS_BRIDGE_STATUS_CHANGED',
   'DEEPSEEK_EXPORT_PROGRESS',
   'CHAT_STREAM_CHUNK',
   'OPEN_CHAT_WITH_TEXT',

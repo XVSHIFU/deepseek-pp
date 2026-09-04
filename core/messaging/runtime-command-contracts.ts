@@ -52,6 +52,8 @@ function typedCommand(
 }
 
 export const RUNTIME_COMMAND_CONTRACTS = {
+  GET_HARNESS_BRIDGE_STATUS: typedCommand('none', 'status-or-domain-error', 'background-error', 'live-only'),
+  UPDATE_HARNESS_BRIDGE_SETTINGS: typedCommand('payload-decoded', 'status-or-domain-error', 'background-error', 'live-only'),
   GET_MEMORIES: typedCommand('none', 'value'),
   GET_MEMORY_BY_ID: typedCommand('payload-decoded', 'nullable-value'),
   SAVE_MEMORY: typedCommand('payload-decoded', 'value'),
@@ -188,6 +190,7 @@ export const RUNTIME_COMMAND_CONTRACTS = {
   SCENARIOS_UPDATED: typedCommand('payload-decoded', 'value', 'background-error', 'live-only', 'optional'),
   TOOL_CALL_EXECUTED: command('client-only', 'payload-cast', 'unrouted', 'none', 'declared-only'),
   MEMORIES_UPDATED: command('client-only', 'none', 'unrouted', 'none', 'declared-only', 'none'),
+  HARNESS_BRIDGE_STATUS_CHANGED: command('client-only', 'payload-cast', 'unrouted', 'none', 'declared-only'),
 } as const satisfies Record<string, RuntimeCommandContract>;
 
 export const TYPED_RUNTIME_COMMAND_TYPES = commandTypesOwnedBy('typed-handler');

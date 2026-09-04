@@ -229,6 +229,10 @@ import {
   uploadDeepSeekFile,
 } from '../core/deepseek/adapter';
 import { createDeepSeekAutomationClient } from '../core/deepseek/active-client';
+import { HarnessBridgeClient } from '../core/harness-bridge/client';
+import { HarnessBridgeCoordinator } from '../core/harness-bridge/coordinator';
+import { createDeepSeekWebModelTurnAdapter } from '../core/harness-bridge/deepseek-turn-adapter';
+import { createHarnessBridgeSettingsStore } from '../core/harness-bridge/settings';
 import { submitOfficialDeepSeekStreaming } from '../core/deepseek/official-api';
 import { createDeepSeekConversationExportTransport } from '../core/deepseek/conversation-export';
 import {
@@ -300,6 +304,34 @@ const REFRESH_AUTH_MESSAGE = { type: 'REFRESH_DEEPSEEK_AUTH' } as const;
 const AUTOMATION_AUTH_TOKEN_MISSING_MESSAGE =
   'DeepSeek login token is missing. Refresh chat.deepseek.com or sign in again, then retry the automation.';
 const deepSeekAutomationClient = createDeepSeekAutomationClient();
+const harnessBridgeCoordinator = new HarnessBridgeCoordinator({
+  settings: createHarnessBridgeSettingsStore(),
+  turnPort: createDeepSeekWebModelTurnAdapter({ client: deepSeekAutomationClient }),
+  createClient(settings) {
+    if (!settings.pairingToken) throw new Error('harness_bridge_pairing_token_required');
+    return new HarnessBridgeClient({
+      port: settings.port,
+      pairingToken: settings.pairingToken,
+      browserInstanceId: chrome.runtime.id,
+      clientVersion: getExtensionVersion(),
+    }, {
+      listenerErrorSink: () => reportBackgroundStartupError(
+        'harness_bridge_listener_failed',
+        new Error('harness_bridge_listener_failed'),
+      ),
+    });
+  },
+  notifyStatus(status) {
+    deliverRuntimeMessageBestEffort(
+      chrome.runtime.sendMessage({ type: 'HARNESS_BRIDGE_STATUS_CHANGED', payload: status }),
+      'harness_bridge_status_notify_failed',
+      reportBackgroundStartupError,
+    );
+  },
+  reportError(code) {
+    reportBackgroundStartupError(code, new Error(code));
+  },
+});
 const externalPayloadAuthorizationCache = new ExternalPayloadAuthorizationCache();
 const {
   executeToolCall: executeRuntimeToolCall,
@@ -593,6 +625,7 @@ const runtimeCommandRegistry = createRuntimeCommandRegistry({
       },
     }),
     ...createDeepSeekRuntimeHandlers({
+      harnessBridge: { coordinator: harnessBridgeCoordinator },
       auth: {
         hasDeepSeekApiKey,
         saveDeepSeekApiKey,
@@ -703,6 +736,7 @@ type ActionApi = {
 };
 
 export default defineBackground(() => {
+  void harnessBridgeCoordinator.initialize();
   void syncLocalRecoveryBarrier.ensureReady().catch(acknowledgeReportedSyncRecoveryFailure);
   enableSidePanelActionClick();
   registerContextMenuClickListener();

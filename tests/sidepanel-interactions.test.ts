@@ -12,6 +12,7 @@ import ScenarioManager from '../entrypoints/sidepanel/components/ScenarioManager
 import ChatPage from '../entrypoints/sidepanel/pages/ChatPage';
 import SavedPage from '../entrypoints/sidepanel/pages/SavedPage';
 import ProjectFilesSubPage from '../entrypoints/sidepanel/components/settings/ProjectFilesSubPage';
+import { HarnessBridgeSubPage } from '../entrypoints/sidepanel/pages/SettingsPage';
 import { TRUSTED_DIRECTORY_STORAGE_KEY } from '../core/trusted-directory/store';
 import {
   buildTrustedDirectorySession,
@@ -962,6 +963,154 @@ describe('trusted-directory settings subpage', () => {
   });
 });
 
+describe('Harness bridge settings subpage', () => {
+  it('loads only the safe status DTO and saves a fixed loopback port with a replacement token', async () => {
+    const token = 'A'.repeat(43);
+    const sendMessage = vi.fn(async (message: { type: string; payload?: unknown }) => {
+      if (message.type === 'GET_HARNESS_BRIDGE_STATUS') return bridgeStatus(false, false, 'stopped');
+      if (message.type === 'UPDATE_HARNESS_BRIDGE_SETTINGS') {
+        const payload = message.payload as { enabled: boolean; port: number; pairingToken?: string };
+        return bridgeStatus(payload.enabled, payload.pairingToken !== undefined, 'connecting', payload.port);
+      }
+      return null;
+    });
+    stubChrome(sendMessage);
+
+    await renderElement(React.createElement(HarnessBridgeSubPage));
+    await flushPromises();
+    expect(container.textContent).toContain('连接状态: 已停止');
+    expect(container.textContent).not.toContain(token);
+
+    const toggle = container.querySelector<HTMLButtonElement>('button[aria-pressed="false"]')!;
+    const port = labelledInput('回环端口');
+    const tokenInput = labelledInput('配对令牌');
+    await act(async () => {
+      toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      setTextControlValue(port, '44001');
+      port.dispatchEvent(new Event('input', { bubbles: true }));
+      setTextControlValue(tokenInput, token);
+      tokenInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await clickButton('保存');
+    await flushPromises();
+
+    expect(sendMessage).toHaveBeenCalledWith({
+      type: 'UPDATE_HARNESS_BRIDGE_SETTINGS',
+      payload: { enabled: true, port: 44_001, pairingToken: token },
+    });
+    expect(tokenInput.value).toBe('');
+    expect(container.textContent).toContain('连接状态: 正在连接');
+    expect(container.textContent).not.toContain(token);
+  });
+
+  it('disconnects by an idempotent disabled update and accepts only secret-free status notifications', async () => {
+    const sendMessage = vi.fn(async (message: { type: string; payload?: unknown }) => {
+      if (message.type === 'GET_HARNESS_BRIDGE_STATUS') return bridgeStatus(true, true, 'ready');
+      if (message.type === 'UPDATE_HARNESS_BRIDGE_SETTINGS') return bridgeStatus(false, true, 'stopped');
+      return null;
+    });
+    stubChrome(sendMessage);
+    await renderElement(React.createElement(HarnessBridgeSubPage));
+    await flushPromises();
+
+    expect(container.textContent).toContain('连接状态: 已连接');
+    await act(async () => {
+      runtimeListeners[0]?.({
+        type: 'HARNESS_BRIDGE_STATUS_CHANGED',
+        payload: { ...bridgeStatus(true, true, 'protocol_error'), pairingToken: 'must-not-cross' },
+      });
+    });
+    expect(container.textContent).toContain('连接状态: 已连接');
+
+    await clickButton('断开');
+    await flushPromises();
+    expect(sendMessage).toHaveBeenLastCalledWith({
+      type: 'UPDATE_HARNESS_BRIDGE_SETTINGS',
+      payload: { enabled: false, port: 43_123 },
+    });
+    expect(container.textContent).toContain('连接状态: 已停止');
+  });
+
+  it('rejects a non-canonical pairing token before sending an update', async () => {
+    const sendMessage = vi.fn(async (message: { type: string }) => (
+      message.type === 'GET_HARNESS_BRIDGE_STATUS'
+        ? bridgeStatus(false, false, 'stopped')
+        : bridgeStatus(true, true, 'connecting')
+    ));
+    stubChrome(sendMessage);
+    await renderElement(React.createElement(HarnessBridgeSubPage));
+    await flushPromises();
+
+    const tokenInput = labelledInput('配对令牌');
+    await act(async () => {
+      setTextControlValue(tokenInput, ' not-a-canonical-token ');
+      tokenInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await clickButton('保存');
+
+    expect(container.textContent).toContain('完整 base64url 配对令牌');
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a non-decimal port before sending an update', async () => {
+    const sendMessage = vi.fn(async (message: { type: string }) => (
+      message.type === 'GET_HARNESS_BRIDGE_STATUS'
+        ? bridgeStatus(false, false, 'stopped')
+        : bridgeStatus(true, true, 'connecting')
+    ));
+    stubChrome(sendMessage);
+    await renderElement(React.createElement(HarnessBridgeSubPage));
+    await flushPromises();
+
+    const portInput = labelledInput('回环端口');
+    await act(async () => {
+      setTextControlValue(portInput, '1e2');
+      portInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await clickButton('保存');
+
+    expect(container.textContent).toContain('1 到 65535');
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('fences a late initial GET behind a newer status notification', async () => {
+    const initial = deferredSidepanelStatus();
+    const sendMessage = vi.fn(async () => initial.promise);
+    stubChrome(sendMessage);
+    await renderElement(React.createElement(HarnessBridgeSubPage));
+    await flushPromises();
+
+    await act(async () => {
+      runtimeListeners[0]?.({
+        type: 'HARNESS_BRIDGE_STATUS_CHANGED',
+        payload: bridgeStatus(true, true, 'ready', 44_001),
+      });
+    });
+    initial.resolve(bridgeStatus(false, false, 'stopped', 43_123));
+    await flushPromises();
+
+    expect(container.textContent).toContain('连接状态: 已连接');
+    expect(labelledInput('回环端口').value).toBe('44001');
+  });
+
+  it('shows corrupt/future configuration failures without rendering raw details', async () => {
+    const sendMessage = vi.fn(async () => ({
+      ok: false,
+      error: 'harness_bridge_settings_future_version',
+    }));
+    stubChrome(sendMessage);
+    await renderElement(React.createElement(HarnessBridgeSubPage));
+    await flushPromises();
+
+    expect(container.textContent).toContain('设置损坏或来自更高版本');
+    expect(container.textContent).not.toContain('harness_bridge_settings_future_version');
+    expect(labelledInput('回环端口').disabled).toBe(true);
+    expect(labelledInput('配对令牌').disabled).toBe(true);
+    expect(buttonByText('保存').disabled).toBe(true);
+    expect(buttonByText('刷新').disabled).toBe(false);
+  });
+});
+
 async function renderElement(element: React.ReactElement) {
   await act(async () => {
     root = createRoot(container);
@@ -1025,6 +1174,33 @@ function buttonByText(label: string): HTMLButtonElement {
     .find((candidate) => candidate.textContent === label);
   expect(button).toBeTruthy();
   return button as HTMLButtonElement;
+}
+
+function labelledInput(label: string): HTMLInputElement {
+  const wrapper = Array.from(container.querySelectorAll('label'))
+    .find((candidate) => candidate.textContent?.includes(label));
+  const input = wrapper?.querySelector('input');
+  expect(input).toBeTruthy();
+  return input as HTMLInputElement;
+}
+
+function bridgeStatus(
+  enabled: boolean,
+  pairingTokenConfigured: boolean,
+  phase: 'stopped' | 'connecting' | 'ready' | 'protocol_error',
+  port = 43_123,
+) {
+  return {
+    ok: true as const,
+    settings: { version: 1 as const, enabled, port, pairingTokenConfigured },
+    state: { phase, attempt: phase === 'connecting' ? 1 : 0 },
+  };
+}
+
+function deferredSidepanelStatus() {
+  let resolve!: (value: ReturnType<typeof bridgeStatus>) => void;
+  const promise = new Promise<ReturnType<typeof bridgeStatus>>((done) => { resolve = done; });
+  return { promise, resolve };
 }
 
 function setTextControlValue(input: HTMLInputElement | HTMLTextAreaElement, value: string) {
