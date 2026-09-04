@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   BYPASS_HOOK_HEADER,
+  createDeepSeekAutomationClient,
   createPowHeadersForPath,
   DEEPSEEK_FILE_UPLOAD_PATH,
+  readHistorySnapshot,
   submitPromptStreaming,
   uploadDeepSeekFile,
 } from '../core/deepseek/adapter';
@@ -65,6 +67,46 @@ describe('DeepSeek web adapter streaming', () => {
 
     expect(fullTexts.at(-1)).toBe('Hello world');
     expect(turn.assistantText).toBe('Hello world');
+  });
+
+  it('passes the full request context through the automation client streaming seam', async () => {
+    const onDispatch = vi.fn();
+    const fetchImpl = vi.fn<typeof fetch>(async () => {
+      expect(onDispatch).toHaveBeenCalledTimes(1);
+      return createSseResponse([
+        'data: {"v":"done"}',
+        'data: {"p":"response/status","v":"FINISHED"}',
+      ].join('\n\n'));
+    });
+    const client = createDeepSeekAutomationClient({ fetchImpl });
+
+    const turn = await client.submitPromptStreaming(createSubmitInput(), {}, { onDispatch });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(onDispatch).toHaveBeenCalledTimes(1);
+    expect(turn).toMatchObject({ assistantText: 'done', finished: true });
+  });
+
+  it('cancels the response reader on callback failure and preserves the original error', async () => {
+    const encoder = new TextEncoder();
+    const cancel = vi.fn();
+    const original = new Error('consumer callback failed');
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode('data: {"v":"chunk"}\n\n'));
+      },
+      cancel,
+    }))));
+
+    const completion = submitPromptStreaming(createSubmitInput(), {
+      onTextChunk() {
+        throw original;
+      },
+    });
+
+    await expect(completion).rejects.toBe(original);
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(cancel).toHaveBeenCalledWith('DEEPSEEK_STREAM_CONSUMER_FAILED');
   });
 
   it('cancels a stream after headers without emitting late callbacks', async () => {
@@ -160,6 +202,65 @@ describe('DeepSeek web adapter streaming', () => {
     expect(reasoningChunks.join('')).toBe('我们');
     expect(reasoningFulls.at(-1)).toBe('我们');
     expect(turn.assistantText).toBe('');
+  });
+
+  it('accepts only the exact latest assistant history message and returns its parent', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => historyResponse([
+      { message_id: 40, parent_id: 39, role: 'USER' },
+      { message_id: 41, parent_id: 40, role: 'ASSISTANT' },
+    ])));
+
+    await expect(readHistorySnapshot('session-1', 41, {})).resolves.toMatchObject({
+      chatSessionId: 'session-1',
+      parentMessageId: 41,
+      assistantMessageId: 41,
+      assistantParentMessageId: 40,
+      requestParentMessageId: 39,
+      messageCount: 2,
+    });
+  });
+
+  it('rejects history with duplicate ids or a non-user request parent', async () => {
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(historyResponse([
+        { message_id: 40, parent_id: 39, role: 'USER' },
+        { message_id: 40, parent_id: 38, role: 'USER' },
+        { message_id: 41, parent_id: 40, role: 'ASSISTANT' },
+      ]))
+      .mockResolvedValueOnce(historyResponse([
+        { message_id: 40, parent_id: 39, role: 'ASSISTANT' },
+        { message_id: 41, parent_id: 40, role: 'ASSISTANT' },
+      ]));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(readHistorySnapshot('session-1', 41, {})).resolves.toBeNull();
+    await expect(readHistorySnapshot('session-1', 41, {})).resolves.toBeNull();
+  });
+
+  it('rejects history when the expected id is missing or does not belong to an assistant', async () => {
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(historyResponse([
+        { message_id: 40, parent_id: 39, role: 'USER' },
+        { message_id: 41, parent_id: 40, role: 'ASSISTANT' },
+      ]))
+      .mockResolvedValueOnce(historyResponse([
+        { message_id: 41, parent_id: 40, role: 'USER' },
+      ]));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(readHistorySnapshot('session-1', 42, {})).resolves.toBeNull();
+    await expect(readHistorySnapshot('session-1', 41, {})).resolves.toBeNull();
+  });
+
+  it('rejects a matching response id when a later assistant exists', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => historyResponse([
+      { message_id: 40, parent_id: 39, role: 'USER' },
+      { message_id: 41, parent_id: 40, role: 'assistant' },
+      { message_id: 42, parent_id: 41, role: 'user' },
+      { message_id: 43, parent_id: 42, role: 'ASSISTANT' },
+    ])));
+
+    await expect(readHistorySnapshot('session-1', 41, {})).resolves.toBeNull();
   });
 
   it('creates PoW headers for the requested DeepSeek target path', async () => {
@@ -384,4 +485,8 @@ function jsonResponse(value: unknown): Response {
   return new Response(JSON.stringify(value), {
     headers: { 'content-type': 'application/json' },
   });
+}
+
+function historyResponse(chatMessages: readonly unknown[]): Response {
+  return jsonResponse({ data: { biz_data: { chat_messages: chatMessages } } });
 }

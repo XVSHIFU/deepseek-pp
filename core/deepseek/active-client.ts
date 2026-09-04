@@ -52,6 +52,7 @@ import type {
   DeepSeekHistorySnapshot,
   DeepSeekRequestContext,
   ModelTurn,
+  StreamCallbacks,
   SubmitPromptInput,
 } from './automation-client-port';
 
@@ -66,6 +67,7 @@ export type {
   DeepSeekHistorySnapshot,
   DeepSeekRequestContext,
   ModelTurn,
+  StreamCallbacks,
   SubmitPromptInput,
 } from './automation-client-port';
 
@@ -78,6 +80,7 @@ const USER_TOKEN_STORAGE_KEY = 'userToken';
 const TOKEN_SPEED_EMIT_INTERVAL_MS = 250;
 const FILE_READY_POLL_INTERVAL_MS = 500;
 const FILE_READY_TIMEOUT_MS = 15_000;
+const STREAM_CONSUMER_CANCEL_REASON = 'DEEPSEEK_STREAM_CONSUMER_FAILED';
 // DeepSeek can return audit_result=unknown together with status=SUCCESS for usable image uploads.
 const ACCEPTED_FILE_AUDIT_RESULTS = new Set(['PASS', 'PASSED', 'SUCCESS', 'OK', 'UNKNOWN']);
 const REJECTED_FILE_AUDIT_RESULTS = new Set(['REJECT', 'REJECTED', 'FAIL', 'FAILED', 'ERROR', 'BLOCK', 'BLOCKED', 'DENY', 'DENIED']);
@@ -101,15 +104,6 @@ export interface DeepSeekFileUploadInput {
 
 export type { DeepSeekUploadedFile } from './contracts';
 
-export interface StreamCallbacks {
-  onTextChunk?(text: string, fullText: string): void;
-  /** Reasoning/thinking deltas of the current response (THINK fragments). */
-  onReasoningChunk?(reasoning: string, fullReasoning: string): void;
-  onTokenSpeed?(progress: ResponseTokenSpeedPayload): void;
-  onFinished?(): void;
-  retainAssistantText?: boolean;
-}
-
 export function createDeepSeekAutomationClient(
   dependencies: { fetchImpl?: typeof fetch } = {},
 ): DeepSeekAutomationClient {
@@ -130,6 +124,8 @@ export function createDeepSeekAutomationClient(
         withDependencies(context),
       ),
     submitPrompt: (input, context) => submitPromptWithContext(input, withDependencies(context)),
+    submitPromptStreaming: (input, callbacks, context) =>
+      submitPromptStreamingWithContext(input, callbacks, withDependencies(context)),
     readHistorySnapshot: (chatSessionId, expectedAssistantMessageId, clientHeaders, context) =>
       readHistorySnapshotWithContext(
         chatSessionId,
@@ -421,7 +417,15 @@ export async function submitPromptStreaming(
   callbacks: StreamCallbacks,
   signal?: AbortSignal,
 ): Promise<ModelTurn> {
-  const response = await requestCompletion(input, { signal });
+  return submitPromptStreamingWithContext(input, callbacks, { signal });
+}
+
+async function submitPromptStreamingWithContext(
+  input: SubmitPromptInput,
+  callbacks: StreamCallbacks,
+  context: DeepSeekRequestContext,
+): Promise<ModelTurn> {
+  const response = await requestCompletion(input, context);
 
   if (!response.ok) {
     throw new DeepSeekPayloadError(await readFailureMessage(response), { retryable: true });
@@ -496,22 +500,31 @@ async function readHistorySnapshotWithContext(
   const rawMessages: unknown[] = Array.isArray(data?.chat_messages) ? data.chat_messages : [];
   if (rawMessages.length === 0) return null;
 
-  const messages = rawMessages
-    .map((message: unknown) => normalizeHistoryMessage(message))
-    .filter((message: DeepSeekHistoryMessage): message is DeepSeekHistoryMessage => message.id !== null);
-  if (messages.length === 0) return null;
-
-  const expected = messages.find((message) => message.id === expectedAssistantMessageId);
-  const latestAssistant =
-    expected ??
-    [...messages].reverse().find((message) => message.role !== 'user') ??
-    messages[messages.length - 1];
+  const messages = rawMessages.map((message: unknown) => normalizeHistoryMessage(message));
+  const messageIds = messages
+    .map((message) => message.id)
+    .filter((id): id is number => id !== null);
+  if (new Set(messageIds).size !== messageIds.length) return null;
+  const expectedMatches = messages.filter((message) => message.id === expectedAssistantMessageId);
+  if (expectedMatches.length !== 1) return null;
+  const expected = expectedMatches[0];
+  if (!expected || expected.role !== 'assistant') return null;
+  const latestAssistant = [...messages].reverse().find((message) => message.role === 'assistant');
+  if (!latestAssistant || latestAssistant.id !== expectedAssistantMessageId) return null;
+  if (expected.parentId === null) return null;
+  const requestMatches = messages.filter((message) => message.id === expected.parentId);
+  if (requestMatches.length !== 1 || requestMatches[0]?.role !== 'user') return null;
+  const request = requestMatches[0];
+  const messageCount = messageIds.length;
+  if (messageCount === 0) return null;
 
   return {
     chatSessionId,
-    parentMessageId: latestAssistant.id,
-    assistantMessageId: latestAssistant.id,
-    messageCount: messages.length,
+    parentMessageId: expected.id,
+    assistantMessageId: expected.id,
+    assistantParentMessageId: expected.parentId,
+    requestParentMessageId: request.parentId,
+    messageCount,
     verifiedAt: Date.now(),
   };
 }
@@ -576,12 +589,28 @@ async function readCompletionStreamWithCallbacks(
     if (finalText && callbacks.onTextChunk) {
       callbacks.onTextChunk(finalText, summary.assistantText);
     }
-  } finally {
     speedTracker?.finish();
+    callbacks.onFinished?.();
+    return summary;
+  } catch (error) {
+    try {
+      speedTracker?.finish();
+    } catch {
+      // A cleanup callback must not replace the first stream processing error.
+    }
+    try {
+      await reader.cancel(STREAM_CONSUMER_CANCEL_REASON);
+    } catch {
+      // Preserve the original callback/decoder/read failure.
+    }
+    throw error;
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      // Lock release is best-effort cleanup and must not replace stream errors.
+    }
   }
-
-  callbacks.onFinished?.();
-  return summary;
 }
 
 function normalizeHistoryMessage(raw: unknown): DeepSeekHistoryMessage {

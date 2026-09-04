@@ -28,6 +28,7 @@ const deepSeekClient: DeepSeekAutomationClient = {
   createChatSession: adapterMocks.createChatSession,
   createPowHeaders: adapterMocks.createPowHeaders,
   submitPrompt: adapterMocks.submitPrompt,
+  submitPromptStreaming: (input, _callbacks, context) => adapterMocks.submitPrompt(input, context),
   readHistorySnapshot: adapterMocks.readHistorySnapshot,
   normalizeMessageId: (value: unknown) => typeof value === 'number' ? value : null,
   buildSessionUrl: (id: string) => `https://chat.deepseek.com/a/chat/s/${id}`,
