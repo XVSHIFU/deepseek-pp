@@ -119,8 +119,14 @@ describe("DSH web model loopback host", () => {
     browser.send(encodeWebModelFrame(helloFor(WRONG_TOKEN)));
     const result = await closed;
     expect(result.code).toBe(1008);
-    expect(result.reason).toBe("PROTOCOL_ERROR");
+    expect(result.reason).toBe("AUTH_FAILED");
     expect(result.reason).not.toContain(WRONG_TOKEN);
+
+    const malformedHost = await startHost();
+    const malformed = await connect(malformedHost.address);
+    const malformedClosed = waitForClose(malformed);
+    malformed.send(JSON.stringify({ ...helloFor(TOKEN), unknown: true }));
+    await expect(malformedClosed).resolves.toMatchObject({ code: 1008, reason: "PROTOCOL_ERROR" });
   });
 
   it("rejects wildcard or non-extension origin configuration", () => {

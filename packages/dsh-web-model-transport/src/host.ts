@@ -399,7 +399,10 @@ export class DeepSeekWebModelHost implements DeepSeekWebBroker {
   private authenticate(peer: PeerConnection, frame: WebModelFrame): void {
     if (!("method" in frame) || frame.method !== "bridge.hello") throw new Error("AUTH_REQUIRED");
     const hello = frame as BridgeHelloRequest;
-    if (!pairingTokenMatches(hello.params.pairing_token, this.pairingToken)) throw new Error("AUTH_FAILED");
+    if (!pairingTokenMatches(hello.params.pairing_token, this.pairingToken)) {
+      this.closePeer(peer, 1008, "AUTH_FAILED");
+      return;
+    }
     const capabilities = negotiateCapabilities(hello.params.capabilities);
     const response = {
       jsonrpc: "2.0",
