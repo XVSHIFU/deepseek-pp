@@ -1,0 +1,10 @@
+{
+  "name": "@deepseek-pp/web-model-protocol",
+  "version": "0.0.0-private",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts"
+}
