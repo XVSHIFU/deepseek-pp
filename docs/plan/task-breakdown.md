@@ -20,6 +20,8 @@ DeepSeek 网页模型是唯一推理核心。本机不得配置或调用模型�
 
 ## 2. 已冻结的技术决策
 
+社区网页桥、用户脚本、浏览器自动化和 OpenAI 兼容网关的核验结论见 [`docs/analysis/community-web-bridge-landscape.md`](../analysis/community-web-bridge-landscape.md)。这些方案只提供测试、配对、安装和兼容层参考，不改变下列冻结决策；尤其不得据此引入 Cookie/Bearer 导出、CDP/Playwright、第二套 Agent loop 或 Browser 侧本地工具执行。
+
 - 主开发仓库是 `XVSHIFU/deepseek-pp`；产品代码只进入本仓库的 `core/`、`entrypoints/`、`packages/`、`tests/` 和发布脚本。
 - `XVSHIFU/deepseek-harness` 的 `master` 保持上游 fast-forward 同步。产品运行时锁定经审核的 Harness tag/commit；禁止依赖浮动 `master`。
 - Harness core 不做产品私有修改。模型接入必须使用公开的 `@deepseek-ai/dsh-llm` `LlmAdapter`、Cordis plugin 和 profile/bundle 扩展面。
