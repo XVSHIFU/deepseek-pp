@@ -88,8 +88,9 @@
 | P0 | P0-T1 | 共享协议类型、严格 codec、版本与消息预算 | `—` | `—` | `release_gap_audit`; review: `protocol_v1_review` | `verified` |
 | P0 | P0-T2 | authenticated loopback WebSocket fake Broker | `—` | `—` | `release_gap_audit`; review: `protocol_v1_review` | `verified` |
 | P0 | P0-T3 | fake browser 纵切片：流顺序、取消、状态查询、离线与 `ambiguous` | `—` | `—` | `release_gap_audit`; review: `protocol_v1_review` | `verified` |
-| P1 | P1-T1 | DeepSeek++ Browser Broker 连接、配对与生命周期 | `—` | `—` | `release_gap_audit` | `in_progress` |
-| P1 | P1-T2 | Broker 委托 `DeepSeekAutomationClient`/`stream-codec`，并隔离模式 B chunk | `TBD` | `TBD` | `TBD` | `not_started` |
+| P1 | P1-T1 | DeepSeek++ Browser Broker 连接、配对与生命周期 | `—` | `—` | `release_gap_audit`; review: orchestration | `verified` |
+| P1 | P1-T2 | Broker 委托 `DeepSeekAutomationClient`/`stream-codec`，并隔离模式 B chunk | `—` | `—` | `deepseek_sampling_audit`, `release_gap_audit`; review: `protocol_v1_review` | `verified` |
+| P1 | P1-T3 | Browser Broker 组合、配置与可见状态 | `—` | `—` | `TBD` | `not_started` |
 | P2 | P2-T1 | out-of-tree DSH `deepseek-web` LLM adapter | `TBD` | `TBD` | `TBD` | `not_started` |
 | P2 | P2-T2 | DSH profile、显式 provider 选择与最小安装 bundle | `TBD` | `TBD` | `TBD` | `not_started` |
 | P3 | P3-T1 | 无 API key 的真实网页单回合 E2E | `TBD` | `TBD` | `TBD` | `not_started` |
@@ -138,13 +139,13 @@
 
 ## 当前状态与下一步
 
-**当前状态**：架构决策 `docs/decisions/web-harness-model-broker.md` 已接受，模式 A 是唯一主开发线。M0 已由提交 `a9dab85`、`eaebb4a`、`9cbe43b` 完整冻结：Protocol v1、authenticated loopback Host、独立 fake browser 真实 socket E2E 与单命令 smoke 均已有自动化证据。当前进入 P1-T1，在 DeepSeek++ 浏览器侧实现 MV3 可重建的 WebSocket client、配对握手、heartbeat、连接代际与有界 backoff；尚未接入真实网页模型。reasoning 不允许进入历史消息，只能在双边显式协商后作为 `retention: ephemeral` 的流事件出现。模式 B 只保持兼容，当前分支没有 release 授权。
+**当前状态**：架构决策 `docs/decisions/web-harness-model-broker.md` 已接受，模式 A 是唯一主开发线。M0 已由提交 `a9dab85`、`eaebb4a`、`9cbe43b` 完整冻结。P1-T1 已由提交 `4d111e6` 完成 MV3 可重建的 WebSocket client、配对握手、heartbeat、连接代际与有界 backoff；P1-T2 已由提交 `ac87871` 完成不依赖 Pi 的网页模型 Turn Adapter、真实 dispatch authority、严格页面消息链、取消/不明结果隔离和输出预算。当前尚未把 client 与 adapter 组合进 Background，也尚未接入本机 DSH 或执行真实网页模型 E2E。reasoning 不允许进入历史消息，只能在双边显式协商后作为 `retention: ephemeral` 的流事件出现。模式 B 只保持兼容，当前分支没有 release 授权。
 
 **立即下一步**：
 
-1. 完成 P1-T1：实现浏览器侧固定 loopback WebSocket client、配对、heartbeat、状态订阅、旧连接隔离与 MV3 suspend/restart 恢复。
-2. 完成 P1-T2：把 Browser Broker 薄适配到现有 `DeepSeekAutomationClient`/`stream-codec`，不复制网页协议且不改变模式 B chunk。
-3. P1 证据收口后进入 out-of-tree DSH adapter/profile；继续严格按 M2 → M3 → M4 推进首个真实闭环。PR #568 与 release 工作继续隔离。
+1. 完成 P1-T3：把 Browser client 与 Turn Adapter 组合到 Background 生命周期，增加默认关闭、仅回环端口和本地配对令牌配置及可见状态。
+2. P1 证据收口后进入 T2.1/T2.2：实现 out-of-tree DSH `deepseek-web` adapter 与 allowlist profile，不修改 DSH `master`。
+3. 继续严格按 M2 → M3 → M4 推进首个真实闭环。PR #568 与 release 工作继续隔离。
 
 ## 活动验证记录
 
@@ -165,3 +166,8 @@
 | 2026-09-04 | P0-T3 | Node 24 import probe; Protocol/Transport/Fake 联合测试; `npm run compile`; `git diff --check` | `passed` | 根复验 56/56；Node 24 原生 workspace TypeScript 入口可用；独立 reviewer 未发现 blocker/high |
 | 2026-09-04 | Environment | `npm ci` | `failed` | WXT 0.20.26 的 prepare 在含 `+` 的工作目录生成非法正则；依赖下载本身完成 |
 | 2026-09-04 | Environment | `npm ci --ignore-scripts`; `npx wxt prepare`（经本机安全 junction） | `passed` | 生成 `.wxt` 后，定向测试和根编译均在实际工作树通过；此为开发路径兼容措施，不是产品能力 |
+| 2026-09-04 | P1-T1 | `npx vitest run tests/dsh-web-model-transport.test.ts tests/harness-bridge-client.test.ts tests/web-model-protocol.test.ts tests/harness-bridge-fake-e2e.test.ts` | `passed` | 71/71；固定 loopback、配对、capability、heartbeat、有界重连、generation fencing 与 restart checkpoint 通过；提交 `4d111e6` |
+| 2026-09-04 | P1-T1 | `npm run compile`; `git diff --check` | `passed` | 根编译与静态差异检查通过；最终复核无 blocker/high |
+| 2026-09-04 | P1-T2 | `npx vitest run`（Turn Adapter、DeepSeek stream、automation typed fake、既有 StreamFn/provider 定向集合） | `passed` | 根复验 88/88；覆盖真实 dispatch authority、回调重入取消、post-dispatch ambiguous/quarantine、完整 parent→request→assistant 链、reasoning ephemeral 与 UTF-8/event/frame budgets；提交 `ac87871` |
+| 2026-09-04 | P1-T2 | `npm run compile`; `git diff --cached --check` | `passed` | 根编译与精确暂存差异检查通过；独立 reviewer 确认无 blocker/high |
+| 2026-09-04 | Repository gate | `npm test` | `failed` | 1911/1918；7 个失败均在未修改的既有测试路径。单线程复跑后 3 个波动项通过，仍有 4 个基线/Windows 问题：5 秒 persistence timeout、Node 24 `npm.cmd` spawn EINVAL、Windows path separator 断言、旧 `.release` 目录扫描 EPERM；未据此否定已通过的 P1 定向证据，也未宣称全仓通过 |
