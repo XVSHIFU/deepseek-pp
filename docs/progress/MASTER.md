@@ -70,8 +70,8 @@
 
 | Milestone | 结果 | 状态 | 退出条件 |
 |:--|:--|:--|:--|
-| M0 Protocol + fake Broker | 纯 TypeScript 版本化协议、严格 codec、fake browser/fake Broker 纵切片 | `in_progress` | 握手/认证、生成、增量、唯一终态、幂等取消、状态查询、预算和未知字段拒绝均有自动化测试 |
-| M1 Browser Broker | DeepSeek++ 建立 authenticated loopback WebSocket，并委托现有网页客户端 | `not_started` | 只连 `127.0.0.1`；凭据不越界；模式 B 行为/chunk 不变 |
+| M0 Protocol + fake Broker | 纯 TypeScript 版本化协议、严格 codec、fake browser/fake Broker 纵切片 | `verified` | 握手/认证、生成、增量、唯一终态、幂等取消、状态查询、预算和未知字段拒绝均有自动化测试 |
+| M1 Browser Broker | DeepSeek++ 建立 authenticated loopback WebSocket，并委托现有网页客户端 | `in_progress` | 只连 `127.0.0.1`；凭据不越界；模式 B 行为/chunk 不变 |
 | M2 DSH adapter + profile | out-of-tree `deepseek-web` LLM adapter、profile 与最小安装 bundle | `not_started` | DSH 可显式选择 `provider=deepseek-web`；无隐式 provider fallback；不修改 DSH `master` |
 | M3 Real one-turn | 本机 DSH 经已登录浏览器完成一次真实网页模型回合 | `not_started` | 无 DeepSeek API key/其他 provider；流正常结束；最终文本进入同一 DSH session |
 | M4 Local-tool multi-turn | 网页模型请求 DSH 本地只读搜索/读取工具，结果进入下一模型回合并返回最终结果 | `not_started` | 首个完整 P0 验收通过；工具只执行一次且可审计，DSH 始终拥有 loop authority |
@@ -87,8 +87,8 @@
 | G0 | G0-T1 | 创建并维护活动进度真源 | `—` | `—` | orchestration | `in_progress` |
 | P0 | P0-T1 | 共享协议类型、严格 codec、版本与消息预算 | `—` | `—` | `release_gap_audit`; review: `protocol_v1_review` | `verified` |
 | P0 | P0-T2 | authenticated loopback WebSocket fake Broker | `—` | `—` | `release_gap_audit`; review: `protocol_v1_review` | `verified` |
-| P0 | P0-T3 | fake browser 纵切片：流顺序、取消、状态查询、离线与 `ambiguous` | `—` | `—` | `release_gap_audit` | `in_progress` |
-| P1 | P1-T1 | DeepSeek++ Browser Broker 连接、配对与生命周期 | `TBD` | `TBD` | `TBD` | `not_started` |
+| P0 | P0-T3 | fake browser 纵切片：流顺序、取消、状态查询、离线与 `ambiguous` | `—` | `—` | `release_gap_audit`; review: `protocol_v1_review` | `verified` |
+| P1 | P1-T1 | DeepSeek++ Browser Broker 连接、配对与生命周期 | `—` | `—` | `release_gap_audit` | `in_progress` |
 | P1 | P1-T2 | Broker 委托 `DeepSeekAutomationClient`/`stream-codec`，并隔离模式 B chunk | `TBD` | `TBD` | `TBD` | `not_started` |
 | P2 | P2-T1 | out-of-tree DSH `deepseek-web` LLM adapter | `TBD` | `TBD` | `TBD` | `not_started` |
 | P2 | P2-T2 | DSH profile、显式 provider 选择与最小安装 bundle | `TBD` | `TBD` | `TBD` | `not_started` |
@@ -138,12 +138,13 @@
 
 ## 当前状态与下一步
 
-**当前状态**：架构决策 `docs/decisions/web-harness-model-broker.md` 已接受，模式 A 是唯一主开发线。P0-T1 已由提交 `a9dab85` 冻结；P0-T2 已由提交 `eaebb4a` 冻结。当前 Host transport 只绑定 `127.0.0.1`，使用首帧配对认证、严格 Origin/Host/path/subprotocol、单 Browser peer、单在途模型请求和连续事件序号；断连与发送结果不明以唯一 `ambiguous` 收口且锁住请求 ID，重连 query 只能从已完整观察的远端 checkpoint 恢复。reasoning 不允许进入历史消息，只能在双边显式协商后作为 `retention: ephemeral` 的流事件出现。P0-T3 正在建立独立 fake browser 的单命令纵切片；模式 B 只保持兼容，当前分支没有 release 授权。
+**当前状态**：架构决策 `docs/decisions/web-harness-model-broker.md` 已接受，模式 A 是唯一主开发线。M0 已由提交 `a9dab85`、`eaebb4a`、`9cbe43b` 完整冻结：Protocol v1、authenticated loopback Host、独立 fake browser 真实 socket E2E 与单命令 smoke 均已有自动化证据。当前进入 P1-T1，在 DeepSeek++ 浏览器侧实现 MV3 可重建的 WebSocket client、配对握手、heartbeat、连接代际与有界 backoff；尚未接入真实网页模型。reasoning 不允许进入历史消息，只能在双边显式协商后作为 `retention: ephemeral` 的流事件出现。模式 B 只保持兼容，当前分支没有 release 授权。
 
 **立即下一步**：
 
-1. 完成 P0-T3：用独立 fake browser 经过真实 socket 验证认证、流顺序、取消、状态查询、断线与端口释放，不直接调用 Broker 内部方法。
-2. 只在 P0 的 L1/L2 证据收口后进入 Browser Broker；随后严格按 M1 → M2 → M3 → M4 推进首个真实闭环。PR #568 与 release 工作继续隔离。
+1. 完成 P1-T1：实现浏览器侧固定 loopback WebSocket client、配对、heartbeat、状态订阅、旧连接隔离与 MV3 suspend/restart 恢复。
+2. 完成 P1-T2：把 Browser Broker 薄适配到现有 `DeepSeekAutomationClient`/`stream-codec`，不复制网页协议且不改变模式 B chunk。
+3. P1 证据收口后进入 out-of-tree DSH adapter/profile；继续严格按 M2 → M3 → M4 推进首个真实闭环。PR #568 与 release 工作继续隔离。
 
 ## 活动验证记录
 
@@ -159,5 +160,8 @@
 | 2026-09-04 | P0-T2 | `npx vitest run tests/dsh-web-model-transport.test.ts` | `passed` | 29/29；真实回环 socket 覆盖认证、流、拒绝矩阵、断连、取消、查询、checkpoint、late frame、超时和端口释放；实现 Agent 另连续运行三轮均通过 |
 | 2026-09-04 | P0-T2 | `npx vitest run tests/web-model-protocol.test.ts tests/dsh-web-model-transport.test.ts` | `passed` | 根复验 52/52；Protocol checkpoint 增量与 Host transport 联合通过 |
 | 2026-09-04 | P0-T2 | 两个包级 `tsc --noEmit`; `npm run compile`; `git diff --check` | `passed` | 精确锁定 `ws@8.21.0`、`@types/ws@8.18.1`；独立 reviewer 未发现 blocker/high |
+| 2026-09-04 | P0-T3 | `npx vitest run tests/harness-bridge-fake-e2e.test.ts` | `passed` | 4/4；独立 fake browser 仅经公开 API 和真实 loopback socket 完成生成、查询、幂等取消、断连与端口释放 |
+| 2026-09-04 | P0-T3 | `node scripts/harness-bridge-fake-smoke.mjs` | `passed` | 单行 JSON：route=`host->fake-browser->host`，terminal=`completed`；未输出配对令牌 |
+| 2026-09-04 | P0-T3 | Node 24 import probe; Protocol/Transport/Fake 联合测试; `npm run compile`; `git diff --check` | `passed` | 根复验 56/56；Node 24 原生 workspace TypeScript 入口可用；独立 reviewer 未发现 blocker/high |
 | 2026-09-04 | Environment | `npm ci` | `failed` | WXT 0.20.26 的 prepare 在含 `+` 的工作目录生成非法正则；依赖下载本身完成 |
 | 2026-09-04 | Environment | `npm ci --ignore-scripts`; `npx wxt prepare`（经本机安全 junction） | `passed` | 生成 `.wxt` 后，定向测试和根编译均在实际工作树通过；此为开发路径兼容措施，不是产品能力 |
