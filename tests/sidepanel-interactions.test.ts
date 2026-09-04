@@ -12,7 +12,7 @@ import ScenarioManager from '../entrypoints/sidepanel/components/ScenarioManager
 import ChatPage from '../entrypoints/sidepanel/pages/ChatPage';
 import SavedPage from '../entrypoints/sidepanel/pages/SavedPage';
 import ProjectFilesSubPage from '../entrypoints/sidepanel/components/settings/ProjectFilesSubPage';
-import { HarnessBridgeSubPage } from '../entrypoints/sidepanel/pages/SettingsPage';
+import HarnessBridgeSubPage from '../entrypoints/sidepanel/components/settings/HarnessBridgeSubPage';
 import { TRUSTED_DIRECTORY_STORAGE_KEY } from '../core/trusted-directory/store';
 import {
   buildTrustedDirectorySession,
