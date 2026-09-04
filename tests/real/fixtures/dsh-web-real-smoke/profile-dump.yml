@@ -1,0 +1,50 @@
+- id: headless-startup
+  name: '@deepseek-ai/dsh-headless/startup'
+- id: headless-runner
+  name: '@deepseek-ai/dsh-headless'
+  inject: [headlessStartup]
+  config:
+    task: !!js ctx.headlessStartup.task
+- id: deepseek-web-model-host
+  name: '@deepseek-pp/dsh-web-agent-bundle/host'
+  config:
+    port: !!js Number(process.env.DSH_WEB_BROKER_PORT ?? 43123)
+    pairingToken: !!js process.env.DSH_WEB_PAIRING_TOKEN
+    allowedExtensionOrigins: !!js (process.env.DSH_WEB_ALLOWED_EXTENSION_ORIGINS ?? '').split(',').filter(Boolean)
+- id: llm
+  name: '@deepseek-ai/dsh-llm'
+- id: session
+  name: '@deepseek-ai/dsh-session'
+- id: session-projection
+  name: '@deepseek-ai/dsh-session-projection'
+- id: system-prompt
+  name: '@deepseek-ai/dsh-system-prompt'
+  config:
+    includeHarnessIdentity: true
+    includeRuntimeContext: false
+    persona: You are a local agent powered by the {{model}} model.
+- id: tools
+  name: '@deepseek-ai/dsh-tools'
+  config:
+    mode: native
+- id: agent
+  name: '@deepseek-ai/dsh-agent'
+- id: agent-default-model
+  name: '@deepseek-ai/dsh-agent-default-model'
+  config:
+    provider: deepseek-web
+    model: current-web-session
+- id: session-persistence-jsonl
+  name: '@deepseek-ai/dsh-session-persistence-jsonl'
+  config:
+    root: !!js dshHomePath('sessions')
+    compression: none
+- id: session-checkpoint-policy
+  name: '@deepseek-ai/dsh-session-checkpoint-policy'
+- id: agent-loop
+  name: '@deepseek-ai/dsh-agent-loop'
+  config:
+    maxParallelToolCalls: 1
+    agents: []
+- id: llm-deepseek-web
+  name: '@deepseek-pp/dsh-llm-deepseek-web'

@@ -73,7 +73,7 @@
 | M0 Protocol + fake Broker | 纯 TypeScript 版本化协议、严格 codec、fake browser/fake Broker 纵切片 | `verified` | 握手/认证、生成、增量、唯一终态、幂等取消、状态查询、预算和未知字段拒绝均有自动化测试 |
 | M1 Browser Broker | DeepSeek++ 建立 authenticated loopback WebSocket，并委托现有网页客户端 | `verified` | 只连 `127.0.0.1`；凭据不越界；模式 B 行为/chunk 不变 |
 | M2 DSH adapter + profile | out-of-tree `deepseek-web` LLM adapter、profile 与最小安装 bundle | `verified` | DSH 可显式选择 `provider=deepseek-web`；无隐式 provider fallback；不修改 DSH `master` |
-| M3 Real one-turn | 本机 DSH 经已登录浏览器完成一次真实网页模型回合 | `not_started` | 无 DeepSeek API key/其他 provider；流正常结束；最终文本进入同一 DSH session |
+| M3 Real one-turn | 本机 DSH 经已登录浏览器完成一次真实网页模型回合 | `in_progress` | 无 DeepSeek API key/其他 provider；流正常结束；最终文本进入同一 DSH session |
 | M4 Local-tool multi-turn | 网页模型请求 DSH 本地只读搜索/读取工具，结果进入下一模型回合并返回最终结果 | `not_started` | 首个完整 P0 验收通过；工具只执行一次且可审计，DSH 始终拥有 loop authority |
 | M5 Disconnect/cancel/recovery | 浏览器离线、取消、断连、重连查询和不明结果处理 | `not_started` | 离线=`waiting_for_browser`；取消幂等；`ambiguous` 不自动重放；唯一终态可重复查询 |
 | M6 Install/release readiness | 本机 Broker、DSH adapter/profile 的安装升级、文档、供应链和发布门禁 | `not_started` | 仅在 M0–M5 验证完成且获得明确 release 授权后执行完整门禁 |
@@ -94,7 +94,7 @@
 | P2 | P2-T1 | out-of-tree DSH `deepseek-web` LLM adapter | `—` | `—` | `dsh_adapter_implement`; review: `dsh_api_surface` | `verified` |
 | P2 | P2-T2 | DSH profile、显式 provider 选择与最小安装 bundle | `—` | `—` | `dsh_bundle_implement`; review: `dsh_api_surface`, `dsh_adapter_implement` | `verified` |
 | P2 | P2-T3 | 实际 `dsh` 入口到 fake browser peer 的单轮闭环 | `—` | `—` | `dsh_fake_e2e_implement`; review: `dsh_fake_e2e_audit`, orchestration | `verified` |
-| P3 | P3-T1 | 无 API key 的真实网页单回合 E2E | `TBD` | `TBD` | `TBD` | `not_started` |
+| P3 | P3-T1 | 无 API key 的真实网页单回合 E2E | `—` | `—` | `dsh_real_smoke_implement`; review: `dsh_adapter_implement`, orchestration | `in_progress` |
 | P4 | P4-T1 | DSH 本地只读工具多回合与最终结果 E2E | `TBD` | `TBD` | `TBD` | `not_started` |
 | P5 | P5-T1 | disconnect/cancel/recovery、`waiting_for_browser` 与不重放 | `TBD` | `TBD` | `TBD` | `not_started` |
 | P6 | P6-T1 | 安装、升级、文档和 release readiness | `TBD` | `TBD` | `TBD` | `not_started` |
@@ -140,12 +140,12 @@
 
 ## 当前状态与下一步
 
-**当前状态**：架构决策 `docs/decisions/web-harness-model-broker.md` 已接受，模式 A 是唯一主开发线。M0 已由提交 `a9dab85`、`eaebb4a`、`9cbe43b` 完整冻结。P1-T1 已由提交 `4d111e6` 完成 MV3 可重建的 WebSocket client；P1-T2 已由提交 `ac87871` 完成不依赖 Pi 的网页模型 Turn Adapter；P1-T3 已由提交 `781d029`、`e4dcc34`、`e712fec` 将二者组合进 Background，并交付默认关闭、browser-local 配对设置、可见状态、显式重连、authority epoch 隔离和按需加载的设置页。M1 Browser Broker 已完成自动化、独立复核和 Chrome/Edge/Firefox 构建验证。P2-T1 已实现并验证 out-of-tree `deepseek-web/current-web-session` `LlmAdapter`；P2-T2 已交付基于 Harness `0.1.2-rc.1` 正式 headless 入口的独立 allowlist bundle；P2-T3 又从实际 `dsh` 入口、临时独立 profile 和 Agent loop，经 T2.1 adapter 与真实认证回环 WebSocket 到独立 fake browser，完成流式终答并 durable flush 到唯一 DSH JSONL session。M2 因而已完成 fake 集成验证，但尚未执行真实网页模型 E2E。Batch A 的 `compile` 通过；全仓 `npm test` 在 60 秒硬上限终止前暴露 7 个既有非 Harness 路径失败，故完整仓库门禁仍如实记为失败，不能宣称全绿。当前 checkout-link 安装不是自包含发行 tarball；私有 TS workspace 的构建/打包闭包明确留给 P6，不得据此宣称 release-ready。reasoning 不允许进入历史消息，只能在双边显式协商后作为 `retention: ephemeral` 的流事件出现。模式 B 只保持兼容，当前分支没有 release 授权。
+**当前状态**：架构决策 `docs/decisions/web-harness-model-broker.md` 已接受，模式 A 是唯一主开发线。M0 已由提交 `a9dab85`、`eaebb4a`、`9cbe43b` 完整冻结。P1-T1 已由提交 `4d111e6` 完成 MV3 可重建的 WebSocket client；P1-T2 已由提交 `ac87871` 完成不依赖 Pi 的网页模型 Turn Adapter；P1-T3 已由提交 `781d029`、`e4dcc34`、`e712fec` 将二者组合进 Background，并交付默认关闭、browser-local 配对设置、可见状态、显式重连、authority epoch 隔离和按需加载的设置页。M1 Browser Broker 已完成自动化、独立复核和 Chrome/Edge/Firefox 构建验证。P2-T1 已实现并验证 out-of-tree `deepseek-web/current-web-session` `LlmAdapter`；P2-T2 已交付基于 Harness `0.1.2-rc.1` 正式 headless 入口的独立 allowlist bundle；P2-T3 又从实际 `dsh` 入口、临时独立 profile 和 Agent loop，经 T2.1 adapter 与真实认证回环 WebSocket 到独立 fake browser，完成流式终答并 durable flush 到唯一 DSH JSONL session。M2 因而已完成 fake 集成验证。P3-T1 已交付默认零副作用、必须显式 opt-in 的真实网页 runner：离线预检会核验 Node/Harness、独立 profile 完整 allowlist、认证 Browser readiness、环境及两层 `.env` 无模型凭证、单轮 durable session 和脱敏证据；真实 `--confirm-real-web` 尚未运行，因此 M3/P3-T1 只记 `in_progress`。Batch A 的 `compile` 通过；全仓 `npm test` 在 60 秒硬上限终止前暴露 7 个既有非 Harness 路径失败，故完整仓库门禁仍如实记为失败，不能宣称全绿。当前 checkout-link 安装不是自包含发行 tarball；私有 TS workspace 的构建/打包闭包明确留给 P6，不得据此宣称 release-ready。reasoning 不允许进入历史消息，只能在双边显式协商后作为 `retention: ephemeral` 的流事件出现。模式 B 只保持兼容，当前分支没有 release 授权。
 
 **立即下一步**：
 
-1. 完成 P3-T1 的离线预检和显式 opt-in runner；未带 `--confirm-real-web` 时不得请求网页模型。
-2. 在用户明确准备好已登录 DeepSeek 页面、扩展 Broker 与配对配置后，执行一次无 API Key/provider 的真实网页单回合并保存脱敏证据。
+1. 准备隔离 `DSH_HOME`、已登录 DeepSeek 页面、扩展 Browser Broker 与配对配置；未带 `--confirm-real-web` 时不得请求网页模型。
+2. 用户明确 opt-in 后执行一次无 API Key/provider 的真实网页单回合，并保存 runner 输出的脱敏证据。
 3. 真实单回合通过后按 T4.1 → T4.4 推进官方只读工具多回合。全仓既有失败回流其原文件 owner，不混入模型代理主线；PR #568 与 release 工作继续隔离。
 
 ## 活动验证记录
@@ -188,3 +188,7 @@
 | 2026-09-04 | P2-T3 | DSH adapter/bundle/fake E2E 联合 `npx vitest run`; `npm run compile`; `git diff --check` | `passed` | 3 files / 26 tests；独立 reviewer 提出的连接错误 fail-loud、headless 环境 allowlist 和 Windows 子进程树清理问题已修复，最终无 blocker/high/medium |
 | 2026-09-04 | Batch A gate | `npm run compile` | `passed` | 根 TypeScript 编译通过 |
 | 2026-09-04 | Batch A gate | `npm test` | `failed (60s timeout)` | 按硬上限终止；终止前出现 7 个非 Harness 路径失败：Side Panel runtime/navigation、tool-provider import、persistence budget、3 个 Shell Host 测试。新增 DSH 定向集合另行 26/26 通过；终止后未发现本轮新启的残留 Node 测试进程，未把全仓门禁记为通过 |
+| 2026-09-04 | P3-T1 offline | `npx vitest run tests/real/dsh-web-real-smoke-preflight.test.ts` | `passed` | 1 file / 10 tests；默认零子进程/网页副作用、显式确认、Node/Harness/profile/provider、Broker 输入、ambient 与两层 `.env` 模型凭证、完整 14-row YAML allowlist、durable 单轮顺序/敏感值和 owned process-tree cleanup 均通过 |
+| 2026-09-04 | P3-T1 offline | `npm run smoke:dsh-web-agent:real`（不带 opt-in） | `passed (expected refusal)` | 稳定输出 `REAL_WEB_CONFIRMATION_REQUIRED` 并返回非零；未启动 DSH、未连接网页 |
+| 2026-09-04 | P3-T1 offline | `node --check scripts/dsh-web-real-smoke.mjs`; `npm run compile`; `git diff --check`; `npm install --package-lock-only --ignore-scripts --offline` | `passed` | runner 语法、根 TypeScript、差异与 `js-yaml@4.3.2` 直接精确依赖锁均通过；独立 reviewer 最终高/中风险项已全部回流修复 |
+| 2026-09-04 | P3-T1 real web | `npm run smoke:dsh-web-agent:real -- --confirm-real-web` | `not_run` | 需要操作者明确准备已登录页面、扩展 Broker、配对值与隔离 DSH_HOME；未把离线测试冒充真实网页证据 |

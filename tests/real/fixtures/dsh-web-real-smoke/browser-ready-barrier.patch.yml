@@ -1,0 +1,4 @@
+- insert:
+    - id: real-web-browser-ready-barrier
+      name: ./browser-ready-barrier.mjs
+      inject: [deepseekWebBroker]
