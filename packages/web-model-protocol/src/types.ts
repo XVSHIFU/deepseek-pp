@@ -174,6 +174,8 @@ export interface ModelStatusResponse {
   };
 }
 
+export type ModelRequestCheckpoint = Omit<ModelStatusResponse["result"], "schema_version" | "type">;
+
 export interface BridgeHeartbeatNotification {
   jsonrpc: "2.0";
   method: "bridge.heartbeat";

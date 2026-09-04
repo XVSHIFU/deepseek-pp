@@ -195,6 +195,41 @@ describe("Web Model Protocol v1 codec", () => {
 });
 
 describe("Web Model Protocol v1 sequence validator", () => {
+  it("hydrates only exact post-handshake request checkpoints without permitting gaps", () => {
+    const checkpoint = {
+      request_id: "request-1",
+      request_digest: "a".repeat(64),
+      status: "accepted",
+      last_sequence: 0,
+    } as const;
+    expect(() => new WebModelSequenceValidator().hydrateRequestCheckpoint(checkpoint))
+      .toThrowError(/HANDSHAKE_INCOMPLETE/);
+
+    const hydrated = new WebModelSequenceValidator();
+    hydrated.accept(helloRequest, "browser");
+    hydrated.accept(helloResponse, "host");
+    hydrated.hydrateRequestCheckpoint(checkpoint);
+    hydrated.hydrateRequestCheckpoint(checkpoint);
+    hydrated.accept({ ...eventFrames[1], params: { ...eventFrames[1].params, sequence: 1 } }, "browser");
+
+    const terminal = new WebModelSequenceValidator();
+    terminal.accept(helloRequest, "browser");
+    terminal.accept(helloResponse, "host");
+    const { schema_version: _schemaVersion, type: _type, ...terminalCheckpoint } = queryResponse.result;
+    terminal.hydrateRequestCheckpoint(terminalCheckpoint);
+    terminal.accept(queryRequest, "host");
+    terminal.accept(queryResponse, "browser");
+
+    const gap = new WebModelSequenceValidator();
+    gap.accept(helloRequest, "browser");
+    gap.accept(helloResponse, "host");
+    gap.hydrateRequestCheckpoint(checkpoint);
+    expect(() => gap.accept({ ...eventFrames[1], params: { ...eventFrames[1].params, sequence: 2 } }, "browser"))
+      .toThrowError(/SEQUENCE_GAP/);
+    expect(() => gap.hydrateRequestCheckpoint({ ...checkpoint, future: true } as any))
+      .toThrowError(/UNKNOWN_FIELD/);
+  });
+
   it("accepts hello, generation, streaming, one terminal, cancellation, query, and heartbeat", () => {
     const sequence = new WebModelSequenceValidator();
     sequence.accept(helloWithReasoningRequest, "browser");

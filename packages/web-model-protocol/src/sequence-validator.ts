@@ -2,7 +2,9 @@ import { decodeWebModelFrame, isTerminalEvent, validateWebModelFrame } from "./c
 import type {
   BridgeCapabilities,
   ModelEvent,
+  ModelRequestCheckpoint,
   ModelStatus,
+  ModelStatusResponse,
   ModelTerminalEvent,
   WebModelFrame,
 } from "./types";
@@ -84,6 +86,37 @@ export class WebModelSequenceValidator {
 
   decodeAndAccept(serialized: string, sender: ProtocolSender): WebModelFrame {
     return this.accept(decodeWebModelFrame(serialized), sender);
+  }
+
+  /** Restores only a fully observed remote checkpoint after a new handshake. */
+  hydrateRequestCheckpoint(input: ModelRequestCheckpoint): void {
+    this.assertReady();
+    const envelope = validateWebModelFrame({
+      jsonrpc: "2.0",
+      id: "checkpoint-hydration",
+      result: { schema_version: 1, type: "model.status", ...input },
+    }) as ModelStatusResponse;
+    const checkpoint = envelope.result;
+    if (checkpoint.status === "unknown") throw new ProtocolSequenceError("SEQUENCE_GAP");
+    const current = this.requests.get(checkpoint.request_id);
+    if (current) {
+      if (current.requestDigest !== checkpoint.request_digest) {
+        throw new ProtocolSequenceError("REQUEST_DIGEST_MISMATCH");
+      }
+      if (current.status !== checkpoint.status || current.lastSequence !== checkpoint.last_sequence ||
+          !sameOptionalTerminal(current.terminal, checkpoint.terminal)) {
+        throw new ProtocolSequenceError(current.terminal ? "TERMINAL_MISMATCH" : "SEQUENCE_GAP");
+      }
+      current.accepted = true;
+      return;
+    }
+    this.requests.set(checkpoint.request_id, {
+      requestDigest: checkpoint.request_digest,
+      accepted: true,
+      status: checkpoint.status,
+      lastSequence: checkpoint.last_sequence,
+      ...(checkpoint.terminal === undefined ? {} : { terminal: checkpoint.terminal }),
+    });
   }
 
   private assertDirection(frame: WebModelFrame, sender: ProtocolSender): void {
@@ -299,4 +332,9 @@ function sameTerminal(left: ModelTerminalEvent, right: ModelTerminalEvent): bool
       return right.type === "failed" && left.error.code === right.error.code && left.error.message === right.error.message &&
         left.error.retryable === right.error.retryable && left.error.external_outcome === right.error.external_outcome;
   }
+}
+
+function sameOptionalTerminal(left: ModelTerminalEvent | undefined, right: ModelTerminalEvent | undefined): boolean {
+  if (left === undefined || right === undefined) return left === right;
+  return sameTerminal(left, right);
 }

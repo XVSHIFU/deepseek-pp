@@ -1,0 +1,20 @@
+{
+  "name": "@deepseek-pp/dsh-web-model-transport",
+  "version": "0.0.0-private",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "@deepseek-pp/web-model-protocol": "0.0.0-private",
+    "ws": "8.21.0"
+  },
+  "devDependencies": {
+    "@types/ws": "8.18.1"
+  }
+}
