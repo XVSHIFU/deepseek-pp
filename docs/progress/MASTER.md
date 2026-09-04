@@ -70,7 +70,7 @@
 
 | Milestone | 结果 | 状态 | 退出条件 |
 |:--|:--|:--|:--|
-| M0 Protocol + fake Broker | 纯 TypeScript 版本化协议、严格 codec、fake browser/fake Broker 纵切片 | `not_started` | 握手/认证、生成、增量、唯一终态、幂等取消、状态查询、预算和未知字段拒绝均有自动化测试 |
+| M0 Protocol + fake Broker | 纯 TypeScript 版本化协议、严格 codec、fake browser/fake Broker 纵切片 | `in_progress` | 握手/认证、生成、增量、唯一终态、幂等取消、状态查询、预算和未知字段拒绝均有自动化测试 |
 | M1 Browser Broker | DeepSeek++ 建立 authenticated loopback WebSocket，并委托现有网页客户端 | `not_started` | 只连 `127.0.0.1`；凭据不越界；模式 B 行为/chunk 不变 |
 | M2 DSH adapter + profile | out-of-tree `deepseek-web` LLM adapter、profile 与最小安装 bundle | `not_started` | DSH 可显式选择 `provider=deepseek-web`；无隐式 provider fallback；不修改 DSH `master` |
 | M3 Real one-turn | 本机 DSH 经已登录浏览器完成一次真实网页模型回合 | `not_started` | 无 DeepSeek API key/其他 provider；流正常结束；最终文本进入同一 DSH session |
@@ -85,8 +85,8 @@
 | Batch | Task | 任务范围 | Issue | PR | Agent/owner | 状态 |
 |:--|:--|:--|:--|:--|:--|:--|
 | G0 | G0-T1 | 创建并维护活动进度真源 | `—` | `—` | orchestration | `in_progress` |
-| P0 | P0-T1 | 共享协议类型、严格 codec、版本与消息预算 | `TBD` | `TBD` | `TBD` | `not_started` |
-| P0 | P0-T2 | authenticated loopback WebSocket fake Broker | `TBD` | `TBD` | `TBD` | `not_started` |
+| P0 | P0-T1 | 共享协议类型、严格 codec、版本与消息预算 | `—` | `—` | `release_gap_audit`; review: `protocol_v1_review` | `verified` |
+| P0 | P0-T2 | authenticated loopback WebSocket fake Broker | `—` | `—` | `release_gap_audit` | `in_progress` |
 | P0 | P0-T3 | fake browser 纵切片：流顺序、取消、状态查询、离线与 `ambiguous` | `TBD` | `TBD` | `TBD` | `not_started` |
 | P1 | P1-T1 | DeepSeek++ Browser Broker 连接、配对与生命周期 | `TBD` | `TBD` | `TBD` | `not_started` |
 | P1 | P1-T2 | Broker 委托 `DeepSeekAutomationClient`/`stream-codec`，并隔离模式 B chunk | `TBD` | `TBD` | `TBD` | `not_started` |
@@ -138,14 +138,13 @@
 
 ## 当前状态与下一步
 
-**当前状态**：架构决策 `docs/decisions/web-harness-model-broker.md` 已接受，模式 A 是唯一主开发线；本页已按该决策纠正。功能代码尚未开始，因此 M0–M6 均不得标记完成。模式 B 已有能力只保持兼容，当前分支没有 release 授权。
+**当前状态**：架构决策 `docs/decisions/web-harness-model-broker.md` 已接受，模式 A 是唯一主开发线。P0-T1 已由提交 `a9dab85` 冻结：纯 TypeScript Protocol v1 已锁定严格 frame codec、Browser/Host 方向、能力协商、连续事件序号、唯一终态、`request_digest`、取消/查询与 `not_started`/`ambiguous` 恢复边界。reasoning 不允许进入历史消息，只能在双边显式协商后作为 `retention: ephemeral` 的流事件出现。P0-T2 回环 WebSocket Host transport 已启动；模式 B 只保持兼容，当前分支没有 release 授权。
 
 **立即下一步**：
 
-1. 启动 P0-T1：定义纯 TypeScript、无 DOM/WXT/Node/DSH 依赖的版本化协议与严格 codec，覆盖认证握手、`generate`、接受、增量、唯一终态、失败、幂等取消和状态查询。
-2. 在协议中锁定请求关联 ID、单调事件序号、消息/流字节上限、截止时间、凭据禁传和错误分类；浏览器不可用映射为 `waiting_for_browser`，结果不明映射为 `ambiguous` 且不可自动重放。
-3. 启动 P0-T2/P0-T3：以 authenticated `127.0.0.1` WebSocket fake Broker 和 fake browser 完成默认离线纵切片测试；服务端按 remote address、Host、Origin、协议版本、认证、消息大小、Schema 顺序失败关闭。
-4. 只有 P0 的 L1/L2 证据收口后才进入 Browser Broker；随后严格按 M1 → M2 → M3 → M4 推进首个真实闭环。PR #568 与 release 工作继续隔离。
+1. 完成 P0-T2：实现只绑定 `127.0.0.1` 的 authenticated WebSocket Host transport、单 Browser peer lease、heartbeat、单在途请求和无自动重放的 `ambiguous` 收口。
+2. 完成 P0-T3：用独立 fake browser 经过真实 socket 验证认证、流顺序、取消、状态查询、断线与端口释放，不直接调用 Broker 内部方法。
+3. 只在 P0 的 L1/L2 证据收口后进入 Browser Broker；随后严格按 M1 → M2 → M3 → M4 推进首个真实闭环。PR #568 与 release 工作继续隔离。
 
 ## 活动验证记录
 
@@ -154,3 +153,9 @@
 | 2026-09-04 | G0-T1 | `git remote -v`; `git branch --show-current`; `git rev-parse HEAD` | `passed` | 核实本地 DeepSeek++ remote、活动分支与基线 SHA |
 | 2026-09-04 | G0-T1 | GitHub API repo/branch/compare/PR 查询 | `passed` | 核实两个 fork、两个 upstream 和 PR #568 状态；只读 |
 | 2026-09-04 | G0-T1 | Runtime/compile/test/build | `not_run` | 本任务只新增治理文档，不改变运行时代码 |
+| 2026-09-04 | P0-T1 | `npx vitest run tests/web-model-protocol.test.ts` | `passed` | 22/22；包含逐字节 JSONL golden、错误输入、方向、协商、连续序号、终态、恢复与 reasoning ephemeral 合同 |
+| 2026-09-04 | P0-T1 | `npx tsc -p packages/web-model-protocol/tsconfig.json --noEmit` | `passed` | 协议包独立 strict TypeScript 通过 |
+| 2026-09-04 | P0-T1 | `npm run compile` | `passed` | DeepSeek++ 根编译通过 |
+| 2026-09-04 | P0-T1 | `git diff --check` | `passed` | 静态差异检查通过；独立 reviewer 未发现 blocker/high |
+| 2026-09-04 | Environment | `npm ci` | `failed` | WXT 0.20.26 的 prepare 在含 `+` 的工作目录生成非法正则；依赖下载本身完成 |
+| 2026-09-04 | Environment | `npm ci --ignore-scripts`; `npx wxt prepare`（经本机安全 junction） | `passed` | 生成 `.wxt` 后，定向测试和根编译均在实际工作树通过；此为开发路径兼容措施，不是产品能力 |
