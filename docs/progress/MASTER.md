@@ -72,7 +72,7 @@
 |:--|:--|:--|:--|
 | M0 Protocol + fake Broker | 纯 TypeScript 版本化协议、严格 codec、fake browser/fake Broker 纵切片 | `verified` | 握手/认证、生成、增量、唯一终态、幂等取消、状态查询、预算和未知字段拒绝均有自动化测试 |
 | M1 Browser Broker | DeepSeek++ 建立 authenticated loopback WebSocket，并委托现有网页客户端 | `verified` | 只连 `127.0.0.1`；凭据不越界；模式 B 行为/chunk 不变 |
-| M2 DSH adapter + profile | out-of-tree `deepseek-web` LLM adapter、profile 与最小安装 bundle | `in_progress` | DSH 可显式选择 `provider=deepseek-web`；无隐式 provider fallback；不修改 DSH `master` |
+| M2 DSH adapter + profile | out-of-tree `deepseek-web` LLM adapter、profile 与最小安装 bundle | `verified` | DSH 可显式选择 `provider=deepseek-web`；无隐式 provider fallback；不修改 DSH `master` |
 | M3 Real one-turn | 本机 DSH 经已登录浏览器完成一次真实网页模型回合 | `not_started` | 无 DeepSeek API key/其他 provider；流正常结束；最终文本进入同一 DSH session |
 | M4 Local-tool multi-turn | 网页模型请求 DSH 本地只读搜索/读取工具，结果进入下一模型回合并返回最终结果 | `not_started` | 首个完整 P0 验收通过；工具只执行一次且可审计，DSH 始终拥有 loop authority |
 | M5 Disconnect/cancel/recovery | 浏览器离线、取消、断连、重连查询和不明结果处理 | `not_started` | 离线=`waiting_for_browser`；取消幂等；`ambiguous` 不自动重放；唯一终态可重复查询 |
@@ -93,7 +93,7 @@
 | P1 | P1-T3 | Browser Broker 组合、配置与可见状态 | `—` | `—` | `release_gap_audit`; review: `protocol_v1_review`, `p1_t3_final_review` | `verified` |
 | P2 | P2-T1 | out-of-tree DSH `deepseek-web` LLM adapter | `—` | `—` | `dsh_adapter_implement`; review: `dsh_api_surface` | `verified` |
 | P2 | P2-T2 | DSH profile、显式 provider 选择与最小安装 bundle | `—` | `—` | `dsh_bundle_implement`; review: `dsh_api_surface`, `dsh_adapter_implement` | `verified` |
-| P2 | P2-T3 | 实际 `dsh` 入口到 fake browser peer 的单轮闭环 | `TBD` | `TBD` | `TBD` | `not_started` |
+| P2 | P2-T3 | 实际 `dsh` 入口到 fake browser peer 的单轮闭环 | `—` | `—` | `dsh_fake_e2e_implement`; review: `dsh_fake_e2e_audit`, orchestration | `verified` |
 | P3 | P3-T1 | 无 API key 的真实网页单回合 E2E | `TBD` | `TBD` | `TBD` | `not_started` |
 | P4 | P4-T1 | DSH 本地只读工具多回合与最终结果 E2E | `TBD` | `TBD` | `TBD` | `not_started` |
 | P5 | P5-T1 | disconnect/cancel/recovery、`waiting_for_browser` 与不重放 | `TBD` | `TBD` | `TBD` | `not_started` |
@@ -140,13 +140,13 @@
 
 ## 当前状态与下一步
 
-**当前状态**：架构决策 `docs/decisions/web-harness-model-broker.md` 已接受，模式 A 是唯一主开发线。M0 已由提交 `a9dab85`、`eaebb4a`、`9cbe43b` 完整冻结。P1-T1 已由提交 `4d111e6` 完成 MV3 可重建的 WebSocket client；P1-T2 已由提交 `ac87871` 完成不依赖 Pi 的网页模型 Turn Adapter；P1-T3 已由提交 `781d029`、`e4dcc34`、`e712fec` 将二者组合进 Background，并交付默认关闭、browser-local 配对设置、可见状态、显式重连、authority epoch 隔离和按需加载的设置页。M1 Browser Broker 已完成自动化、独立复核和 Chrome/Edge/Firefox 构建验证。P2-T1 已实现并验证 out-of-tree `deepseek-web/current-web-session` `LlmAdapter`。P2-T2 已交付基于 Harness `0.1.2-rc.1` 正式 headless 入口的独立 allowlist bundle：生产 Cordis Host 随 fiber 启停，唯一模型为 `deepseek-web/current-web-session`，Session/JSONL/checkpoint 与空工具注册表均由 DSH 所有；临时空 profile 中实际执行 `dsh plugin ... add <local-package>`、纯 Node import、配置 dump 和无 Browser CLI 失败均已验证。当前还缺 P2-T3 的真实 socket fake-browser 单轮 durable E2E，因此 M2 尚未完成，也未执行真实网页模型 E2E。当前 checkout-link 安装不是自包含发行 tarball；私有 TS workspace 的构建/打包闭包明确留给 P6，不得据此宣称 release-ready。reasoning 不允许进入历史消息，只能在双边显式协商后作为 `retention: ephemeral` 的流事件出现。模式 B 只保持兼容，当前分支没有 release 授权。
+**当前状态**：架构决策 `docs/decisions/web-harness-model-broker.md` 已接受，模式 A 是唯一主开发线。M0 已由提交 `a9dab85`、`eaebb4a`、`9cbe43b` 完整冻结。P1-T1 已由提交 `4d111e6` 完成 MV3 可重建的 WebSocket client；P1-T2 已由提交 `ac87871` 完成不依赖 Pi 的网页模型 Turn Adapter；P1-T3 已由提交 `781d029`、`e4dcc34`、`e712fec` 将二者组合进 Background，并交付默认关闭、browser-local 配对设置、可见状态、显式重连、authority epoch 隔离和按需加载的设置页。M1 Browser Broker 已完成自动化、独立复核和 Chrome/Edge/Firefox 构建验证。P2-T1 已实现并验证 out-of-tree `deepseek-web/current-web-session` `LlmAdapter`；P2-T2 已交付基于 Harness `0.1.2-rc.1` 正式 headless 入口的独立 allowlist bundle；P2-T3 又从实际 `dsh` 入口、临时独立 profile 和 Agent loop，经 T2.1 adapter 与真实认证回环 WebSocket 到独立 fake browser，完成流式终答并 durable flush 到唯一 DSH JSONL session。M2 因而已完成 fake 集成验证，但尚未执行真实网页模型 E2E。Batch A 的 `compile` 通过；全仓 `npm test` 在 60 秒硬上限终止前暴露 7 个既有非 Harness 路径失败，故完整仓库门禁仍如实记为失败，不能宣称全绿。当前 checkout-link 安装不是自包含发行 tarball；私有 TS workspace 的构建/打包闭包明确留给 P6，不得据此宣称 release-ready。reasoning 不允许进入历史消息，只能在双边显式协商后作为 `retention: ephemeral` 的流事件出现。模式 B 只保持兼容，当前分支没有 release 授权。
 
 **立即下一步**：
 
-1. 完成 P2-T3：从实际 `dsh` 入口经真实 loopback transport 到 fake browser peer，验证单轮 session durable flush。
-2. 在 P2-T3 后执行一次 Batch A `npm run compile` 与 `npm test` 门禁，真实记录既有 Windows/环境失败与本任务回归。
-3. 继续严格按 M2 → M3 → M4 推进真实网页单回合和本地只读工具多回合。PR #568 与 release 工作继续隔离。
+1. 完成 P3-T1 的离线预检和显式 opt-in runner；未带 `--confirm-real-web` 时不得请求网页模型。
+2. 在用户明确准备好已登录 DeepSeek 页面、扩展 Broker 与配对配置后，执行一次无 API Key/provider 的真实网页单回合并保存脱敏证据。
+3. 真实单回合通过后按 T4.1 → T4.4 推进官方只读工具多回合。全仓既有失败回流其原文件 owner，不混入模型代理主线；PR #568 与 release 工作继续隔离。
 
 ## 活动验证记录
 
@@ -183,3 +183,8 @@
 | 2026-09-04 | P2-T2 | `npx vitest run tests/dsh-llm-deepseek-web.test.ts tests/dsh-web-agent-bundle.test.ts` | `passed` | 根复验 2 files / 25 tests；实际官方 profile composer、Cordis Host lifecycle、异步 service teardown、唯一网页 provider、空 tools、checkpoint、无 Browser `WAITING_FOR_BROWSER` 和无 API/Pi fallback 均通过 |
 | 2026-09-04 | P2-T2 | 临时 `DSH_HOME` seed；`dsh plugin --profile deepseek-web-agent add <local-package>`；Node import；`dsh --dump-default-config`；无 Browser headless task | `passed` | 最终 bundle 列表仅含本包、无 `dsh-base`；配置可由官方 DSH `0.1.2-rc.1` 解析，CLI 缺 Browser 明确失败且未回退。只证明当前 checkout link，非独立 tarball/registry 发布闭包 |
 | 2026-09-04 | P2-T2 | `npm run build --workspace @deepseek-pp/dsh-web-agent-bundle --if-present`; `npm run compile`; `git diff --check` | `passed` | 根复验通过；独立 reviewer 的 Host 异步 unprovide/stop 与 pairing-token secret metadata 问题已修复；完整发行打包留 P6 |
+| 2026-09-04 | P2-T3 | `npx vitest run tests/dsh-web-agent-fake-e2e.test.ts` | `passed` | 1/1；实际 `dsh` CLI、临时 profile、官方 Agent loop、T2.1 adapter、认证回环 WebSocket、独立 fake browser 和唯一 JSONL session durable flush 全部经过；无直接 adapter 调用 |
+| 2026-09-04 | P2-T3 | `node scripts/dsh-web-agent-fake-smoke.mjs` | `passed` | 单行脱敏 JSON；终答、唯一模型请求、持久 assistant/message、最终 turn/end(completed)、端口和临时目录释放均通过 |
+| 2026-09-04 | P2-T3 | DSH adapter/bundle/fake E2E 联合 `npx vitest run`; `npm run compile`; `git diff --check` | `passed` | 3 files / 26 tests；独立 reviewer 提出的连接错误 fail-loud、headless 环境 allowlist 和 Windows 子进程树清理问题已修复，最终无 blocker/high/medium |
+| 2026-09-04 | Batch A gate | `npm run compile` | `passed` | 根 TypeScript 编译通过 |
+| 2026-09-04 | Batch A gate | `npm test` | `failed (60s timeout)` | 按硬上限终止；终止前出现 7 个非 Harness 路径失败：Side Panel runtime/navigation、tool-provider import、persistence budget、3 个 Shell Host 测试。新增 DSH 定向集合另行 26/26 通过；终止后未发现本轮新启的残留 Node 测试进程，未把全仓门禁记为通过 |

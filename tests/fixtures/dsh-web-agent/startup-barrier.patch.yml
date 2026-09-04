@@ -1,0 +1,3 @@
+- insert:
+    - id: fake-browser-ready-barrier
+      name: ./startup-barrier.mjs
