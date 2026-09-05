@@ -216,18 +216,20 @@ npm test
 - **2026-09-05 长会话边界**：上述功能 fixture 已通过；新增 `tests/dsh-web-context-budget.test.ts` 固定 128 messages/1 MiB 上限，验证官方 token 压力自动摘要与提前显式 `compactNow` 的持久恢复。大量短回合低于 token 阈值时可先超消息上限；新输入在官方压力检查后加入，也可令帧先越界。两者目前拒绝派发、保留历史、不重放，但不算自动长会话保护完成。只覆盖 `summarize` 的既定扩展面不能解决这两处准入时序；不得伪造 token/context-overflow、提高协议预算或复制压缩核心绕过。若需上游增强，按第 12 节单独提出最小公开 hook 方案，不暗改 Harness core。
 - **定向测试**：`npx vitest run tests/dsh-web-harness-features.test.ts`。
 
-#### T4.6 长会话补齐：待确认的最小上游扩展
+#### T4.6 长会话补齐：已实现的最小上游扩展
 
 当前不是模型不支持压缩，而是锁版 Harness 的自动触发只看 token，且检查点早于当次新输入入会话。现有唯一 `summarize` hook 只能改变摘要调用，不能安全改变请求准入和区段选择；简单降低 token 阈值无法保证消息数/编码字节边界。
 
-建议在 `XVSHIFU/deepseek-harness` 的独立 topic branch 先验证并提出一个通用的 **模型请求预算 hook**，不修改 `master`、不复制核心到 DeepSeek++、不立即替换当前可用运行时：
+2026-09-05 维护者已明确同意。在 `XVSHIFU/deepseek-harness` 的独立 `codex/web-request-budget` topic branch 先验证一个通用的 **模型请求预算 hook**；本地源码位于 `C:\temp\deepseek-harness-request-budget`，起点锁定 `76fda729799fe9b3848dbe2c211d4b231032b81e`。不修改 `master`、不复制核心到 DeepSeek++、不立即替换当前可用运行时：
 
 1. 让模型适配层报告准备发送的完整请求是否触及消息/编码预算；检查必须考虑新输入、工具结果和实际工具描述，不把字节数伪装成 token。
 2. 压缩时机、平衡工具对的区段选择、摘要提交和持久化仍由官方引擎独占；摘要请求本身也须满足预算。先验证能否通过最小公开 hook 表达，再决定具体 API，不在外部插件重写这些算法。
 3. 仅允许有界压缩后重建尚未发送的请求。单条输入/工具描述本身超限时明确拒绝；摘要失败保持原历史；已发送或结果不明的请求绝不自动重放。沿用同网页模型，不提高既有协议限额。
 4. 用现有 context-budget fixture 把“短轮第 65 轮失败”改为“自动真实摘要后继续”；覆盖新输入跨界、摘要也越界、取消、checkpoint resume 和子会话。通过前不将补丁接入产品或声称长会话已完成。
 
-这是对“核心只用现有公开接口”约束的窄调整草案，**待维护者确认后执行**。当前测试/构建通过不代替此功能验收，也不因此提前放行后续阶段。
+这是维护者已批准的窄接口扩展验证，不授权无关核心重构、浮动依赖升级、发布或创建远端 PR。当前测试/构建通过不代替此功能验收；只有扩展及本项目真实 Harness/fake browser 集成通过后，才考虑固定身份的接入，不提前替换可用版本或放行后续阶段。
+
+**2026-09-05 实现结果**：fork `codex/web-request-budget` 的 `34d57aed2e386af0b61874390c86fc5915c51b1a` 已实现同步 `LlmAdapter.requestBudget`、同代际 prepared 预检，以及 defaults/image/replay 投影之后、实际 dispatch 之前的最终检查。使用独立 `LOCAL_REQUEST_BUDGET_EXCEEDED` 错误，经已有 `agent/request-error` 进入原压缩事务；默认最多一次，不剪枝，不改 loop/session schema。摘要按自身真实包络缩短平衡前缀，提交前再次检查取消；失败不提交、不授权普通重试器原样重发。浏览器不得提供此保留本地码。短轮第 65 轮、新输入字节跨界、摘要失败、完整工具对及 checkpoint resume 的真实 Harness/fake browser 测试已通过；另有 fork 原 headless CLI 无密钥录制／回放。三份原构建产物以内容哈希文件名及 npm overrides 固定，见 [依赖来源](../../vendor/harness-request-budget/README.md)。master 未改，不是 release。
 
 ### Batch B 完整门禁
 

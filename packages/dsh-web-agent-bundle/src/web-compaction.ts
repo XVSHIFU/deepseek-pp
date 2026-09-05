@@ -4,6 +4,7 @@ import {
   BlockAssembler,
   LlmError,
   createUserMessage,
+  type GenerateOptions,
   type Message,
   type ToolSchema,
 } from "@deepseek-ai/dsh-llm";
@@ -19,6 +20,16 @@ export const WEB_CHECKPOINT_INSTRUCTION = "Write a concise continuation checkpoi
  * generation cap. Protocol byte limits and upstream shrink validation remain.
  */
 export class WebCompactionEngine extends BasicCompactionEngine {
+  protected override async summarizationRequestBudget(
+    input: { readonly system?: string; readonly tools?: readonly ToolSchema[]; readonly messages: readonly Message[] },
+    agent: Agent,
+    signal?: AbortSignal,
+  ) {
+    const options = webSummarizationOptions(input, agent, signal);
+    const prepared = await this.ctx.llm.prepareCall(options, signal);
+    return prepared.requestBudget({ ...options, ...prepared.config });
+  }
+
   protected override async summarize(
     input: { readonly system?: string; readonly tools?: readonly ToolSchema[]; readonly messages: readonly Message[] },
     agent: Agent,
@@ -27,19 +38,7 @@ export class WebCompactionEngine extends BasicCompactionEngine {
     signal?.throwIfAborted();
     const assembler = new BlockAssembler();
     let finished = false;
-    for await (const chunk of this.ctx.llm.stream({
-      provider: DEEPSEEK_WEB_PROVIDER,
-      model: DEEPSEEK_WEB_MODEL,
-      sessionId: agent.session.id,
-      purpose: "compaction",
-      messages: [...input.messages, createUserMessage({
-        content: [{ type: "text", text: WEB_CHECKPOINT_INSTRUCTION }],
-        source: { kind: "plugin", plugin: "deepseek-web-compaction" },
-      })],
-      ...(input.system === undefined ? {} : { system: input.system }),
-      ...(input.tools === undefined ? {} : { tools: [...input.tools] }),
-      ...(signal === undefined ? {} : { signal }),
-    })) {
+    for await (const chunk of this.ctx.llm.stream(webSummarizationOptions(input, agent, signal))) {
       signal?.throwIfAborted();
       if (finished) throw new LlmError("Checkpoint stream continued after its finish.", "WEB_COMPACTION_INVALID_STREAM");
       assembler.push(chunk);
@@ -67,6 +66,28 @@ export class WebCompactionEngine extends BasicCompactionEngine {
       ...(assembler.usage === undefined ? {} : { usage: assembler.usage }),
     };
   }
+}
+
+// Budget selection and dispatch must measure the same web-specific packet,
+// including the final checkpoint instruction and the actual system/tool schema.
+function webSummarizationOptions(
+  input: { readonly system?: string; readonly tools?: readonly ToolSchema[]; readonly messages: readonly Message[] },
+  agent: Agent,
+  signal?: AbortSignal,
+): GenerateOptions {
+  return {
+    provider: DEEPSEEK_WEB_PROVIDER,
+    model: DEEPSEEK_WEB_MODEL,
+    sessionId: agent.session.id,
+    purpose: "compaction",
+    messages: [...input.messages, createUserMessage({
+      content: [{ type: "text", text: WEB_CHECKPOINT_INSTRUCTION }],
+      source: { kind: "plugin", plugin: "deepseek-web-compaction" },
+    })],
+    ...(input.system === undefined ? {} : { system: input.system }),
+    ...(input.tools === undefined ? {} : { tools: [...input.tools] }),
+    ...(signal === undefined ? {} : { signal }),
+  };
 }
 
 export default WebCompactionEngine;

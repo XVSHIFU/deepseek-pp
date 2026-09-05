@@ -15,6 +15,7 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createFeatureRuntime } from "./fixtures/dsh-web-agent/harness-features/runtime.ts";
+import { WEB_CHECKPOINT_INSTRUCTION } from "../packages/dsh-web-agent-bundle/src/web-compaction.ts";
 
 const fixtures: Awaited<ReturnType<typeof createFeatureRuntime>>[] = [];
 afterEach(async () => { for (const fixture of fixtures.splice(0)) await fixture.dispose(); });
@@ -41,7 +42,37 @@ function prospectiveRequest(session: Session, text: string) {
   }, { requestId: "context-budget-probe" });
 }
 function summaries(session: Session) { return session.snapshotEvents().filter((event) => event.type === "compaction/summary"); }
+function text(request: ModelGenerateRequest["params"]) {
+  return request.input.messages.flatMap((message) => message.content).filter((block) => block.type === "text").map((block) => block.text).join("\n");
+}
+function summaryEnvelope(request: ModelGenerateRequest["params"], session: Session) {
+  expect(request.purpose).toBe("compaction");
+  expect(request.session_id).toBe(session.id);
+  expect(request.input.messages.at(-1)).toEqual({ role: "user", content: [{ type: "text", text: WEB_CHECKPOINT_INSTRUCTION }] });
+  const header = session.requestHeader()!;
+  if (header.system !== undefined) {
+    expect(request.input.messages[0]).toEqual({ role: "system", content: [{ type: "text", text: header.system }] });
+  }
+  expect(request.tools).toEqual(prospectiveRequest(session, "envelope comparison").tools);
+  expect(request.tools.map((tool) => tool.name).sort()).toEqual(["skill", "str_replace_editor", "subagent"]);
+  expect(request.options).not.toHaveProperty("maxTokens");
+}
+async function durableCheckpoint(fixture: Awaited<ReturnType<typeof setup>>, handle: AgentHandle, checkpoint: string) {
+  const session = handle.agent.session;
+  const [summary] = summaries(session);
+  expect(summaries(session)).toHaveLength(1);
+  expect(summary?.data).toMatchObject({ provider: "deepseek-web", model: "current-web-session", llmStreamCall: true });
+  expect(summary?.data.shadowedSeqs.length).toBeGreaterThan(0);
+  expect(summary?.data).not.toHaveProperty("maxTokens");
+  await fixture.ctx.sessions.flush(session);
+  const raw = (await fixture.ctx.sessionPersistence.readRaw(session.id))?.content;
+  expect(raw).toContain("compaction/summary");
+  expect(raw).toContain(checkpoint);
+  expect(session.snapshotEvents().at(-1)).toMatchObject({ type: "turn/end", data: { reason: { kind: "completed" } } });
+}
 function allWebRequests(fixture: Awaited<ReturnType<typeof setup>>) {
+  const requests = fixture.peer.observedGenerateRequests;
+  expect(new Set(requests.map((request) => request.request_id)).size).toBe(requests.length);
   for (const request of fixture.peer.observedGenerateRequests) {
     expect(request.model).toEqual({ provider: "deepseek-web", model_id: "current-web-session" });
     expect(request.input.messages.length).toBeLessThanOrEqual(MAX_MESSAGES);
@@ -99,7 +130,7 @@ describe("web context hard limits over the official Harness composition", () => 
     allWebRequests(fixture);
   }, 30_000);
 
-  it("current-gap: many short turns reach the message cap below automatic token pressure, without losing or replaying history", async () => {
+  it("recovers the short-history message cap with a bounded summary and a real persisted continuation", async () => {
     const fixture = await setup();
     const handle = await fixture.create();
     await shortHistory(fixture, handle, 64);
@@ -107,27 +138,44 @@ describe("web context hard limits over the official Harness composition", () => 
     expect(next.input.messages.length).toBeGreaterThan(MAX_MESSAGES);
     expect(fixture.ctx.tokenMeter.measure(handle.agent.session).totalTokens).toBeLessThan(DEEPSEEK_WEB_CONTEXT_WINDOW * 0.35);
     const before = [...handle.agent.session.surface.nodes];
-    await expect(fixture.turn(handle, "Boundary turn must remain in the durable log.")).rejects.toThrow();
-    expect(fixture.peer.observedGenerateRequests).toHaveLength(64);
+    const checkpoint = "SHORT_HISTORY_CHECKPOINT: items 0 through 62 complete; continue the boundary task.";
+    fixture.peer.enqueueGeneration((request) => {
+      summaryEnvelope(request, handle.agent.session);
+      // The unbounded prefix plus system and final instruction would be 130
+      // messages. The official selector must shorten its balanced prefix.
+      expect(request.input.messages.length).toBeLessThanOrEqual(MAX_MESSAGES);
+      expect(request.input.messages.length).toBeGreaterThanOrEqual(MAX_MESSAGES - 2);
+      expect(text(request)).toContain("bounded item 0");
+      return final(checkpoint);
+    });
+    fixture.peer.enqueueGeneration((request) => {
+      expect(request.purpose).toBe("agent");
+      expect(text(request)).toContain(checkpoint);
+      expect(text(request)).toContain("Boundary turn must remain in the durable log.");
+      expect(request.input.messages.length).toBeLessThan(12);
+      return final("SHORT_HISTORY_CONTINUED");
+    });
+    await fixture.turn(handle, "Boundary turn must remain in the durable log.");
+    expect(fixture.peer.observedGenerateRequests).toHaveLength(66);
+    expect(fixture.peer.observedGenerateRequests.slice(64).map((request) => request.purpose)).toEqual(["compaction", "agent"]);
     expect(fixture.peer.cancelRequestCount).toBe(0);
-    expect(summaries(handle.agent.session)).toEqual([]);
-    expect(handle.agent.session.surface.nodes.slice(0, before.length)).toEqual(before);
-    const events = handle.agent.session.snapshotEvents();
-    expect(events.at(-1)).toMatchObject({ type: "turn/end", data: { reason: { kind: "error" } } });
-    // Waiting until *after* overflow is not a reliable recovery: the official
-    // maximal summary input can itself exceed the same unchanged message cap.
-    const afterFailure = [...handle.agent.session.surface.nodes];
-    await expect(fixture.ctx.compaction.compactNow(handle.agent, AbortSignal.timeout(10_000))).rejects.toThrow();
-    expect(handle.agent.session.surface.nodes).toEqual(afterFailure);
-    expect(summaries(handle.agent.session)).toEqual([]);
-    expect(fixture.peer.observedGenerateRequests).toHaveLength(64);
-    expect(handle.agent.session.snapshotEvents().filter((event) => event.type === "compaction/end")).toHaveLength(1);
+    const summary = summaries(handle.agent.session)[0]!;
+    expect(summary.data.shadowedSeqs).toEqual(before.slice(0, summary.data.shadowedSeqs.length));
+    expect(summary.data.shadowedSeqs.length).toBeLessThan(before.length);
+    await durableCheckpoint(fixture, handle, checkpoint);
     const id = handle.agent.session.id;
     expect((await fixture.ctx.sessionPersistence.readRaw(id))?.content).toContain("Boundary turn must remain in the durable log.");
     const beforeResume = handle.agent.session.deriveMessages();
     await fixture.disposeHandle(handle);
     const resumed = await fixture.resume(id);
     expect(resumed.agent.session.deriveMessages()).toEqual(beforeResume);
+    fixture.peer.enqueueGeneration((request) => {
+      expect(request.purpose).toBe("agent");
+      expect(text(request)).toContain(checkpoint);
+      expect(text(request)).toContain("SHORT_HISTORY_CONTINUED");
+      return final("RESUMED_SHORT_CHECKPOINT");
+    });
+    await fixture.turn(resumed, "Continue after reloading the durable checkpoint.");
     allWebRequests(fixture);
   }, 30_000);
 
@@ -156,7 +204,7 @@ describe("web context hard limits over the official Harness composition", () => 
     allWebRequests(fixture);
   }, 30_000);
 
-  it("current-gap: a newly admitted escaped input exceeds the frame cap after the automatic check priced only earlier history", async () => {
+  it("recovers a newly admitted escaped frame overflow before sending the original oversized request", async () => {
     const fixture = await setup();
     const handle = await fixture.create();
     for (let index = 0; index < 5; index++) {
@@ -174,12 +222,102 @@ describe("web context hard limits over the official Harness composition", () => 
     const price = fixture.ctx.tokenMeter.measure(handle.agent.session).totalTokens + fixture.ctx.tokenMeter.estimateMessage(createUserMessage({ content: [{ type: "text", text: nextText }], source: { kind: "user" } }));
     expect(price).toBeGreaterThanOrEqual(DEEPSEEK_WEB_CONTEXT_WINDOW * 0.35);
     const before = [...handle.agent.session.surface.nodes];
-    await expect(fixture.turn(handle, nextText)).rejects.toThrow();
-    expect(fixture.peer.observedGenerateRequests).toHaveLength(5);
+    const checkpoint = "ESCAPED_HISTORY_CHECKPOINT: preserve the five completed fixture results; continue the boundary input.";
+    fixture.peer.enqueueGeneration((request) => {
+      summaryEnvelope(request, handle.agent.session);
+      expect(Buffer.byteLength(JSON.stringify(frame(request)), "utf8")).toBeLessThanOrEqual(MAX_FRAME_BYTES);
+      return final(checkpoint);
+    });
+    fixture.peer.enqueueGeneration((request) => {
+      expect(request.purpose).toBe("agent");
+      expect(text(request)).toContain(checkpoint);
+      expect(text(request)).toContain(nextText);
+      return final("ESCAPED_BOUNDARY_CONTINUED");
+    });
+    await fixture.turn(handle, nextText);
+    expect(fixture.peer.observedGenerateRequests.slice(5).map((request) => request.purpose)).toEqual(["compaction", "agent"]);
     expect(fixture.peer.cancelRequestCount).toBe(0);
-    expect(summaries(handle.agent.session)).toEqual([]);
-    expect(handle.agent.session.surface.nodes.slice(0, before.length)).toEqual(before);
-    expect(handle.agent.session.snapshotEvents().at(-1)).toMatchObject({ type: "turn/end", data: { reason: { kind: "error" } } });
+    expect(summaries(handle.agent.session)[0]?.data.shadowedSeqs).toEqual(before);
+    await durableCheckpoint(fixture, handle, checkpoint);
+    allWebRequests(fixture);
+  }, 30_000);
+
+  it("keeps the latest real tool call/result pair outside the budget-selected summary and continues with its result", async () => {
+    const fixture = await setup();
+    const handle = await fixture.create();
+    await shortHistory(fixture, handle, 63);
+    const callId = "budget-latest-skill";
+    const checkpoint = "LATEST_TOOL_CHECKPOINT: completed the earlier fixture items; use the newly loaded guide.";
+    fixture.peer.enqueueGeneration((request) => {
+      expect(request.purpose).toBe("agent");
+      expect(request.input.messages.length).toBe(MAX_MESSAGES);
+      return { events: [
+        { type: "tool_call", tool_call_id: callId, name: "skill", arguments: { name: "fixture-guide" } },
+        { type: "completed", finish_reason: "tool_calls" },
+      ] };
+    });
+    fixture.peer.enqueueGeneration((request) => {
+      summaryEnvelope(request, handle.agent.session);
+      expect(JSON.stringify(request)).not.toContain(callId);
+      return final(checkpoint);
+    });
+    fixture.peer.enqueueGeneration((request) => {
+      expect(request.purpose).toBe("agent");
+      expect(text(request)).toContain(checkpoint);
+      const blocks = request.input.messages.flatMap((message) => message.content);
+      const calls = blocks.filter((block) => block.type === "tool_call");
+      const results = blocks.filter((block) => block.type === "tool_result");
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.tool_call_id).toBe(callId);
+      expect(results).toHaveLength(1);
+      expect(results[0]).toMatchObject({ tool_call_id: callId, is_error: false });
+      expect(JSON.stringify(results[0])).toContain("Use the provided fixture identifier.");
+      return final("LATEST_TOOL_RESULT_CONSUMED");
+    });
+    await fixture.turn(handle, "Load fixture-guide and use its instructions to continue.");
+    expect(fixture.peer.observedGenerateRequests.slice(63).map((request) => request.purpose)).toEqual(["agent", "compaction", "agent"]);
+    const events = handle.agent.session.snapshotEvents();
+    expect(events.filter((event) => event.type === "tool/call")).toHaveLength(1);
+    expect(events.filter((event) => event.type === "tool/result")).toHaveLength(1);
+    await durableCheckpoint(fixture, handle, checkpoint);
+    const raw = (await fixture.ctx.sessionPersistence.readRaw(handle.agent.session.id))?.content;
+    expect(raw).toContain(callId);
+    expect(raw).toContain("LATEST_TOOL_RESULT_CONSUMED");
+    allWebRequests(fixture);
+  }, 30_000);
+
+  it.each(["failed", "not-smaller"] as const)("preserves durable history and does not replay the request when its budget summary is %s", async (kind) => {
+    const fixture = await setup();
+    const handle = await fixture.create();
+    await shortHistory(fixture, handle, 64);
+    const session = handle.agent.session;
+    const before = [...session.surface.nodes];
+    const generation = session.surface.replaceGeneration;
+    const boundary = `Preserve this unsent boundary after ${kind} summary.`;
+    fixture.peer.enqueueGeneration((request) => {
+      summaryEnvelope(request, session);
+      return kind === "failed"
+        ? { events: [{ type: "failed", error: { code: "BROWSER_UNAVAILABLE", message: "Fixture summary unavailable", retryable: false, external_outcome: "started" } }] }
+        : final("This checkpoint is deliberately larger than its selected history. ".repeat(500));
+    });
+    await expect(fixture.turn(handle, boundary)).rejects.toThrow();
+    fixture.peer.throwIfFailed();
+    expect(session.surface.replaceGeneration).toBe(generation);
+    expect(session.surface.nodes.slice(0, before.length)).toEqual(before);
+    expect(summaries(session)).toEqual([]);
+    expect(fixture.peer.observedGenerateRequests.slice(64).map((request) => request.purpose)).toEqual(["compaction"]);
+    expect(session.snapshotEvents().filter((event) => event.type === "compaction/end")).toHaveLength(1);
+    expect(session.snapshotEvents().at(-1)).toMatchObject({ type: "turn/end", data: { reason: { kind: "error" } } });
+    await fixture.ctx.sessions.flush(session);
+    const raw = (await fixture.ctx.sessionPersistence.readRaw(session.id))?.content;
+    expect(raw).toContain(boundary);
+    expect(raw).toContain("LOCAL_REQUEST_BUDGET_EXCEEDED");
+    expect(raw).not.toContain("compaction/summary");
+    const messages = session.deriveMessages();
+    await fixture.disposeHandle(handle);
+    const resumed = await fixture.resume(session.id);
+    expect(resumed.agent.session.deriveMessages()).toEqual(messages);
+    expect(fixture.peer.observedGenerateRequests).toHaveLength(65);
     allWebRequests(fixture);
   }, 30_000);
 });

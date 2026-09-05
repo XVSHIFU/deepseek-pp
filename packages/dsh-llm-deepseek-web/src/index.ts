@@ -7,6 +7,7 @@ import { DEEPSEEK_WEB_PROVIDER } from "./constants.ts";
 export * from "./adapter.ts";
 export * from "./constants.ts";
 export * from "./request.ts";
+export * from "./request-budget.ts";
 
 export const name = "llm-deepseek-web";
 export const inject = ["llm", "deepseekWebBroker"] as const;

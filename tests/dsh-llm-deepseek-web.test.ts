@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 import { Context } from "@deepseek-ai/cordis";
 import {
+  LOCAL_REQUEST_BUDGET_EXCEEDED_CODE,
   LlmRuntime,
   createUserMessage,
   type GenerateOptions,
@@ -176,6 +177,42 @@ describe("DeepSeek Web DSH adapter", () => {
     registerDeepSeekWebAdapter(ctx, new FakeBroker([event]));
     const chunks = await collect(ctx.llm.stream(generateOptions()));
     expect(chunks).toEqual([{ type: "finish", reason }]);
+  });
+
+  it("rejects a browser-reported local budget code without recovery or another generate", async () => {
+    const ctx = new Context();
+    const broker = new FakeBroker([{
+      type: "failed",
+      error: {
+        code: LOCAL_REQUEST_BUDGET_EXCEEDED_CODE,
+        message: "An external failure must not claim an unsent local request.",
+        retryable: false,
+        external_outcome: "started",
+      },
+    }]);
+    try {
+      await ctx.plugin(LlmRuntime);
+      registerDeepSeekWebAdapter(ctx, broker);
+
+      const chunks = await collect(ctx.llm.stream(generateOptions()));
+
+      expect(chunks).toEqual([{
+        type: "finish",
+        reason: {
+          kind: "error",
+          failure: {
+            code: "WEB_MODEL_PROTOCOL",
+            message: "The browser reported a reserved local failure code.",
+          },
+        },
+      }]);
+      expect(JSON.stringify(chunks)).not.toContain(LOCAL_REQUEST_BUDGET_EXCEEDED_CODE);
+      expect(broker.requests.map((request) => request.purpose)).toEqual(["agent"]);
+      expect(broker.cancelRequests).toHaveLength(0);
+      expect(broker.cleanupCount).toBe(1);
+    } finally {
+      await ctx.fiber.dispose();
+    }
   });
 
   it("turns an empty completed response into one EMPTY_RESPONSE finish", async () => {

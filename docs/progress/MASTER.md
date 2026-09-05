@@ -97,7 +97,7 @@
 | P3 | P3-T1 | 无 API key 的真实网页单回合 E2E | `—` | `—` | `dsh_real_smoke_implement`; review: `dsh_adapter_implement`, orchestration | `verified` |
 | P4 | P4-T1 | DSH 本地只读工具多回合与最终结果 E2E（T4.1–T4.4） | `—` | `—` | `harness_tool_mapping`, `dsh_readonly_tools`, `dsh_tool_loop_e2e`; integration: orchestration | `verified` |
 | P4 | T4.5 | 官方受控写入、编辑与 Linux 命令 | `—` | `—` | `file_write_acceptance`, `windows_command_route`; integration: orchestration | `verified` |
-| P4 | T4.6 | 官方 Skills/剪枝/压缩/串行子 Agent/会话恢复增量 | `—` | `—` | `harness_features`, `windows_command_route`, `file_write_acceptance`; integration: orchestration | `blocked`（长会话 hook 方案待确认） |
+| P4 | T4.6 | 官方 Skills/剪枝/压缩/串行子 Agent/会话恢复增量 | `—` | `—` | `harness_features`, `windows_command_route`, `file_write_acceptance`; integration: orchestration | `verified` |
 | P5 | P5-T1 | disconnect/cancel/recovery、`waiting_for_browser` 与不重放 | `TBD` | `TBD` | `TBD` | `not_started` |
 | P6 | P6-T1 | 安装、升级、文档和 release readiness | `TBD` | `TBD` | `TBD` | `not_started` |
 | S1 | S1-T1 | PR #568 独立评估；只服务模式 B 兼容，不作为模式 A 前置 | `TBD` | `TBD` | `TBD` | `not_started` |
@@ -146,15 +146,15 @@
 
 M4/T4.1–T4.4 的真实只读运行保持有效。T4.5 的文件编辑及 Linux 命令组合均已通过实际 DSH/fake browser 闭环，工作区写入/越界拒绝/取消清理已实测；本次操作者真实网页运行 `command-0469b0dc-bf30-44fb-ac29-ddbc1e8bcf36` 又完成 2 model steps、1 Bash call/result、文件和短测试验证、同一 session completed。原始 Linux session 与文件哈希只读复验一致，新增网页请求为零。独立 editor 专用真实网页检查未执行，不能以本次 Bash 验收冒充。
 
-T4.6 的 Skills、前台子会话、JSONL 恢复、剪枝及同网页路由压缩已有本地集成证据。长会话保护仍有明确 `current-gap`：很多短回合可在 token 阈值前超过 128 消息；当次新输入也可在压力检查后令帧超过 1 MiB。已验证越界不派发/不重放/不丢历史，以及提前显式压缩可恢复，但越界后再压缩并不保证成功。当前代码的 Batch B 自动测试/编译/构建均已通过；阶段放行仍受 T4.6 功能缺口约束，P5 断线/崩溃恢复和 P6 安装交付未完成。不把安全拒绝或绿色测试当作已解决长会话。
+T4.6 已补齐可压缩历史的消息数／编码字节保护：fork 独立分支的真实发送前预算检查复用原恢复及压缩事务，两项旧 `current-gap` 已从安全拒绝改为自动摘要后继续成功。最终候选在独立 checkout 离线安装，4 份定向测试 61/61 通过；包含实际 65 轮、当次输入跨界、摘要合法前缀、工具对保留、失败不提交、持久化恢复及外部保留码拒绝。它不承诺固定系统／工具包络或不可分单元总能容纳。P5 断线／崩溃恢复和 P6 安装交付仍未完成，不是完整交付版。
 
 T4.2 的明确调整与边界见计划：官方 read-only 本身不约束读取，故窄组合复用官方 scope/guard/canonicalPath/resolve/contains，只有原生 read 可见；不复制文件工具，不声称是 OS 沙箱。首验只读取生成的临时文件，不接触真实用户项目。原单轮 profile 保持不变。
 
 **立即下一步**：
 
 1. 操作者本次测试已完成，当前无需继续操作或重装扩展。原始记录保留在 Ubuntu 项目忽略目录 `command-runs/command-0469b0dc-bf30-44fb-ac29-ddbc1e8bcf36`；不提交原始日志或配对信息。
-2. T4.6 长会话边界已确认现有公开 hook 不足；计划书已写入待确认的最小模型请求预算 hook 草案，仅在 Harness fork 独立 topic branch 验证，不改 master，不先替换当前运行时。需要维护者确认这一窄调整后继续，不制造第二套上下文管理器。
-3. P5 已完成只读接线梳理：复用 Host 现有 request ledger 和 Browser coordinator/session map 增加版本化持久化，不并存另一状态机。Batch B 前不启动其生产实现。恢复仅查同一 request ID，`unknown` 不是 `not_started`，completed 状态索引不能冒充已恢复终答/工具内容。PR #568、无关功能整改和 release 继续隔离。
+2. T4.6 最小扩展已在 Harness fork 的 `codex/web-request-budget` 提交 `34d57aed2e386af0b61874390c86fc5915c51b1a`；本地源码 `C:\temp\deepseek-harness-request-budget`。master 仍为 `76fda729...`，未推送远端。只有在官方包级、原 CLI 回放、独立产品候选测试通过后，才将三份固定摘要归档接入开发 checkout；[来源与重建](../../vendor/harness-request-budget/README.md)。不需要重新加载扩展或重复真实网页测试。
+3. 下一开发项为 P5：复用 Host 现有 request ledger 和 Browser coordinator/session map 增加版本化持久化，不并存另一状态机。恢复仅查同一 request ID，`unknown` 不是 `not_started`，completed 状态索引不能冒充已恢复终答／工具内容。PR #568、无关功能整改和 release 继续隔离。
 
 本机开发版仍为提交 `5f110ba` 的产物：继续加载 `C:\temp\deepseek-pp-build-e4dcc34\dist\chrome-mv3`，扩展 ID 不变。操作者已成功完成加载后的真实工具验收。本次文件编辑/Harness 增量和串行调度只改变本机代码；主/子请求沿用 `purpose=agent` 与独立 session ID，摘要沿用 `purpose=compaction`，没有扩展 purpose 枚举，不需要更新浏览器产物。
 
@@ -168,6 +168,9 @@ Windows 启动器只临时用 `WSLENV` 的 `/u` 标记传递固定配对配置�
 
 | Date | Scope | Command | Result | Notes |
 |:--|:--|:--|:--|:--|
+| 2026-09-05 | T4.6 fixed dependency integration | 独立 `C:\temp\deepseek-web-budget-integration`：最终归档 `npm ci --ignore-scripts --offline`；context/helper/features/adapter 四份原 Vitest 定向 | `passed` | 61/61，8.57s，hard60。128消息／1MiB不增限；65轮自动摘要后继续、新输入字节越界恢复、完整最新工具对、失败／不缩小摘要保留历史及恢复会话通过。外部 Browser 冒用本地预算码转 WEB_MODEL_PROTOCOL，只有本地未发送请求可进入此恢复。1172条锁记录、全部依赖版本不变，只固定3包的路径和integrity；7个消费者解析同一LLM实例 |
+| 2026-09-05 | T4.6 Harness fork verification | fork 原包级 Vitest、leaf tsc、真实 Loader；原 headless snapshot 入口 | `passed targeted` | LLM 247/247、compaction 141/141、retry 40/40、replay 108/108；真实CLI keyless replay 1/1，快照metadata 2/2。取消微任务窗口已确认修前失败、最终precommit检查修后通过。fork提交34d57aed2e；master未改。README/Agent Note成对更新、type-equiv400块通过、配置及Cordis目录按原生成器更新。未执行全仓doc-sync/网站构建或完整上游发布门禁；test:docs聚合因旧接口文档漂移失败且剩余中断，相关漂移已修后单项通过，不将其记为全量绿色 |
+| 2026-09-05 | T4.6 final static/browser closure | 独立最终候选：compile、prompt、Chrome/Edge/Firefox、manifest/UTF8/chunks | `passed` | compile2.707s；prompt7/7；三构建9.641/8.922/9.208s；manifest、177文件UTF8、三端chunks通过。仅既有Pyodide node模块externalization warnings；不修改已安装扩展、不重复真实网页调用。最新代码仅做定向回归，不冒称重跑下面历史全仓2183项 |
 | 2026-09-05 | Batch B final full test | 冻结代码后原生 Vitest `--shard=1/4` 至 `4/4`，每项 Linux timeout55s/killafter2s，独立完整 JSON | `passed` | 4次 exit0；2183 passed、0 failed、6既有平台skip，共2189 tests。246份报告文件与 `rg --files tests -g '*.test.ts'` 精确对应，遗漏/重复/额外文件均0，不排除失败测试。四批外层25.654/38.419/23.687/28.425s。全仓绿色不等于current-gap功能完成，不替代真实网页证据；Windows全仓历史路径/EPERM问题不在本次Linux通过结论内 |
 | 2026-09-05 | Batch B regression repairs | 四分片完整初跑后回流对应文件；各修复定向测试及最终 compile/prompt/build | `passed targeted` | 初跑 2189 tests：2179 passed、4 failed、6原有平台skip。修复：①本分支新增设置标签的严格导航fixture遗漏，5/5；②本分支 types→coordinator 引入的18节点静态环，迁移唯一纯DTO合同并保留旧exports，no-SCC通过；③旧bundle CLI fixture补与生产一致的offline/workspace-root，Linux6/6；④仅Shell Host测试适配实测npm keyed JSON，保留单包身份/落地验证，Linux7/7。不改Shell Host生产/扫描规则/golden/依赖，无关Windows EPERM/路径基线未声称修复 |
 | 2026-09-05 | Batch B final static/build | 最终冻结代码：Linux compile、prompt:freeze、Chrome/Edge/Firefox build、manifest/UTF-8/chunk | `passed` | compile exit0 18.223s（并行负载）；prompt 7/7；三端build exit0，8.760/7.646/8.151s；manifest、177文件UTF-8、三端chunk通过。initialShell raw384043/gzip117312、Harness子块raw9348/gzip3194；只含既有Pyodide externalization warnings，不更新已安装扩展 |

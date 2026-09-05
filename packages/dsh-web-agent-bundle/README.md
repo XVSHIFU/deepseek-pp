@@ -99,24 +99,26 @@ Cancelling while queued sends no browser request. The next call is admitted only
 after the previous stream finishes cleanup; unresolved cleanup remains an error.
 
 The official token meter, tool-result pruner and compaction engine retain their
-session algorithms. A small subclass overrides only the public summarizer hook
+session algorithms. A small subclass overrides the public summarizer and matching budget hooks
 to make one explicit `purpose=compaction` web request with a short checkpoint
 instruction. The web route cannot set `maxTokens`; no token cap is silently
 ignored or falsely recorded. Failed summaries do not become checkpoints and are
 not automatically retried. Token counts are estimates; protocol limits still
-apply (including 1 MiB per frame and 128 messages). Long-session protection and
-crash/reconnect acceptance are not complete.
+apply (including 1 MiB per frame and 128 messages). Crash/reconnect acceptance
+is not complete.
 
 The configured compaction threshold is 35% of the adapter's conservative context
 capacity, retaining 8% verbatim. This starts earlier than the upstream default
 but does not guarantee that every message-count or encoded-byte limit is avoided.
-Regression tests confirm two remaining limits: many short turns can exhaust the
-message count below the token threshold, and newly admitted input can exceed the
-encoded frame budget before the next pressure check. Neither case sends the
-oversized request or discards history. Explicit official compaction before the
-limit can checkpoint and resume; waiting until after overflow is not a reliable
-recovery because the summary request is subject to the same limits. A user-facing
-maintenance/resume entry is not yet delivered.
+The pinned Harness fork checks the complete request immediately before model
+dispatch. A local message-count or encoded-byte refusal can trigger one bounded
+summary replacement and reconstruct the request through the original loop.
+The summary measures its own envelope and uses a balanced historical prefix that
+fits; failed or cancelled summaries keep the original history. Tests cover many
+short turns, newly admitted escaped input, the newest tool pair and checkpoint
+resume. An oversized fixed envelope or indivisible unit still fails visibly.
+See [the pinned dependency record](../../vendor/harness-request-budget/README.md).
+A user-facing maintenance/resume entry is not yet delivered.
 
 After the checkout installation and pairing setup above, run from the selected
 workspace, with `DSH_WEB_WORKSPACE_ROOT` set to that same absolute directory:

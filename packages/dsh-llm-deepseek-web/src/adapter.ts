@@ -1,6 +1,7 @@
 import {
   LlmAdapter,
   LlmError,
+  LOCAL_REQUEST_BUDGET_EXCEEDED_CODE,
   ToolCallId,
   resolveRetryPolicy,
   type GenerateOptions,
@@ -24,6 +25,7 @@ import {
 } from "./constants.ts";
 import { canonicalJson, serializeGenerateRequest, type RequestIdentityFactory } from "./request.ts";
 import { GenerationScheduler } from "./generation-scheduler.ts";
+import { deepSeekWebRequestBudget } from "./request-budget.ts";
 
 const NO_RETRY_POLICY: ResolvedRetryPolicy = resolveRetryPolicy(
   { mode: "normal", maxRetries: 0 },
@@ -60,6 +62,10 @@ export class DeepSeekWebAdapter extends LlmAdapter {
 
   override providerRetryPolicy(_provider: string): ResolvedRetryPolicy {
     return NO_RETRY_POLICY;
+  }
+
+  override requestBudget(options: GenerateOptions) {
+    return deepSeekWebRequestBudget(options, this.createRequestId !== undefined);
   }
 
   override listModels(provider: string): Promise<readonly LlmModelInfo[]> {
@@ -386,6 +392,11 @@ function terminalFinish(event: ModelTerminalEvent): StreamChunk {
     case "aborted":
       return abortedFinish();
     case "failed":
+      // Only the local, pre-dispatch runtime check may authorize budget recovery.
+      // A browser-reported failure has already crossed the external boundary.
+      if (event.error.code === LOCAL_REQUEST_BUDGET_EXCEEDED_CODE) {
+        return errorFinish("WEB_MODEL_PROTOCOL", "The browser reported a reserved local failure code.");
+      }
       return errorFinish(event.error.code, event.error.message);
     case "ambiguous":
       return ambiguousFinish();
