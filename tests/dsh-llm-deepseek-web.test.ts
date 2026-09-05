@@ -168,9 +168,11 @@ describe("DeepSeek Web DSH adapter", () => {
     [{ type: "failed", error: { code: "PAGE_FAILED", message: "private detail", retryable: false, external_outcome: "started" } } as const,
       { kind: "error", failure: { code: "PAGE_FAILED", message: "private detail" } }],
     [{ type: "ambiguous", reason: "browser_disconnected" } as const,
-      { kind: "error", failure: { code: "WEB_MODEL_AMBIGUOUS", message: "The DeepSeek Web model request outcome is ambiguous." } }],
+      { kind: "error", failure: { code: "WEB_MODEL_DISCONNECTED_AMBIGUOUS", message: "The browser connection was lost; the web outcome is unknown. Reconnect to query the original request." } }],
+    [{ type: "ambiguous", reason: "generation_timeout" } as const,
+      { kind: "error", failure: { code: "WEB_MODEL_TIMEOUT_AMBIGUOUS", message: "The web request timed out; its outcome is unknown. Do not replay automatically." } }],
     [{ type: "aborted", reason: "cancelled" } as const,
-      { kind: "aborted", failure: { code: "ABORTED", message: "DeepSeek Web request aborted by caller." } }],
+      { kind: "error", failure: { code: "WEB_MODEL_BROWSER_ABORTED", message: "The browser stopped the request before web generation was dispatched." } }],
   ])("maps %s to exactly one stable terminal finish", async (event, reason) => {
     const ctx = new Context();
     await ctx.plugin(LlmRuntime);
@@ -345,8 +347,8 @@ describe("DeepSeek Web DSH adapter", () => {
     expect(chunks).toEqual([{
       type: "finish",
       reason: { kind: "error", failure: {
-        code: "WEB_MODEL_AMBIGUOUS",
-        message: "The DeepSeek Web model request outcome is ambiguous.",
+        code: "WEB_MODEL_CANCEL_UNCONFIRMED",
+        message: "Cancellation was requested, but the web result or cleanup could not be confirmed. Do not replay automatically.",
       } },
     }]);
     expect(chunks).not.toContainEqual(expect.objectContaining({ reason: { kind: "tool-calls" } }));
@@ -368,8 +370,8 @@ describe("DeepSeek Web DSH adapter", () => {
     expect(chunks.filter((chunk) => chunk.type === "finish")).toEqual([{
       type: "finish",
       reason: { kind: "error", failure: {
-        code: "WEB_MODEL_AMBIGUOUS",
-        message: "The DeepSeek Web model request outcome is ambiguous.",
+        code: "WEB_MODEL_CANCEL_UNCONFIRMED",
+        message: "Cancellation was requested, but the web result or cleanup could not be confirmed. Do not replay automatically.",
       } },
     }]);
     const blocked = await collect(ctx.llm.stream(generateOptions()));
@@ -391,8 +393,8 @@ describe("DeepSeek Web DSH adapter", () => {
     expect(chunks.at(-1)).toEqual({
       type: "finish",
       reason: { kind: "error", failure: {
-        code: "WEB_MODEL_AMBIGUOUS",
-        message: "The DeepSeek Web model request outcome is ambiguous.",
+        code: "WEB_MODEL_CANCEL_UNCONFIRMED",
+        message: "Cancellation was requested, but the web result or cleanup could not be confirmed. Do not replay automatically.",
       } },
     });
     await waitFor(() => broker.cleanupCount === 1);

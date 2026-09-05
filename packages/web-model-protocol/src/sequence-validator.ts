@@ -50,6 +50,8 @@ interface RequestState {
   status: Exclude<ModelStatus, "unknown">;
   lastSequence: number;
   terminal?: ModelTerminalEvent;
+  /** Recovery queries observe metadata, never a replacement event stream. */
+  statusOnly?: boolean;
 }
 
 /** Validates an ordered bidirectional stream; transport supplies sender identity. */
@@ -119,6 +121,27 @@ export class WebModelSequenceValidator {
     });
   }
 
+  /**
+   * Receiver-owned recovery fence, not a wire capability. A journal owner may
+   * query an interrupted request across missing frames, but cannot consume
+   * model.event or resubmit that identity on this connection afterwards.
+   */
+  allowStatusSnapshot(requestId: string, requestDigest: string): void {
+    this.assertReady();
+    validateWebModelFrame({
+      jsonrpc: "2.0", id: "status-snapshot-validation", method: "model.query",
+      params: { schema_version: 1, request_id: requestId, request_digest: requestDigest },
+    });
+    const current = this.requests.get(requestId);
+    if (current && current.requestDigest !== requestDigest) {
+      throw new ProtocolSequenceError("REQUEST_DIGEST_MISMATCH");
+    }
+    if (current) current.statusOnly = true;
+    else this.requests.set(requestId, {
+      requestDigest, accepted: false, status: "accepted", lastSequence: 0, statusOnly: true,
+    });
+  }
+
   private assertDirection(frame: WebModelFrame, sender: ProtocolSender): void {
     if ("method" in frame) {
       const expected: ProtocolSender = frame.method === "bridge.hello" || frame.method === "model.event" || frame.method === "bridge.heartbeat"
@@ -177,6 +200,7 @@ export class WebModelSequenceValidator {
     }
     if (frame.method !== "model.event") throw new ProtocolSequenceError("UNEXPECTED_FRAME");
     const state = this.requests.get(frame.params.request_id);
+    if (state?.statusOnly) throw new ProtocolSequenceError("UNEXPECTED_FRAME");
     if (!state || !state.accepted) throw new ProtocolSequenceError("UNKNOWN_REQUEST");
     if (state.terminal !== undefined) throw new ProtocolSequenceError("EVENT_AFTER_TERMINAL");
     if (frame.params.sequence <= state.lastSequence) throw new ProtocolSequenceError("NON_MONOTONIC_SEQUENCE");
@@ -267,6 +291,22 @@ export class WebModelSequenceValidator {
       if (status !== current.status || lastSequence !== current.lastSequence || terminal === undefined || !sameTerminal(current.terminal, terminal)) {
         throw new ProtocolSequenceError("TERMINAL_MISMATCH");
       }
+      return;
+    }
+    if (current?.statusOnly) {
+      // Unknown is lack of evidence, not proof that a prior request was unsent.
+      if (status === "unknown") return;
+      if (lastSequence < current.lastSequence) {
+        throw new ProtocolSequenceError("NON_MONOTONIC_SEQUENCE");
+      }
+      if ((current.status === "streaming" && status === "accepted") ||
+          (terminal !== undefined && lastSequence <= current.lastSequence)) {
+        throw new ProtocolSequenceError("SEQUENCE_GAP");
+      }
+      current.accepted = true;
+      current.status = status;
+      current.lastSequence = lastSequence;
+      if (terminal !== undefined) current.terminal = terminal;
       return;
     }
     if (!current) {

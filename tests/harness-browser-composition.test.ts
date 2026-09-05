@@ -1,3 +1,4 @@
+import { webcrypto } from 'node:crypto';
 import { afterEach, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
 import { createUserMessage, type GenerateOptions } from '@deepseek-ai/dsh-llm';
@@ -6,6 +7,7 @@ import { DeepSeekWebModelHost, createPairingToken } from '../packages/dsh-web-mo
 import { serializeGenerateRequest } from '../packages/dsh-llm-deepseek-web/src/request';
 import { HarnessBridgeClient, type HarnessBridgeSocket } from '../core/harness-bridge/client';
 import { HarnessBridgeCoordinator } from '../core/harness-bridge/coordinator';
+import type { HarnessBridgeRecoveryIndex } from '../core/harness-bridge/result-cache';
 import { createDeepSeekWebModelTurnAdapter } from '../core/harness-bridge/deepseek-turn-adapter';
 import type { DeepSeekAutomationClient } from '../core/deepseek/automation-client-port';
 
@@ -19,6 +21,8 @@ afterEach(async () => {
 
 it.each(['ready', 'missing-auth'] as const)('runs the actual browser composition for an empty-tool DSH request (%s)', async (mode) => {
   vi.stubGlobal('localStorage', undefined);
+  vi.stubGlobal('crypto', webcrypto);
+  let recoveryIndex: HarnessBridgeRecoveryIndex | undefined;
   const token = createPairingToken();
   const host = new DeepSeekWebModelHost({ pairingToken: token, allowedOrigins: [ORIGIN] });
   const address = await host.start();
@@ -44,6 +48,10 @@ it.each(['ready', 'missing-auth'] as const)('runs the actual browser composition
   const turnAdapter = createDeepSeekWebModelTurnAdapter({ client, loadClientHeaders: loadedHeaders });
   const turnErrors: unknown[] = [];
   const coordinator = new HarnessBridgeCoordinator({
+    recoveryStorage: {
+      read: async () => structuredClone(recoveryIndex),
+      write: async (value) => { recoveryIndex = structuredClone(value); },
+    },
     settings: {
       read: async () => ({ version: 1, enabled: true, port: address.port, pairingToken: token }),
       update: async () => { throw new Error('Not used'); },

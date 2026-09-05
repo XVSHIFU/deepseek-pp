@@ -306,6 +306,15 @@ const AUTOMATION_AUTH_TOKEN_MISSING_MESSAGE =
 const deepSeekAutomationClient = createDeepSeekAutomationClient();
 const harnessBridgeCoordinator = new HarnessBridgeCoordinator({
   settings: createHarnessBridgeSettingsStore(),
+  recoveryStorage: {
+    async read() {
+      const stored = await chrome.storage.local.get('harness_bridge_recovery_v1');
+      return stored.harness_bridge_recovery_v1;
+    },
+    async write(index) {
+      await chrome.storage.local.set({ harness_bridge_recovery_v1: index });
+    },
+  },
   turnPort: createDeepSeekWebModelTurnAdapter({
     client: deepSeekAutomationClient,
     loadClientHeaders: ({ signal }) => loadOrRefreshClientHeaders(undefined, signal),

@@ -246,6 +246,10 @@ npm run build:all
 
 ## 9. Batch C：P5 断线、取消与恢复
 
+**落地边界（2026-09-05）**：沿用 v1 wire 的 `unknown / accepted / streaming / completed / failed / aborted / ambiguous`；只有带 `external_outcome=not_started` 的明确未启动错误才能释放重试，不把 `unknown` 当作未启动。Host journal 与扩展索引只记录请求身份、顺序和结果摘要，不记录完整回答或工具内容；断流后的 `model.query` 只恢复状态可见性，不补造流、不自动重发。共享 validator 仅在接收方从持久记录显式开启的 status-only 恢复模式允许跨缺帧快照，该身份随后不能接收事件或重新 generate。
+
+官方 one-shot headless CLI 每次创建新 session，并无旧会话 resume 参数。其崩溃验收采用同一临时 profile 重启、沿用既有 startup barrier，只让 Host 查询旧 request，不把新 CLI session 冒充旧 turn 续跑。已有官方 Session/compaction/child 恢复测试继续覆盖对应公开运行时。扩展重启后不恢复私有网页 parent ID；不明本地 session 隔离，完整结束后的新请求可携全量本地上下文创建新网页链。
+
 ### T5.1 Host 请求 Journal 与恢复状态机
 
 - **文件范围**：`packages/dsh-web-model-transport/src/journal*.ts`、`src/request-state*.ts`、该包配置/exports、`tests/dsh-web-model-journal.test.ts`。

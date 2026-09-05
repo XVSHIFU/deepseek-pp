@@ -1,3 +1,4 @@
+import { webcrypto } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ModelTerminalEvent } from '../packages/web-model-protocol/src/index.ts';
@@ -19,6 +20,7 @@ import {
   type HarnessBridgeSettingsStorage,
 } from '../core/harness-bridge/settings';
 import type { WebModelTurnPort } from '../core/harness-bridge/model-turn-port';
+import type { HarnessBridgeRecoveryIndex, HarnessBridgeRecoveryStorage } from '../core/harness-bridge/result-cache';
 import { decodeHarnessBridgeStatusResult } from '../core/messaging/deepseek-runtime-contracts';
 
 const TOKEN = 'A'.repeat(43);
@@ -135,6 +137,7 @@ describe('Harness bridge background coordinator', () => {
   ] as const)('forwards only the safe pre-dispatch adapter code %s', async (code) => {
     const client = new FakeClient();
     const coordinator = new HarnessBridgeCoordinator({
+      recoveryStorage: recoveryStorage(),
       settings: fixedSettingsStore(enabledSettings()),
       turnPort: fakeTurnPort({
         generate: vi.fn(async () => { throw new DeepSeekTurnAdapterError(code, true); }),
@@ -157,6 +160,7 @@ describe('Harness bridge background coordinator', () => {
   it('maps an unknown pre-dispatch exception without exposing its message', async () => {
     const client = new FakeClient();
     const coordinator = new HarnessBridgeCoordinator({
+      recoveryStorage: recoveryStorage(),
       settings: fixedSettingsStore(enabledSettings()),
       turnPort: fakeTurnPort({
         generate: vi.fn(async () => { throw new Error('secret upstream auth response'); }),
@@ -183,6 +187,7 @@ describe('Harness bridge background coordinator', () => {
     };
     const clients: FakeClient[] = [];
     const coordinator = new HarnessBridgeCoordinator({
+      recoveryStorage: recoveryStorage(),
       settings: store,
       turnPort: fakeTurnPort(),
       createClient: () => {
@@ -212,6 +217,7 @@ describe('Harness bridge background coordinator', () => {
   it('does not poison a valid status when an update is rejected', async () => {
     const fixture = storageFixture();
     const coordinator = new HarnessBridgeCoordinator({
+      recoveryStorage: recoveryStorage(),
       settings: createHarnessBridgeSettingsStore(fixture.port),
       turnPort: fakeTurnPort(),
       createClient: () => new FakeClient(),
@@ -239,6 +245,7 @@ describe('Harness bridge background coordinator', () => {
     });
     const clients: FakeClient[] = [];
     const coordinator = new HarnessBridgeCoordinator({
+      recoveryStorage: recoveryStorage(),
       settings: createHarnessBridgeSettingsStore(fixture.port),
       turnPort,
       createClient: () => {
@@ -261,6 +268,7 @@ describe('Harness bridge background coordinator', () => {
 
     await coordinator.updateSettings({ enabled: true, port: 43_123 });
     clients[1]!.ready();
+    await flush();
     expect(clients[1]!.hydrated).toEqual([{
       request_id: 'request-1',
       request_digest: DIGEST,
@@ -269,6 +277,7 @@ describe('Harness bridge background coordinator', () => {
       terminal: { type: 'ambiguous', reason: 'deepseek_turn_outcome_unknown' },
     }]);
     clients[1]!.receive(queryFrame());
+    await flush();
     expect(clients[1]!.sent.at(-1)).toMatchObject({
       result: { type: 'model.status', status: 'ambiguous', last_sequence: 1 },
     });
@@ -284,6 +293,7 @@ describe('Harness bridge background coordinator', () => {
     });
     const client = new FakeClient();
     const coordinator = new HarnessBridgeCoordinator({
+      recoveryStorage: recoveryStorage(),
       settings: fixedSettingsStore(enabledSettings()),
       turnPort,
       createClient: () => client,
@@ -293,10 +303,12 @@ describe('Harness bridge background coordinator', () => {
     client.receive(generateFrame());
     await flush();
     client.receive(generateFrame('rpc-2', 'request-2'));
+    await flush();
     expect(client.sent.at(-1)).toMatchObject({ error: { data: { error_code: 'BROKER_BUSY' } } });
     completion.resolve({ type: 'completed', finish_reason: 'stop' });
     await flush();
     client.receive(generateFrame('rpc-3', 'request-1', 'e'.repeat(64)));
+    await flush();
     expect(client.sent.at(-1)).toMatchObject({ error: { data: { error_code: 'REQUEST_IDENTITY_MISMATCH' } } });
   });
 
@@ -309,6 +321,7 @@ describe('Harness bridge background coordinator', () => {
   ] as const)('reconnects an unchanged enabled authority from %s without replacing its client', async (phase) => {
     const client = new FakeClient();
     const coordinator = new HarnessBridgeCoordinator({
+      recoveryStorage: recoveryStorage(),
       settings: fixedSettingsStore(enabledSettings()),
       turnPort: fakeTurnPort(),
       createClient: () => client,
@@ -330,6 +343,7 @@ describe('Harness bridge background coordinator', () => {
   ] as const)('leaves an unchanged enabled authority in %s alone', async (phase) => {
     const client = new FakeClient();
     const coordinator = new HarnessBridgeCoordinator({
+      recoveryStorage: recoveryStorage(),
       settings: fixedSettingsStore(enabledSettings()),
       turnPort: fakeTurnPort(),
       createClient: () => client,
@@ -343,7 +357,7 @@ describe('Harness bridge background coordinator', () => {
     expect(client.stop).not.toHaveBeenCalled();
   });
 
-  it('clears records on port or token authority change and never imports an old active terminal', async () => {
+  it('isolates records on port or token authority change and never imports an old active terminal', async () => {
     const completion = deferred<ModelTerminalEvent>();
     const turnPort = fakeTurnPort({
       generate: vi.fn(async (_request, callbacks, context) => {
@@ -370,6 +384,7 @@ describe('Harness bridge background coordinator', () => {
     };
     const clients: FakeClient[] = [];
     const coordinator = new HarnessBridgeCoordinator({
+      recoveryStorage: recoveryStorage(),
       settings: store,
       turnPort,
       createClient: () => {
@@ -388,6 +403,7 @@ describe('Harness bridge background coordinator', () => {
     completion.resolve({ type: 'ambiguous', reason: 'old_authority_outcome' });
     await flush();
     clients[1]!.receive(queryFrame());
+    await flush();
 
     expect(clients[1]!.hydrated).toEqual([]);
     expect(clients[1]!.sent.at(-1)).toMatchObject({
@@ -500,6 +516,14 @@ function deferred<T>() {
 }
 
 async function flush(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
+
+function recoveryStorage(): HarnessBridgeRecoveryStorage {
+  vi.stubGlobal('crypto', webcrypto);
+  let index: HarnessBridgeRecoveryIndex | undefined;
+  return {
+    read: async () => structuredClone(index),
+    write: async (value) => { index = structuredClone(value); },
+  };
 }

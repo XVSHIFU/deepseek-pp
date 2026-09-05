@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -75,6 +75,9 @@ describe("DeepSeek Web Agent standalone bundle", () => {
       agents: [],
     });
     expect(rows.find((row) => row.id === "tools")?.config).toEqual({ mode: "native" });
+    expect(await readFile(PATCH_PATH, "utf8")).toContain(
+      "journalPath: !!js dshHomePath('profiles', 'deepseek-web-agent', 'web-model-journal')",
+    );
 
     const rowPackages = rows.map((row) => row.name);
     expect(rowPackages).not.toContain("@deepseek-ai/dsh-base");
@@ -175,6 +178,34 @@ describe("DeepSeek Web Agent standalone bundle", () => {
     });
     await expect(replacement.start()).resolves.toMatchObject({ host: "127.0.0.1", port });
     await replacement.stop();
+  });
+
+  it("wires profile-owned durable journal lifecycle through the production plugin", async () => {
+    const journalPath = join(await makeTempRoot(), "web-model-journal");
+    const config = { pairingToken: createPairingToken(), allowedExtensionOrigins: [ORIGIN], journalPath };
+    const ctx = new Context();
+    const dispose = await HostPlugin.apply(ctx, { ...config, port: await reserveLoopbackPort() });
+    try {
+      expect((await readdir(journalPath)).length).toBeGreaterThan(0);
+      // A second listener cannot acquire the same profile's journal, even
+      // when its network port differs from the running instance.
+      await expect(HostPlugin.apply(new Context(), { ...config, port: await reserveLoopbackPort() }))
+        .rejects.toThrow(/JOURNAL/);
+    } finally {
+      await dispose();
+      await ctx.fiber.dispose();
+    }
+    const replacementCtx = new Context();
+    const replacement = await HostPlugin.apply(replacementCtx, { ...config, port: await reserveLoopbackPort() });
+    await replacement();
+    await replacementCtx.fiber.dispose();
+    // Startup failure after journal acquisition must also release ownership.
+    await expect(HostPlugin.apply({ provide: () => { throw new Error("provide failed"); } } as unknown as Context,
+      { ...config, port: await reserveLoopbackPort() })).rejects.toThrow("provide failed");
+    const finalCtx = new Context();
+    const finalDispose = await HostPlugin.apply(finalCtx, { ...config, port: await reserveLoopbackPort() });
+    await finalDispose();
+    await finalCtx.fiber.dispose();
   });
 
   it("seeds an empty profile, installs the checkout through dsh plugin, and resolves the real bundle", async () => {

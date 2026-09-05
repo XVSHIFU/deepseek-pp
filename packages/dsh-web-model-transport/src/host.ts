@@ -15,13 +15,14 @@ import {
   type ModelCancelledResponse,
   type ModelEvent,
   type ModelEventNotification,
-  type ModelRequestCheckpoint,
   type ModelStatusResponse,
   type WebModelFrame,
 } from "@deepseek-pp/web-model-protocol";
 import WebSocket, { WebSocketServer, type RawData } from "ws";
 
 import { AsyncQueue, deferred, type Deferred } from "./async-queue.ts";
+import { RequestJournal } from "./journal.ts";
+import { isFinalRecord, type RequestAction, type RequestRecord } from "./request-state.ts";
 import {
   BrokerError,
   type BrokerCancelRequest,
@@ -56,6 +57,9 @@ export interface DeepSeekWebModelHostOptions {
   readonly rpcTimeoutMs?: number;
   readonly maxBufferedEvents?: number;
   readonly maxEventsPerGeneration?: number;
+  /** Absolute owned journal directory; omission is only for ephemeral fixtures. */
+  readonly journalPath?: string;
+  readonly maxJournalRecords?: number;
 }
 
 export interface DeepSeekWebModelHostAddress {
@@ -83,17 +87,12 @@ interface RequestIdentity {
 }
 
 interface ActiveGeneration extends RequestIdentity {
+  readonly generation: number;
   readonly queue: AsyncQueue<ModelEvent>;
   readonly accepted: Deferred<void>;
   eventCount: number;
   terminal: boolean;
   deadlineTimer?: NodeJS.Timeout;
-}
-
-interface RequestLedgerEntry {
-  readonly requestDigest: string;
-  state: "active" | "ambiguous" | "terminal";
-  remoteCheckpoint?: ModelRequestCheckpoint;
 }
 
 type PendingOperation =
@@ -119,7 +118,11 @@ export class DeepSeekWebModelHost implements DeepSeekWebBroker {
   private readonly operations = new Map<string, PendingOperation>();
   private readonly cancelResults = new Map<string, BrokerCancelResult>();
   private readonly cancelInFlight = new Map<string, Promise<BrokerCancelResult>>();
-  private readonly requestLedger = new Map<string, RequestLedgerEntry>();
+  private readonly journal: RequestJournal;
+  private readonly durableJournal: boolean;
+  private journalFailed = false;
+  private recovering = false;
+  private stopPromise: Promise<void> | undefined;
   private httpServer: Server | undefined;
   private addressValue: DeepSeekWebModelHostAddress | undefined;
   private connection: PeerConnection | undefined;
@@ -137,6 +140,8 @@ export class DeepSeekWebModelHost implements DeepSeekWebBroker {
     this.rpcTimeoutMs = boundedInteger(options.rpcTimeoutMs ?? DEFAULT_RPC_TIMEOUT_MS, 10, 600_000, "INVALID_TIMEOUT");
     this.maxBufferedEvents = boundedInteger(options.maxBufferedEvents ?? DEFAULT_MAX_BUFFERED_EVENTS, 1, 4_096, "INVALID_LIMIT");
     this.maxEventsPerGeneration = boundedInteger(options.maxEventsPerGeneration ?? DEFAULT_MAX_EVENTS, 1, 65_536, "INVALID_LIMIT");
+    this.journal = new RequestJournal(options.journalPath, options.maxJournalRecords);
+    this.durableJournal = options.journalPath !== undefined;
   }
 
   get address(): DeepSeekWebModelHostAddress {
@@ -145,12 +150,13 @@ export class DeepSeekWebModelHost implements DeepSeekWebBroker {
   }
 
   get hasAuthenticatedPeer(): boolean {
-    return this.connection?.authenticated === true && this.connection.socket.readyState === WebSocket.OPEN;
+    return !this.recovering && !this.journalFailed && this.connection?.authenticated === true && this.connection.socket.readyState === WebSocket.OPEN;
   }
 
   async start(): Promise<DeepSeekWebModelHostAddress> {
     if (this.started || this.stopping) throw new BrokerError("BROKER_STOPPED", "not_started");
     this.started = true;
+    try { await this.journal.open(); } catch (error) { await this.journal.close(); throw error; }
     const server = createServer((_request, response) => {
       response.writeHead(404, { "content-length": "0" });
       response.end();
@@ -174,8 +180,11 @@ export class DeepSeekWebModelHost implements DeepSeekWebBroker {
     return this.addressValue;
   }
 
-  async stop(): Promise<void> {
-    if (this.stopping) return;
+  stop(): Promise<void> {
+    return this.stopPromise ??= this.stopHost();
+  }
+
+  private async stopHost(): Promise<void> {
     this.stopping = true;
     const connection = this.connection;
     if (connection) {
@@ -194,37 +203,43 @@ export class DeepSeekWebModelHost implements DeepSeekWebBroker {
     if (this.httpServer) await closeHttpServer(this.httpServer);
     this.httpServer = undefined;
     this.addressValue = undefined;
+    await this.journal.close();
   }
 
   async *generate(request: BrokerGenerateRequest): AsyncIterable<ModelEvent> {
     if (this.hasCancelInFlight(request.request_id)) {
       throw new BrokerError("BROKER_BUSY", "not_started");
     }
-    const existing = this.requestLedger.get(request.request_id);
-    if (existing) {
+    const existing = this.journal.get(request.request_id);
+    if (existing && existing.outcome !== "not_started") {
       if (existing.requestDigest !== request.request_digest) {
         throw new BrokerError("REQUEST_DIGEST_MISMATCH", "not_started");
       }
-      throw new BrokerError("REQUEST_ALREADY_EXISTS", existing.state === "terminal" ? "started" : "unknown");
+      throw new BrokerError("REQUEST_ALREADY_EXISTS", isFinalRecord(existing) ? "started" : "unknown");
     }
-    if (this.requestLedger.size >= 1_024) throw new BrokerError("BROKER_BUSY", "not_started");
+    this.assertLedgerIdentity(request);
     const peer = this.requirePeer();
     if (this.activeGeneration) throw new BrokerError("BROKER_BUSY", "not_started");
+    let planned: RequestRecord;
+    // Validate without consuming the sequence validator or durable identity.
+    const rpcId = newRpcId();
+    const frame = { jsonrpc: "2.0", id: rpcId, method: "model.generate", params: { schema_version: 1, ...request } } as const;
+    try { encodeWebModelFrame(frame); } catch (error) { throw stableBrokerError(error, "PROTOCOL_VIOLATION", "not_started"); }
+    try { planned = this.journal.plan(request.request_id, request.request_digest, request.session_id); }
+    catch (error) {
+      if (error instanceof Error && error.message === "JOURNAL_FULL") throw new BrokerError("BROKER_BUSY", "not_started");
+      this.journalFailed = true;
+      throw new BrokerError("JOURNAL_UNAVAILABLE", "not_started");
+    }
     const active: ActiveGeneration = {
       requestId: request.request_id,
       requestDigest: request.request_digest,
+      generation: planned.generation,
       queue: new AsyncQueue<ModelEvent>(this.maxBufferedEvents),
       accepted: deferred<void>(),
       eventCount: 0,
       terminal: false,
     };
-    const rpcId = newRpcId();
-    const frame = {
-      jsonrpc: "2.0",
-      id: rpcId,
-      method: "model.generate",
-      params: { schema_version: 1, ...request },
-    } as const;
     let encoded: string;
     try {
       encoded = this.prepareHostFrame(peer, frame);
@@ -233,8 +248,8 @@ export class DeepSeekWebModelHost implements DeepSeekWebBroker {
     }
     this.clearCancelResults(request.request_id);
     this.activeGeneration = active;
-    this.requestLedger.set(request.request_id, { requestDigest: request.request_digest, state: "active" });
     try {
+      this.updateRecord(request.request_id, { type: "dispatch" });
       this.trackOperation(rpcId, { kind: "generate", identity: active, deferred: active.accepted });
       this.sendPreparedFrame(peer, encoded);
       const timeoutMs = Math.min(request.options.timeout_ms ?? this.rpcTimeoutMs, 30 * 60 * 1_000);
@@ -260,15 +275,15 @@ export class DeepSeekWebModelHost implements DeepSeekWebBroker {
           this.activeGeneration = undefined;
           active.queue.close();
         }
-        this.requestLedger.delete(request.request_id);
+        // Only a validated peer not_started response permits reuse; never delete
+        // an accepted identity or interpret a local failure as remote evidence.
         throw normalized;
       }
       if (this.activeGeneration === active) {
         this.settleGenerationAmbiguous("send_outcome_unknown");
         this.closePeer(peer, 1011, "SEND_FAILED");
       } else {
-        const ledger = this.requestLedger.get(request.request_id);
-        if (ledger) ledger.state = "ambiguous";
+        this.updateRecord(request.request_id, { type: "disconnect" });
       }
       for (;;) {
         const next = await active.queue.next();
@@ -288,12 +303,15 @@ export class DeepSeekWebModelHost implements DeepSeekWebBroker {
   async cancel(request: BrokerCancelRequest): Promise<BrokerCancelResult> {
     const key = identityKey(request.request_id, request.request_digest);
     this.assertLedgerIdentity(request);
+    const persisted = this.journal.get(request.request_id);
+    if (persisted?.cancelStatus) return { schema_version: 1, type: "model.cancelled", request_id: request.request_id,
+      request_digest: request.request_digest, status: persisted.cancelStatus };
     const cached = this.cancelResults.get(key);
     if (cached) return cached;
     const inFlight = this.cancelInFlight.get(key);
     if (inFlight) return inFlight;
-    const ledger = this.requestLedger.get(request.request_id);
-    if (ledger?.state === "terminal") {
+    const ledger = this.journal.get(request.request_id);
+    if (ledger && isFinalRecord(ledger)) {
       const terminalResult: BrokerCancelResult = {
         schema_version: 1,
         type: "model.cancelled",
@@ -301,15 +319,17 @@ export class DeepSeekWebModelHost implements DeepSeekWebBroker {
         request_digest: request.request_digest,
         status: "already_terminal",
       };
-      this.cancelResults.set(key, terminalResult);
       return terminalResult;
     }
     const pending = this.performCancel(request);
     this.cancelInFlight.set(key, pending);
     try {
       const value = await pending;
-      this.cancelResults.set(key, value);
-      trimMap(this.cancelResults, 128);
+      // Known requests use only the authoritative journal acknowledgment.
+      if (!this.journal.get(request.request_id)) {
+        this.cancelResults.set(key, value);
+        trimMap(this.cancelResults, 128);
+      }
       return value;
     } finally {
       this.cancelInFlight.delete(key);
@@ -327,16 +347,26 @@ export class DeepSeekWebModelHost implements DeepSeekWebBroker {
       params: { schema_version: 1, request_id: request.request_id, request_digest: request.request_digest,
         ...(request.reason === undefined ? {} : { reason: request.reason }) },
     } as const;
-    this.sendHostFrame(peer, frame);
+    if (this.journal.get(request.request_id)) this.updateRecord(request.request_id, { type: "cancel" });
     this.trackOperation(rpcId, { kind: "cancel", identity: identityOf(request), deferred: result });
+    try { this.sendHostFrame(peer, frame); } catch (error) {
+      this.discardOperation(rpcId);
+      result.reject(stableBrokerError(error, "PROTOCOL_VIOLATION", "not_started"));
+    }
     return result.promise;
   }
 
   async query(request: BrokerQueryRequest): Promise<BrokerQueryResult> {
     this.assertLedgerIdentity(request);
-    const peer = this.requirePeer();
-    const checkpoint = this.requestLedger.get(request.request_id)?.remoteCheckpoint;
-    if (checkpoint) peer.validator.hydrateRequestCheckpoint(checkpoint);
+    const peer = this.requirePeer(true);
+    const record = this.journal.get(request.request_id);
+    if (record?.remoteStatus === "accepted" || record?.remoteStatus === "streaming") {
+      peer.validator.hydrateRequestCheckpoint({ request_id: record.requestId, request_digest: record.requestDigest,
+        status: record.remoteStatus, last_sequence: record.sequence });
+    }
+    if (record?.state === "ambiguous" || (record && isFinalRecord(record))) {
+      peer.validator.allowStatusSnapshot(request.request_id, request.request_digest);
+    }
     const rpcId = newRpcId();
     const result = deferred<BrokerQueryResult>();
     const frame = {
@@ -345,8 +375,11 @@ export class DeepSeekWebModelHost implements DeepSeekWebBroker {
       method: "model.query",
       params: { schema_version: 1, request_id: request.request_id, request_digest: request.request_digest },
     } as const;
-    this.sendHostFrame(peer, frame);
     this.trackOperation(rpcId, { kind: "query", identity: identityOf(request), deferred: result });
+    try { this.sendHostFrame(peer, frame); } catch (error) {
+      this.discardOperation(rpcId);
+      result.reject(stableBrokerError(error, "PROTOCOL_VIOLATION", "not_started"));
+    }
     return result.promise;
   }
 
@@ -420,6 +453,10 @@ export class DeepSeekWebModelHost implements DeepSeekWebBroker {
     if (peer.authenticationTimer) clearTimeout(peer.authenticationTimer);
     delete peer.authenticationTimer;
     this.armHeartbeat(peer);
+    if (this.durableJournal) {
+      this.recovering = true;
+      void this.recoverRequests(peer);
+    }
   }
 
   private routeFrame(peer: PeerConnection, frame: WebModelFrame): void {
@@ -446,8 +483,6 @@ export class DeepSeekWebModelHost implements DeepSeekWebBroker {
       active.queue.close();
       if (active.deadlineTimer) clearTimeout(active.deadlineTimer);
       this.activeGeneration = undefined;
-      const ledger = this.requestLedger.get(active.requestId);
-      if (ledger) ledger.state = "terminal";
     }
   }
 
@@ -456,30 +491,26 @@ export class DeepSeekWebModelHost implements DeepSeekWebBroker {
     const operation = this.operations.get(frame.id);
     if (!operation) throw new Error("UNEXPECTED_RESPONSE");
     clearTimeout(operation.timer);
-    this.operations.delete(frame.id);
     if ("error" in frame) {
       this.handleRpcError(peer, operation, frame);
+      this.operations.delete(frame.id);
       return;
     }
     if (operation.kind === "generate" && frame.result.type === "model.accepted") {
-      const ledger = this.requestLedger.get(operation.identity.requestId);
-      if (ledger) {
-        ledger.remoteCheckpoint = {
-          request_id: operation.identity.requestId,
-          request_digest: operation.identity.requestDigest,
-          status: "accepted",
-          last_sequence: 0,
-        };
-      }
+      this.updateRecord(operation.identity.requestId, { type: "accept" });
+      this.operations.delete(frame.id);
       operation.deferred.resolve();
       return;
     }
     if (operation.kind === "cancel" && frame.result.type === "model.cancelled") {
+      if (this.journal.get(operation.identity.requestId)) this.updateRecord(operation.identity.requestId, { type: "cancel_ack", status: frame.result.status });
+      this.operations.delete(frame.id);
       operation.deferred.resolve(frame.result);
       return;
     }
     if (operation.kind === "query" && frame.result.type === "model.status") {
       this.recordRemoteStatus(frame.result);
+      this.operations.delete(frame.id);
       operation.deferred.resolve(frame.result);
       return;
     }
@@ -498,11 +529,9 @@ export class DeepSeekWebModelHost implements DeepSeekWebBroker {
           if (this.activeGeneration.deadlineTimer) clearTimeout(this.activeGeneration.deadlineTimer);
           this.activeGeneration = undefined;
         }
-        this.requestLedger.delete(operation.identity.requestId);
+        this.updateRecord(operation.identity.requestId, { type: "not_started" });
         operation.deferred.reject(error);
       } else {
-        const ledger = this.requestLedger.get(operation.identity.requestId);
-        if (ledger) ledger.state = "ambiguous";
         this.settleGenerationAmbiguous("remote_outcome_unknown");
         operation.deferred.resolve();
       }
@@ -558,6 +587,12 @@ export class DeepSeekWebModelHost implements DeepSeekWebBroker {
     this.operations.set(rpcId, { ...operation, timer } as PendingOperation);
   }
 
+  private discardOperation(rpcId: string): void {
+    const pending = this.operations.get(rpcId);
+    if (pending) clearTimeout(pending.timer);
+    this.operations.delete(rpcId);
+  }
+
   private armHeartbeat(peer: PeerConnection): void {
     if (peer.heartbeatTimer) clearTimeout(peer.heartbeatTimer);
     peer.heartbeatTimer = deadline(() => this.closePeer(peer, 1008, "HEARTBEAT_TIMEOUT"), this.heartbeatTimeoutMs);
@@ -594,12 +629,11 @@ export class DeepSeekWebModelHost implements DeepSeekWebBroker {
     active.accepted.resolve();
     if (active.deadlineTimer) clearTimeout(active.deadlineTimer);
     this.activeGeneration = undefined;
-    const ledger = this.requestLedger.get(active.requestId);
-    if (ledger) ledger.state = "ambiguous";
+    try { this.updateRecord(active.requestId, { type: "disconnect" }); } catch { this.journalFailed = true; }
   }
 
   private assertLedgerIdentity(request: { request_id: string; request_digest: string }): void {
-    const ledger = this.requestLedger.get(request.request_id);
+    const ledger = this.journal.get(request.request_id);
     if (ledger && ledger.requestDigest !== request.request_digest) {
       throw new BrokerError("REQUEST_DIGEST_MISMATCH", "not_started");
     }
@@ -621,29 +655,33 @@ export class DeepSeekWebModelHost implements DeepSeekWebBroker {
   }
 
   private recordRemoteEvent(active: ActiveGeneration, sequence: number, event: ModelEvent): void {
-    const ledger = this.requestLedger.get(active.requestId);
-    if (!ledger) return;
-    ledger.remoteCheckpoint = {
-      request_id: active.requestId,
-      request_digest: active.requestDigest,
-      status: isTerminalEvent(event) ? event.type : "streaming",
-      last_sequence: sequence,
-      ...(isTerminalEvent(event) ? { terminal: event } : {}),
-    };
+    const record = this.journal.get(active.requestId);
+    if (!record || record.generation !== active.generation) throw new Error("JOURNAL_CAS_MISMATCH");
+    this.updateRecord(active.requestId, { type: "event", sequence, event });
   }
 
   private recordRemoteStatus(result: ModelStatusResponse["result"]): void {
-    if (result.status === "unknown") return;
-    const ledger = this.requestLedger.get(result.request_id);
-    if (!ledger) return;
-    ledger.remoteCheckpoint = {
-      request_id: result.request_id,
-      request_digest: result.request_digest,
-      status: result.status,
-      last_sequence: result.last_sequence,
-      ...(result.terminal === undefined ? {} : { terminal: result.terminal }),
-    };
-    if (result.terminal !== undefined) ledger.state = "terminal";
+    if (this.journal.get(result.request_id)) this.updateRecord(result.request_id, { type: "query", result });
+    if (this.activeGeneration?.requestId === result.request_id && this.journal.get(result.request_id)?.state === "ambiguous") {
+      this.settleGenerationAmbiguous("status_without_stream");
+    }
+  }
+
+  private updateRecord(requestId: string, action: RequestAction): void {
+    const record = this.journal.get(requestId);
+    if (!record) throw new BrokerError("JOURNAL_UNAVAILABLE", "unknown");
+    try { this.journal.apply(requestId, record.generation, record.revision, action); }
+    catch { this.journalFailed = true; throw new BrokerError("JOURNAL_UNAVAILABLE", record.state === "planned" ? "not_started" : "unknown"); }
+  }
+
+  private async recoverRequests(peer: PeerConnection): Promise<void> {
+    try {
+      for (const record of this.journal.recoverable()) {
+        if (peer !== this.connection || peer.closing || this.stopping) return;
+        await this.query({ request_id: record.requestId, request_digest: record.requestDigest });
+      }
+    } catch { this.closePeer(peer, 1008, "RECOVERY_FAILED"); }
+    finally { if (peer === this.connection) this.recovering = false; }
   }
 
   private rejectPeerOperations(): void {
@@ -661,8 +699,10 @@ export class DeepSeekWebModelHost implements DeepSeekWebBroker {
     if (peer.closeTimer) clearTimeout(peer.closeTimer);
   }
 
-  private requirePeer(): PeerConnection {
+  private requirePeer(allowRecovery = false): PeerConnection {
     if (this.stopping) throw new BrokerError("BROKER_STOPPED", "not_started");
+    if (this.journalFailed) throw new BrokerError("JOURNAL_UNAVAILABLE", "not_started");
+    if (this.recovering && !allowRecovery) throw new BrokerError("BROKER_BUSY", "not_started");
     const peer = this.connection;
     if (!peer?.authenticated || peer.closing || peer.socket.readyState !== WebSocket.OPEN) {
       throw new BrokerError("WAITING_FOR_BROWSER", "not_started");

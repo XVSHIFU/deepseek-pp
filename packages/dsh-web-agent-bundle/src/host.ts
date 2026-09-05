@@ -11,12 +11,14 @@ export interface Config {
   readonly pairingToken: string;
   readonly allowedExtensionOrigins: string[];
   readonly port?: number;
+  readonly journalPath?: string;
 }
 
 export const Config: z<Config> = z.object({
   pairingToken: z.string().role("secret").required(),
   allowedExtensionOrigins: z.array(z.string()).min(1).required(),
   port: z.number().step(1).min(1).max(65_535).default(43_123),
+  journalPath: z.string(),
 });
 
 declare module "@deepseek-ai/cordis" {
@@ -30,13 +32,18 @@ export async function apply(ctx: Context, config: Config): Promise<() => Promise
     pairingToken: config.pairingToken,
     allowedOrigins: config.allowedExtensionOrigins,
     ...(config.port === undefined ? {} : { port: config.port }),
+    ...(config.journalPath === undefined ? {} : { journalPath: config.journalPath }),
   });
-  await host.start();
   let unprovide: ReturnType<Context["provide"]> | undefined;
   try {
+    await host.start();
     unprovide = ctx.provide("deepseekWebBroker", host);
   } catch (error) {
-    await host.stop();
+    try {
+      await host.stop();
+    } catch (stopFailure) {
+      throw new AggregateError([error, stopFailure], "DeepSeek Web Host startup failed");
+    }
     throw error;
   }
   return async () => {

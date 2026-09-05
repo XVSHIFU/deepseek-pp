@@ -75,7 +75,7 @@
 | M2 DSH adapter + profile | out-of-tree `deepseek-web` LLM adapter、profile 与最小安装 bundle | `verified` | DSH 可显式选择 `provider=deepseek-web`；无隐式 provider fallback；不修改 DSH `master` |
 | M3 Real one-turn | 本机 DSH 经已登录浏览器完成一次真实网页模型回合 | `verified` | 无 DeepSeek API key/其他 provider；流正常结束；最终文本进入同一 DSH session |
 | M4 Local-tool multi-turn | 网页模型请求 DSH 本地只读工具，结果进入下一模型回合并返回最终结果 | `verified` | 2026-09-05 操作者真实网页两轮：2 model steps、1 read、1 result、同一 session completed；本地只读复验与终答哈希一致 |
-| M5 Disconnect/cancel/recovery | 浏览器离线、取消、断连、重连查询和不明结果处理 | `not_started` | 离线=`waiting_for_browser`；取消幂等；`ambiguous` 不自动重放；唯一终态可重复查询 |
+| M5 Disconnect/cancel/recovery | 浏览器离线、取消、断连、重连查询和不明结果处理 | `in_progress` | 离线=`waiting_for_browser`；取消幂等；`ambiguous` 不自动重放；唯一终态可重复查询 |
 | M6 Install/release readiness | 本机 Broker、DSH adapter/profile 的安装升级、文档、供应链和发布门禁 | `not_started` | 仅在 M0–M5 验证完成且获得明确 release 授权后执行完整门禁 |
 
 ## Task / Batch 映射
@@ -98,7 +98,7 @@
 | P4 | P4-T1 | DSH 本地只读工具多回合与最终结果 E2E（T4.1–T4.4） | `—` | `—` | `harness_tool_mapping`, `dsh_readonly_tools`, `dsh_tool_loop_e2e`; integration: orchestration | `verified` |
 | P4 | T4.5 | 官方受控写入、编辑与 Linux 命令 | `—` | `—` | `file_write_acceptance`, `windows_command_route`; integration: orchestration | `verified` |
 | P4 | T4.6 | 官方 Skills/剪枝/压缩/串行子 Agent/会话恢复增量 | `—` | `—` | `harness_features`, `windows_command_route`, `file_write_acceptance`; integration: orchestration | `verified` |
-| P5 | P5-T1 | disconnect/cancel/recovery、`waiting_for_browser` 与不重放 | `TBD` | `TBD` | `TBD` | `not_started` |
+| P5 | T5.1–T5.4 | Host journal、Browser 结果索引、取消与原 CLI 崩溃恢复 | `—` | `—` | `harness_features`, `windows_command_route`, `file_write_acceptance`; integration: orchestration | `in_progress` |
 | P6 | P6-T1 | 安装、升级、文档和 release readiness | `TBD` | `TBD` | `TBD` | `not_started` |
 | S1 | S1-T1 | PR #568 独立评估；只服务模式 B 兼容，不作为模式 A 前置 | `TBD` | `TBD` | `TBD` | `not_started` |
 
@@ -154,7 +154,7 @@ T4.2 的明确调整与边界见计划：官方 read-only 本身不约束读取�
 
 1. 操作者本次测试已完成，当前无需继续操作或重装扩展。原始记录保留在 Ubuntu 项目忽略目录 `command-runs/command-0469b0dc-bf30-44fb-ac29-ddbc1e8bcf36`；不提交原始日志或配对信息。
 2. T4.6 最小扩展已在 Harness fork 的 `codex/web-request-budget` 提交 `34d57aed2e386af0b61874390c86fc5915c51b1a`；本地源码 `C:\temp\deepseek-harness-request-budget`。master 仍为 `76fda729...`，未推送远端。只有在官方包级、原 CLI 回放、独立产品候选测试通过后，才将三份固定摘要归档接入开发 checkout；[来源与重建](../../vendor/harness-request-budget/README.md)。不需要重新加载扩展或重复真实网页测试。
-3. 下一开发项为 P5：复用 Host 现有 request ledger 和 Browser coordinator/session map 增加版本化持久化，不并存另一状态机。恢复仅查同一 request ID，`unknown` 不是 `not_started`，completed 状态索引不能冒充已恢复终答／工具内容。PR #568、无关功能整改和 release 继续隔离。
+3. P5 已进入实现与定向验证：Host 现有 ledger 替换为版本化持久记录，Browser coordinator 使用单一持久元数据索引；生产 profile/扩展接线已加入。恢复仅查同一 request ID，`unknown` 不是 `not_started`，completed 状态索引不能冒充已恢复终答／工具内容。正在验证取消、原 CLI 进程 kill 与 worker 重启；尚未通过 Batch C 完整门禁或新的真实只读验收。PR #568、无关功能整改和 release 继续隔离。
 
 本机开发版仍为提交 `5f110ba` 的产物：继续加载 `C:\temp\deepseek-pp-build-e4dcc34\dist\chrome-mv3`，扩展 ID 不变。操作者已成功完成加载后的真实工具验收。本次文件编辑/Harness 增量和串行调度只改变本机代码；主/子请求沿用 `purpose=agent` 与独立 session ID，摘要沿用 `purpose=compaction`，没有扩展 purpose 枚举，不需要更新浏览器产物。
 
@@ -168,6 +168,7 @@ Windows 启动器只临时用 `WSLENV` 的 `/u` 标记传递固定配对配置�
 
 | Date | Scope | Command | Result | Notes |
 |:--|:--|:--|:--|:--|
+| 2026-09-05 | P5 production integration targeted | Windows Node24.18：11份协议/journal/cache/settings/真实socket/adapter/bundle/scheduler/真实runtime/cancel/real-preflight 原Vitest；compile | `passed targeted` | 167/167，8.23s，外层55s watchdog；compile exit0。覆盖metadata-only快照、损坏/未来保存、单owner、存盘后响应、自动同ID查询、真实adapter取消、实际自动摘要失败无checkpoint、真实child独立session恢复。原CLI profile导入时发现新增参数属性不兼容Node strip-only，已改显式字段后原bundle通过。不等于P5完整门禁：实际CLI kill/restart矩阵仍在完成，全仓及新的真实只读验收未跑 |
 | 2026-09-05 | T4.6 actual Windows/Linux checkout delivery | Windows compile及原CLI/Profile安装；Ubuntu原生离线安装、61项定向及CLI/bundle7项 | `passed` | 实现提交412826959e3a8156a4d0c7cffedf7390d54b571f；Windows compile exit0，实际profile/CLI/bundle解析同一份patched包、CLI1/1和安装6/6通过。Ubuntu worker ff-only更新、Linux Node24.18.0、npm ci --offline 1024包24s、wxt prepare3.783s；两批各timeout55s：61/61（5.81s）、7/7（2.82s）。三补丁包路径／SHA跨锚点一致，锁SHA4440b0e2b669ddfef9416ed25d74827ada9277ea5071b39e036f377cf6526e90未变。两份stash、ignored真实证据保留，无Node/DSH/Vitest遗留，不改Ubuntu配置、不调用真实网页 |
 | 2026-09-05 | T4.6 fixed dependency integration | 独立 `C:\temp\deepseek-web-budget-integration`：最终归档 `npm ci --ignore-scripts --offline`；context/helper/features/adapter 四份原 Vitest 定向 | `passed` | 61/61，8.57s，hard60。128消息／1MiB不增限；65轮自动摘要后继续、新输入字节越界恢复、完整最新工具对、失败／不缩小摘要保留历史及恢复会话通过。外部 Browser 冒用本地预算码转 WEB_MODEL_PROTOCOL，只有本地未发送请求可进入此恢复。1172条锁记录、全部依赖版本不变，只固定3包的路径和integrity；7个消费者解析同一LLM实例 |
 | 2026-09-05 | T4.6 Harness fork verification | fork 原包级 Vitest、leaf tsc、真实 Loader；原 headless snapshot 入口 | `passed targeted` | LLM 247/247、compaction 141/141、retry 40/40、replay 108/108；真实CLI keyless replay 1/1，快照metadata 2/2。取消微任务窗口已确认修前失败、最终precommit检查修后通过。fork提交34d57aed2e；master未改。README/Agent Note成对更新、type-equiv400块通过、配置及Cordis目录按原生成器更新。未执行全仓doc-sync/网站构建或完整上游发布门禁；test:docs聚合因旧接口文档漂移失败且剩余中断，相关漂移已修后单项通过，不将其记为全量绿色 |

@@ -239,7 +239,9 @@ describe("real DeepSeek Web smoke offline preflight", () => {
     expect(BARRIER).not.toMatch(/WebSocket|fetch\(|playwright|cookie|authorization|cdp/i);
   });
 
-  it("reports an allowlisted durable failure code without exposing DSH or session details", async () => {
+  it.each(["WEB_MODEL_PROTOCOL", "WEB_MODEL_TIMEOUT_AMBIGUOUS", "WEB_MODEL_DISCONNECTED_AMBIGUOUS",
+    "WEB_MODEL_CANCEL_UNCONFIRMED", "WEB_MODEL_BROWSER_ABORTED", "JOURNAL_UNAVAILABLE"])(
+    "reports allowlisted durable %s without exposing DSH or session details", async (code) => {
     const privateFailure = [
       "The DeepSeek Web browser broker rejected the request contract.",
       TOKEN,
@@ -248,7 +250,7 @@ describe("real DeepSeek Web smoke offline preflight", () => {
     ].join(" ");
     const fixture = await makeFixture({
       actual: { exitCode: 1, stdout: "", stderr: privateFailure },
-      failureSession: { code: "WEB_MODEL_PROTOCOL", message: privateFailure },
+      failureSession: { code, message: privateFailure },
     });
     const output = captureOutput();
 
@@ -265,7 +267,7 @@ describe("real DeepSeek Web smoke offline preflight", () => {
       ok: false,
       status: "failed",
       error: "REAL_WEB_DSH_FAILED",
-      cause_code: "WEB_MODEL_PROTOCOL",
+      cause_code: code,
     });
     expect(output.stderr()).not.toContain(privateFailure);
     expect(output.stderr()).not.toContain(TOKEN);

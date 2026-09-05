@@ -195,6 +195,72 @@ describe("Web Model Protocol v1 codec", () => {
 });
 
 describe("Web Model Protocol v1 sequence validator", () => {
+  it("accepts journal-authorized status snapshots without recovering missing event contents", () => {
+    const sequence = new WebModelSequenceValidator();
+    const { request_id, request_digest } = queryRequest.params;
+    expect(() => sequence.allowStatusSnapshot(request_id, request_digest)).toThrow(/HANDSHAKE_INCOMPLETE/);
+    sequence.accept(helloRequest, "browser");
+    sequence.accept(helloResponse, "host");
+    sequence.hydrateRequestCheckpoint({ request_id, request_digest, status: "accepted", last_sequence: 0 });
+    expect(() => sequence.allowStatusSnapshot(request_id, "b".repeat(64))).toThrow(/REQUEST_DIGEST_MISMATCH/);
+    sequence.allowStatusSnapshot(request_id, request_digest);
+    sequence.accept(queryRequest, "host");
+    expect(() => sequence.accept(queryResponse, "browser")).not.toThrow();
+    // Even the next correctly numbered frame cannot fill in a lost answer.
+    expect(() => sequence.accept({
+      ...eventFrames[1], params: { ...eventFrames[1].params, sequence: 6 },
+    }, "browser")).toThrow(/UNEXPECTED_FRAME/);
+    expect(() => sequence.accept(generateRequest, "host")).toThrow(/DUPLICATE_REQUEST/);
+    sequence.accept(queryRequest, "host");
+    expect(() => sequence.accept(queryResponse, "browser")).not.toThrow();
+  });
+
+  it("keeps interrupted identities fenced when recovery query reports unknown", () => {
+    const sequence = new WebModelSequenceValidator();
+    sequence.accept(helloRequest, "browser");
+    sequence.accept(helloResponse, "host");
+    sequence.allowStatusSnapshot(queryRequest.params.request_id, queryRequest.params.request_digest);
+    sequence.accept(queryRequest, "host");
+    sequence.accept({
+      ...queryResponse,
+      result: { ...queryRequest.params, type: "model.status", status: "unknown", last_sequence: 0 },
+    }, "browser");
+    expect(() => sequence.accept(generateRequest, "host")).toThrow(/DUPLICATE_REQUEST/);
+    sequence.accept(queryRequest, "host");
+    expect(() => sequence.accept(queryResponse, "browser")).not.toThrow();
+  });
+
+  it("rejects recovery status regression, wrong RPC identity, and inconsistent terminal", () => {
+    // Set up each rejecting response on its own connection: failed frames
+    // never grant another request authority.
+    for (const kind of ["sequence", "status", "identity", "terminal"] as const) {
+      const sequence = new WebModelSequenceValidator();
+      sequence.accept(helloRequest, "browser");
+      sequence.accept(helloResponse, "host");
+      const { request_id, request_digest } = queryRequest.params;
+      sequence.hydrateRequestCheckpoint({ request_id, request_digest, status: "streaming", last_sequence: 3 });
+      sequence.allowStatusSnapshot(request_id, request_digest);
+      sequence.accept(queryRequest, "host");
+      if (kind === "sequence") {
+        expect(() => sequence.accept({ ...queryResponse, result: {
+          ...queryRequest.params, type: "model.status", status: "streaming", last_sequence: 2,
+        } }, "browser")).toThrow(/NON_MONOTONIC_SEQUENCE/);
+      } else if (kind === "status") {
+        expect(() => sequence.accept({ ...queryResponse, result: {
+          ...queryRequest.params, type: "model.status", status: "accepted", last_sequence: 0,
+        } }, "browser")).toThrow(/NON_MONOTONIC_SEQUENCE/);
+      } else if (kind === "identity") {
+        expect(() => sequence.accept({ ...queryResponse, id: "unrelated" }, "browser")).toThrow(/RPC_ID_MISMATCH/);
+      } else {
+        sequence.accept(queryResponse, "browser");
+        sequence.accept(queryRequest, "host");
+        expect(() => sequence.accept({ ...queryResponse, result: {
+          ...queryResponse.result, terminal: { type: "completed", finish_reason: "stop" },
+        } }, "browser")).toThrow(/TERMINAL_MISMATCH/);
+      }
+    }
+  });
+
   it("hydrates only exact post-handshake request checkpoints without permitting gaps", () => {
     const checkpoint = {
       request_id: "request-1",

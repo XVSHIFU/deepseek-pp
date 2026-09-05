@@ -390,7 +390,7 @@ function terminalFinish(event: ModelTerminalEvent): StreamChunk {
             : { kind: "stop" },
       };
     case "aborted":
-      return abortedFinish();
+      return errorFinish("WEB_MODEL_BROWSER_ABORTED", "The browser stopped the request before web generation was dispatched.");
     case "failed":
       // Only the local, pre-dispatch runtime check may authorize budget recovery.
       // A browser-reported failure has already crossed the external boundary.
@@ -399,21 +399,30 @@ function terminalFinish(event: ModelTerminalEvent): StreamChunk {
       }
       return errorFinish(event.error.code, event.error.message);
     case "ambiguous":
-      return ambiguousFinish();
+      return ambiguousFinish(event.reason);
   }
 }
 
 function terminalAfterAbort(event: ModelTerminalEvent | undefined): StreamChunk {
   // consumeUntilTerminal intentionally discards events racing with cancellation.
   // A completed terminal therefore cannot safely claim a complete text/tool result.
-  return event === undefined || event.type === "completed" ? ambiguousFinish() : terminalFinish(event);
+  if (event === undefined || event.type === "completed") {
+    return errorFinish("WEB_MODEL_CANCEL_UNCONFIRMED", "Cancellation was requested, but the web result or cleanup could not be confirmed. Do not replay automatically.");
+  }
+  return event.type === "aborted" ? abortedFinish() : terminalFinish(event);
 }
 
 function errorFinish(code: string, message: string): StreamChunk {
   return { type: "finish", reason: { kind: "error", failure: { code, message } } };
 }
 
-function ambiguousFinish(): StreamChunk {
+function ambiguousFinish(reason?: string): StreamChunk {
+  if (reason === "generation_timeout" || reason === "accept_timeout" || reason === "request_timeout" || reason === "deepseek_turn_timeout") {
+    return errorFinish("WEB_MODEL_TIMEOUT_AMBIGUOUS", "The web request timed out; its outcome is unknown. Do not replay automatically.");
+  }
+  if (reason === "browser_disconnected" || reason === "connection_closed" || reason === "connection_lost" || reason === "host_stopped") {
+    return errorFinish("WEB_MODEL_DISCONNECTED_AMBIGUOUS", "The browser connection was lost; the web outcome is unknown. Reconnect to query the original request.");
+  }
   return errorFinish("WEB_MODEL_AMBIGUOUS", "The DeepSeek Web model request outcome is ambiguous.");
 }
 
@@ -442,6 +451,12 @@ function ambiguousFailure(message: string, cause?: unknown): LlmError {
 
 function normalizeAdapterError(error: unknown, signal?: AbortSignal): Error {
   if (error instanceof BrokerError && error.externalOutcome !== "not_started") {
+    if (error.code === "REQUEST_TIMEOUT") {
+      return new LlmError("The web request timed out; its outcome is unknown. Do not replay automatically.", "WEB_MODEL_TIMEOUT_AMBIGUOUS", { cause: error });
+    }
+    if (error.code === "CONNECTION_LOST" || error.code === "BROKER_STOPPED") {
+      return new LlmError("The browser connection was lost; the web outcome is unknown. Reconnect to query the original request.", "WEB_MODEL_DISCONNECTED_AMBIGUOUS", { cause: error });
+    }
     return ambiguousFailure("The DeepSeek Web model request outcome is ambiguous.", error);
   }
   if (error instanceof LlmError) return error;
@@ -452,6 +467,8 @@ function normalizeAdapterError(error: unknown, signal?: AbortSignal): Error {
         return new LlmError("Waiting for an authenticated DeepSeek++ browser broker.", "WAITING_FOR_BROWSER", { cause: error });
       case "BROKER_BUSY":
         return new LlmError("The DeepSeek Web browser broker is busy.", "BROKER_BUSY", { cause: error });
+      case "JOURNAL_UNAVAILABLE":
+        return new LlmError("The local request journal could not be saved; no new web request was sent.", error.code, { cause: error });
       case "DEEPSEEK_AUTH_REQUIRED":
         return new LlmError("Refresh the signed-in DeepSeek web page so the extension can use its login state.", error.code, { cause: error });
       case "DEEPSEEK_PREPARATION_FAILED":

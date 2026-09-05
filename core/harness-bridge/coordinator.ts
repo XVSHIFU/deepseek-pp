@@ -1,10 +1,9 @@
 import {
+  encodeWebModelFrame,
   type JsonRpcErrorResponse,
   type ModelEvent,
   type ModelGenerateRequest,
   type ModelRequestCheckpoint,
-  type ModelStatus,
-  type ModelTerminalEvent,
 } from '@deepseek-pp/web-model-protocol';
 
 import type {
@@ -17,8 +16,15 @@ import type {
   HarnessBridgeStatusResult,
   SafeHarnessBridgeState,
 } from './contracts';
-import { DeepSeekTurnAdapterError } from './deepseek-turn-adapter';
+import { DeepSeekTurnAdapterError, WEB_MODEL_TURN_BUDGETS } from './deepseek-turn-adapter';
 import type { WebModelTurnPort } from './model-turn-port';
+import {
+  HarnessBridgeRecoveryError,
+  HarnessBridgeResultCache,
+  harnessBridgeAuthorityDigest,
+  type HarnessBridgeRecoveryRecord,
+  type HarnessBridgeRecoveryStorage,
+} from './result-cache';
 import {
   HarnessBridgeSettingsError,
   type HarnessBridgeSettings,
@@ -34,8 +40,6 @@ export type {
   SafeHarnessBridgeState,
 } from './contracts';
 
-const MAX_REQUEST_RECORDS = 1_024;
-
 export interface HarnessBridgeClientPort {
   readonly state: HarnessBridgeClientState;
   start(): void;
@@ -50,16 +54,10 @@ export interface HarnessBridgeClientPort {
 export interface HarnessBridgeCoordinatorDependencies {
   readonly settings: HarnessBridgeSettingsStore;
   readonly turnPort: WebModelTurnPort;
+  readonly recoveryStorage: HarnessBridgeRecoveryStorage;
   readonly createClient: (settings: HarnessBridgeSettings) => HarnessBridgeClientPort;
   readonly notifyStatus?: (status: HarnessBridgeStatus) => void | Promise<void>;
   readonly reportError?: (code: string) => void;
-}
-
-interface RequestRecord {
-  readonly requestDigest: string;
-  status: Exclude<ModelStatus, 'unknown'>;
-  lastSequence: number;
-  terminal?: ModelTerminalEvent;
 }
 
 interface ActiveGeneration {
@@ -68,6 +66,11 @@ interface ActiveGeneration {
   readonly controller: AbortController;
   readonly binding: ClientBinding;
   readonly authorityEpoch: number;
+  readonly authorityDigest: string;
+  deliveryTail: Promise<void>;
+  deliveryError?: unknown;
+  queuedEvents: number;
+  queuedBytes: number;
 }
 
 interface ClientBinding {
@@ -75,12 +78,13 @@ interface ClientBinding {
   lastPhase: HarnessBridgeClientState['phase'];
   unsubscribeState: () => void;
   unsubscribeRequests: () => void;
+  hydration: Promise<void>;
 }
 
 /** Browser-side composition root for the Web Model Protocol and DeepSeek turn port. */
 export class HarnessBridgeCoordinator {
   private readonly dependencies: HarnessBridgeCoordinatorDependencies;
-  private readonly records = new Map<string, RequestRecord>();
+  private readonly records: HarnessBridgeResultCache;
   private binding: ClientBinding | undefined;
   private active: ActiveGeneration | undefined;
   private settingsValue: HarnessBridgeSettings | undefined;
@@ -88,9 +92,11 @@ export class HarnessBridgeCoordinator {
   private lifecycleTail: Promise<void> = Promise.resolve();
   private initialization: Promise<void> | undefined;
   private authorityEpoch = 0;
+  private authorityDigest: string | undefined;
 
   constructor(dependencies: HarnessBridgeCoordinatorDependencies) {
     this.dependencies = dependencies;
+    this.records = new HarnessBridgeResultCache(dependencies.recoveryStorage);
   }
 
   initialize(): Promise<void> {
@@ -98,10 +104,11 @@ export class HarnessBridgeCoordinator {
     this.initialization = this.serialize(async () => {
       try {
         const settings = await this.dependencies.settings.read();
+        await this.records.initialize();
         this.configurationError = undefined;
-        this.apply(settings);
+        await this.apply(settings);
       } catch (error) {
-        this.configurationError = safeSettingsError(error);
+        this.configurationError = safeConfigurationError(error);
         this.retireClient();
         this.dependencies.reportError?.(this.configurationError);
       }
@@ -122,14 +129,16 @@ export class HarnessBridgeCoordinator {
     return this.initialize().then(() => this.serialize(async () => {
       try {
         const settings = await this.dependencies.settings.update(patch);
+        await this.records.validate();
         this.configurationError = undefined;
-        this.apply(settings);
+        await this.apply(settings);
         result = this.createStatus(settings);
       } catch (error) {
-        const code = safeSettingsError(error);
+        const code = safeConfigurationError(error);
         if (error instanceof HarnessBridgeSettingsError &&
             (error.code === 'harness_bridge_settings_corrupt' ||
-             error.code === 'harness_bridge_settings_future_version')) {
+             error.code === 'harness_bridge_settings_future_version') ||
+            error instanceof HarnessBridgeRecoveryError) {
           this.configurationError = code;
           this.retireClient();
         }
@@ -148,7 +157,7 @@ export class HarnessBridgeCoordinator {
     return next;
   }
 
-  private apply(settings: HarnessBridgeSettings): void {
+  private async apply(settings: HarnessBridgeSettings): Promise<void> {
     const previous = this.settingsValue;
     const sameAuthority = previous !== undefined &&
       previous.port === settings.port &&
@@ -156,8 +165,11 @@ export class HarnessBridgeCoordinator {
     const unchanged = sameAuthority && previous.enabled === settings.enabled;
     if (!sameAuthority) {
       this.authorityEpoch += 1;
-      this.records.clear();
       this.abortActive(undefined, 'bridge_authority_changed');
+      this.retireClient();
+      await this.active?.deliveryTail;
+      if (this.authorityDigest) await this.records.abandon(this.authorityDigest);
+      this.authorityDigest = await harnessBridgeAuthorityDigest(settings.port, settings.pairingToken);
     }
     this.settingsValue = settings;
     if (!settings.enabled) {
@@ -185,6 +197,7 @@ export class HarnessBridgeCoordinator {
       lastPhase: client.state.phase,
       unsubscribeState: () => undefined,
       unsubscribeRequests: () => undefined,
+      hydration: Promise.resolve(),
     };
     this.binding = binding;
     binding.unsubscribeRequests = client.subscribeRequests((request) => {
@@ -196,7 +209,7 @@ export class HarnessBridgeCoordinator {
       const wasReady = binding.lastPhase === 'ready';
       binding.lastPhase = state.phase;
       if (wasReady && state.phase !== 'ready') this.abortActive(binding, 'connection_lost');
-      if (state.phase === 'ready') this.hydrateCheckpoints(binding);
+      if (state.phase === 'ready') binding.hydration = this.hydrateCheckpoints(binding);
       void this.publishStatus();
     });
     client.start();
@@ -213,16 +226,18 @@ export class HarnessBridgeCoordinator {
   }
 
   private async handleRequest(binding: ClientBinding, request: HarnessBridgeHostRequest): Promise<void> {
+    await binding.hydration;
     if (this.binding !== binding) return;
     try {
       if (request.method === 'model.generate') {
         await this.handleGenerate(binding, request);
       } else if (request.method === 'model.cancel') {
-        this.handleCancel(binding, request);
+        await this.handleCancel(binding, request);
       } else {
-        this.handleQuery(binding, request);
+        await this.handleQuery(binding, request);
       }
-    } catch {
+    } catch (error) {
+      if (error instanceof HarnessBridgeRecoveryError) this.recoveryFailed(error);
       // All request-local failures are converted to a stable protocol frame by
       // the method handlers. A retired socket must not receive a late response.
     }
@@ -230,27 +245,14 @@ export class HarnessBridgeCoordinator {
 
   private async handleGenerate(binding: ClientBinding, request: ModelGenerateRequest): Promise<void> {
     if (this.active) {
-      this.sendError(binding, request.id, request.params.request_id, request.params.request_digest, 'BROKER_BUSY');
+      const sameRequest = this.active.requestId === request.params.request_id;
+      this.sendError(binding, request.id, request.params.request_id, request.params.request_digest,
+        sameRequest ? (this.active.requestDigest === request.params.request_digest ? 'DUPLICATE_REQUEST' : 'REQUEST_IDENTITY_MISMATCH') : 'BROKER_BUSY',
+        sameRequest ? 'unknown' : 'not_started');
       return;
     }
-    const prior = this.records.get(request.params.request_id);
-    if (prior || this.records.size >= MAX_REQUEST_RECORDS) {
-      this.sendError(
-        binding,
-        request.id,
-        request.params.request_id,
-        request.params.request_digest,
-        prior && prior.requestDigest !== request.params.request_digest
-          ? 'REQUEST_IDENTITY_MISMATCH'
-          : 'DUPLICATE_REQUEST',
-      );
-      return;
-    }
-    const record: RequestRecord = {
-      requestDigest: request.params.request_digest,
-      status: 'accepted',
-      lastSequence: 0,
-    };
+    const authorityDigest = this.authorityDigest;
+    if (!authorityDigest || this.configurationError) return;
     const controller = new AbortController();
     const active: ActiveGeneration = {
       requestId: request.params.request_id,
@@ -258,29 +260,43 @@ export class HarnessBridgeCoordinator {
       controller,
       binding,
       authorityEpoch: this.authorityEpoch,
+      authorityDigest,
+      deliveryTail: Promise.resolve(),
+      queuedEvents: 0,
+      queuedBytes: 0,
     };
     this.active = active;
     let adapterAccepted = false;
     let acceptedSent = false;
+    let reserved = false;
+    let terminalCommitted = false;
+    let turnInvoked = false;
     try {
+      // A crash anywhere in preparation/dispatch must leave a durable replay
+      // tombstone, even before the synchronous accepted callback is reached.
+      await this.records.reserve(authorityDigest, active.requestId, active.requestDigest, request.params.session_id);
+      reserved = true;
+      this.assertActive(active);
+      turnInvoked = true;
       const terminal = await this.dependencies.turnPort.generate(request.params, {
         onAccepted: (value) => {
           if (this.active !== active) throw new Error('STALE_GENERATION');
           adapterAccepted = true;
-          if (this.binding !== binding || controller.signal.aborted) return;
-          binding.client.send({
-            jsonrpc: '2.0',
-            id: request.id,
-            result: { schema_version: 1, type: 'model.accepted', ...value },
+          this.queueDelivery(active, async () => {
+            this.assertActive(active);
+            binding.client.send({
+              jsonrpc: '2.0',
+              id: request.id,
+              result: { schema_version: 1, type: 'model.accepted', ...value },
+            });
+            acceptedSent = true;
           });
-          acceptedSent = true;
-          this.records.set(request.params.request_id, record);
         },
-        onTextDelta: (event) => this.sendEvent(active, record, event),
-        onToolCall: (event) => this.sendEvent(active, record, event),
+        onTextDelta: (event) => this.sendEvent(active, event),
+        onToolCall: (event) => this.sendEvent(active, event),
         ...(binding.client.state.capabilities?.reasoning === true
           ? { onReasoningDelta: (event: Extract<ModelEvent, { type: 'reasoning_delta' }>) => {
-            this.sendEvent(active, record, event);
+            this.sendEvent(active, event);
           } }
           : {}),
       }, {
@@ -288,26 +304,50 @@ export class HarnessBridgeCoordinator {
         negotiatedCapabilities: binding.client.state.capabilities,
       });
       if (this.active !== active || !adapterAccepted) throw new Error('TURN_NOT_ACCEPTED');
+      await active.deliveryTail;
       if (active.authorityEpoch !== this.authorityEpoch) return;
-      this.recordTerminal(record, terminal);
-      this.records.set(request.params.request_id, record);
+      if (active.deliveryError instanceof HarnessBridgeRecoveryError) throw active.deliveryError;
+      const record = await this.records.advance(authorityDigest, active.requestId, terminal);
+      terminalCommitted = true;
+      if (active.authorityEpoch !== this.authorityEpoch) return;
       const currentBinding = this.binding;
       if (currentBinding && currentBinding !== binding && currentBinding.client.state.phase === 'ready') {
-        this.hydrateRecord(currentBinding, request.params.request_id, record);
+        this.hydrateRecord(currentBinding, record);
       }
       if (this.binding === binding && acceptedSent && !controller.signal.aborted) {
-        binding.client.send(this.eventFrame(active.requestId, record.lastSequence, terminal));
+        binding.client.send(this.eventFrame(active.requestId, record.last_sequence, record.terminal!));
       }
     } catch (error) {
-      if (!adapterAccepted) this.records.delete(request.params.request_id);
+      if (terminalCommitted || active.authorityEpoch !== this.authorityEpoch) return;
+      if (error instanceof HarnessBridgeRecoveryError) {
+        if (['DUPLICATE_REQUEST', 'REQUEST_IDENTITY_MISMATCH', 'REQUEST_CAPACITY_EXCEEDED', 'SESSION_QUARANTINED'].includes(error.code)) {
+          this.sendError(binding, request.id, active.requestId, active.requestDigest, error.code,
+            error.code === 'REQUEST_CAPACITY_EXCEEDED' ? 'not_started' : 'unknown');
+        } else this.recoveryFailed(error);
+        return;
+      }
+      await active.deliveryTail;
+      if (active.deliveryError instanceof HarnessBridgeRecoveryError) {
+        this.recoveryFailed(active.deliveryError);
+        return;
+      }
+      const provenUnstarted = !turnInvoked || (!adapterAccepted && error instanceof DeepSeekTurnAdapterError &&
+        error.code !== 'DUPLICATE_REQUEST' && error.code !== 'REQUEST_IDENTITY_MISMATCH' && error.code !== 'SESSION_QUARANTINED');
+      if (reserved && provenUnstarted) await this.records.releaseUnstarted(authorityDigest, active.requestId);
+      else if (reserved) {
+        const record = await this.records.advance(authorityDigest, active.requestId, { type: 'ambiguous', reason: 'browser_recovery_failed' });
+        if (this.binding === binding && acceptedSent && !controller.signal.aborted) {
+          binding.client.send(this.eventFrame(active.requestId, record.last_sequence, record.terminal!));
+        }
+      }
       if (this.binding === binding && !adapterAccepted && !controller.signal.aborted) {
-        this.records.delete(request.params.request_id);
         this.sendError(
           binding,
           request.id,
           request.params.request_id,
           request.params.request_digest,
           safePreparationErrorCode(error),
+          provenUnstarted ? 'not_started' : 'unknown',
         );
       }
     } finally {
@@ -315,23 +355,40 @@ export class HarnessBridgeCoordinator {
     }
   }
 
-  private handleCancel(binding: ClientBinding, request: Extract<HarnessBridgeHostRequest, { method: 'model.cancel' }>): void {
+  private async handleCancel(binding: ClientBinding, request: Extract<HarnessBridgeHostRequest, { method: 'model.cancel' }>): Promise<void> {
     try {
-      const result = this.dependencies.turnPort.cancel(request.params);
+      const authorityDigest = this.authorityDigest;
+      if (!authorityDigest) return;
+      const record = await this.records.requestCancel(authorityDigest, request.params.request_id, request.params.request_digest);
+      if (this.binding !== binding || authorityDigest !== this.authorityDigest) return;
+      // Persist intent before asking the live adapter to abort. After restart,
+      // the durable terminal answers idempotently without a recreated turn.
+      const result = record?.terminal
+        ? { request_id: request.params.request_id, request_digest: request.params.request_digest, status: 'already_terminal' as const }
+        : this.dependencies.turnPort.cancel(request.params);
       binding.client.send({
         jsonrpc: '2.0',
         id: request.id,
         result: { schema_version: 1, type: 'model.cancelled', ...result },
       });
-    } catch {
-      this.sendError(binding, request.id, request.params.request_id, request.params.request_digest, 'CANCEL_FAILED');
+    } catch (error) {
+      if (error instanceof HarnessBridgeRecoveryError && error.code !== 'REQUEST_IDENTITY_MISMATCH') {
+        this.recoveryFailed(error);
+        return;
+      }
+      this.sendError(binding, request.id, request.params.request_id, request.params.request_digest,
+        error instanceof HarnessBridgeRecoveryError ? error.code : 'CANCEL_FAILED', 'unknown');
     }
   }
 
-  private handleQuery(binding: ClientBinding, request: Extract<HarnessBridgeHostRequest, { method: 'model.query' }>): void {
-    const record = this.records.get(request.params.request_id);
-    if (record && record.requestDigest !== request.params.request_digest) {
-      this.sendError(binding, request.id, request.params.request_id, request.params.request_digest, 'REQUEST_IDENTITY_MISMATCH');
+  private async handleQuery(binding: ClientBinding, request: Extract<HarnessBridgeHostRequest, { method: 'model.query' }>): Promise<void> {
+    const authorityDigest = this.authorityDigest;
+    if (!authorityDigest) return;
+    await this.active?.deliveryTail;
+    const record = (await this.records.read(authorityDigest)).find((item) => item.request_id === request.params.request_id);
+    if (this.binding !== binding || authorityDigest !== this.authorityDigest) return;
+    if (record && record.request_digest !== request.params.request_digest) {
+      this.sendError(binding, request.id, request.params.request_id, request.params.request_digest, 'REQUEST_IDENTITY_MISMATCH', 'unknown');
       return;
     }
     binding.client.send({
@@ -343,26 +400,21 @@ export class HarnessBridgeCoordinator {
         request_id: request.params.request_id,
         request_digest: request.params.request_digest,
         status: record?.status ?? 'unknown',
-        last_sequence: record?.lastSequence ?? 0,
+        last_sequence: record?.last_sequence ?? 0,
         ...(record?.terminal === undefined ? {} : { terminal: record.terminal }),
       },
     });
   }
 
-  private sendEvent(active: ActiveGeneration, record: RequestRecord, event: ModelEvent): void {
+  private sendEvent(active: ActiveGeneration, event: ModelEvent): void {
     this.assertActive(active);
-    const sequence = record.lastSequence + 1;
-    if (isTerminal(event)) {
-      // The adapter has established the browser-side outcome. Preserve it
-      // before the socket send: a send race must not downgrade known local
-      // truth to accepted/streaming on the next authenticated query.
-      this.recordTerminal(record, event);
-      active.binding.client.send(this.eventFrame(active.requestId, sequence, event));
-    } else {
-      active.binding.client.send(this.eventFrame(active.requestId, sequence, event));
-      record.lastSequence = sequence;
-      record.status = 'streaming';
-    }
+    const bytes = new TextEncoder().encode(encodeWebModelFrame(this.eventFrame(active.requestId, Number.MAX_SAFE_INTEGER, event))).byteLength;
+    this.queueDelivery(active, async () => {
+      this.assertActive(active);
+      const record = await this.records.advance(active.authorityDigest, active.requestId);
+      this.assertActive(active);
+      active.binding.client.send(this.eventFrame(active.requestId, record.last_sequence, event));
+    }, bytes);
   }
 
   private eventFrame(requestId: string, sequence: number, event: ModelEvent) {
@@ -373,11 +425,30 @@ export class HarnessBridgeCoordinator {
     };
   }
 
-  private recordTerminal(record: RequestRecord, terminal: ModelTerminalEvent): void {
-    if (record.terminal) return;
-    record.lastSequence += 1;
-    record.status = terminal.type;
-    record.terminal = terminal;
+  private queueDelivery(active: ActiveGeneration, operation: () => Promise<void>, bytes = 0): void {
+    if (active.queuedEvents >= WEB_MODEL_TURN_BUDGETS.events || active.queuedBytes + bytes > WEB_MODEL_TURN_BUDGETS.outputUtf8Bytes) {
+      if (!active.controller.signal.aborted) active.controller.abort('bridge_delivery_budget_exceeded');
+      throw new Error('BRIDGE_DELIVERY_BUDGET_EXCEEDED');
+    }
+    active.queuedEvents += 1;
+    active.queuedBytes += bytes;
+    active.deliveryTail = active.deliveryTail.then(async () => {
+      try { if (active.deliveryError === undefined) await operation(); }
+      catch (error) {
+        active.deliveryError = error;
+        if (!active.controller.signal.aborted) active.controller.abort('bridge_delivery_failed');
+        if (error instanceof HarnessBridgeRecoveryError) this.recoveryFailed(error);
+      } finally {
+        active.queuedEvents -= 1;
+        active.queuedBytes -= bytes;
+      }
+    });
+  }
+
+  private recoveryFailed(error: HarnessBridgeRecoveryError): void {
+    this.configurationError = error.code;
+    this.retireClient();
+    this.dependencies.reportError?.(error.code);
   }
 
   private sendError(
@@ -386,6 +457,7 @@ export class HarnessBridgeCoordinator {
     requestId: string,
     requestDigest: string,
     errorCode: string,
+    externalOutcome: 'not_started' | 'unknown' = 'not_started',
   ): void {
     if (this.binding !== binding) return;
     const frame: JsonRpcErrorResponse = {
@@ -393,12 +465,12 @@ export class HarnessBridgeCoordinator {
       id,
       error: {
         code: -32_000,
-        message: 'Web model request was not started.',
+        message: externalOutcome === 'not_started' ? 'Web model request was not started.' : 'Web model request outcome is unknown.',
         data: {
           schema_version: 1,
           error_code: errorCode,
-          retryable: errorCode !== 'DUPLICATE_REQUEST',
-          external_outcome: 'not_started',
+          retryable: externalOutcome === 'not_started',
+          external_outcome: externalOutcome,
           request_id: requestId,
           request_digest: requestDigest,
         },
@@ -413,24 +485,27 @@ export class HarnessBridgeCoordinator {
     }
   }
 
-  private hydrateCheckpoints(binding: ClientBinding): void {
-    for (const [requestId, record] of this.records) {
-      if (this.binding !== binding) return;
-      try {
-        this.hydrateRecord(binding, requestId, record);
-      } catch {
-        this.dependencies.reportError?.('harness_bridge_checkpoint_failed');
-        return;
+  private async hydrateCheckpoints(binding: ClientBinding): Promise<void> {
+    const authorityDigest = this.authorityDigest;
+    if (!authorityDigest) return;
+    try {
+      await this.active?.deliveryTail;
+      for (const record of await this.records.read(authorityDigest)) {
+        if (this.binding !== binding || authorityDigest !== this.authorityDigest) return;
+        this.hydrateRecord(binding, record);
       }
+    } catch (error) {
+      if (error instanceof HarnessBridgeRecoveryError) this.recoveryFailed(error);
+      else this.dependencies.reportError?.('harness_bridge_checkpoint_failed');
     }
   }
 
-  private hydrateRecord(binding: ClientBinding, requestId: string, record: RequestRecord): void {
+  private hydrateRecord(binding: ClientBinding, record: HarnessBridgeRecoveryRecord): void {
     binding.client.hydrateRequestCheckpoint({
-      request_id: requestId,
-      request_digest: record.requestDigest,
+      request_id: record.request_id,
+      request_digest: record.request_digest,
       status: record.status,
-      last_sequence: record.lastSequence,
+      last_sequence: record.last_sequence,
       ...(record.terminal === undefined ? {} : { terminal: record.terminal }),
     });
   }
@@ -478,15 +553,10 @@ export function projectSafeState(state: HarnessBridgeClientState): SafeHarnessBr
   });
 }
 
-function safeSettingsError(error: unknown): string {
-  return error instanceof HarnessBridgeSettingsError
+function safeConfigurationError(error: unknown): string {
+  return error instanceof HarnessBridgeSettingsError || error instanceof HarnessBridgeRecoveryError
     ? error.code
     : 'harness_bridge_storage_unavailable';
-}
-
-function isTerminal(event: ModelEvent): event is ModelTerminalEvent {
-  return event.type === 'completed' || event.type === 'aborted' ||
-    event.type === 'failed' || event.type === 'ambiguous';
 }
 
 const RECONNECTABLE_PHASES = new Set<HarnessBridgeClientState['phase']>([

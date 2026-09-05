@@ -46,7 +46,7 @@ export function featureRows() {
 /** Real upstream runtime/services plus the production web adapter and socket.
  * Only the remote browser/model is scripted. No Harness/core monkey patches.
  */
-export async function createFeatureRuntime(skillBody = "Use the provided fixture identifier.") {
+export async function createFeatureRuntime(skillBody = "Use the provided fixture identifier.", options: { persistentJournal?: boolean } = {}) {
   const root = await mkdtemp(join(tmpdir(), "dsh-harness-features-"));
   const workspace = join(root, "workspace");
   const skillRoot = join(workspace, ".agents", "skills");
@@ -73,7 +73,8 @@ export async function createFeatureRuntime(skillBody = "Use the provided fixture
     await ctx.plugin(ObservationPolicy);
     await ctx.plugin(ApprovalService, { policy: "ask" });
     const pairingToken = createPairingToken();
-    await ctx.plugin(Host, { pairingToken, allowedExtensionOrigins: [FAKE_EXTENSION_ORIGIN], port: await reservePort() });
+    await ctx.plugin(Host, { pairingToken, allowedExtensionOrigins: [FAKE_EXTENSION_ORIGIN], port: await reservePort(),
+      ...(options.persistentJournal ? { journalPath: join(root, "journal") } : {}) });
     await ctx.plugin(Adapter);
     peer = await FakeBrowserPeer.connect({ address: (ctx.deepseekWebBroker as DeepSeekWebModelHost).address, pairingToken });
     // Consume the real composition/config. Only the operator-selected root's

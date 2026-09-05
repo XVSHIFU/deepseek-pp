@@ -24,6 +24,26 @@ dsh --profile deepseek-web-agent 'Reply with a short acknowledgement.'
 
 With no authenticated browser peer, the turn fails visibly as `WAITING_FOR_BROWSER`. There is no provider fallback. The Host listens only on `127.0.0.1`, accepts one model generation at a time, and stops with the owning Cordis plugin.
 
+## Interrupted requests (P5 development)
+
+The profile now keeps a bounded request journal in its own `web-model-journal`
+directory. Restarting the same profile queries interrupted request identities
+after the extension reconnects; it never automatically replays them. The
+extension keeps matching metadata across background-worker restarts. These
+records do not store prompts, answers, reasoning, tool results or login secrets.
+
+A remote “completed” status does not recover a missing answer or tool call.
+Interrupted turns remain visibly ambiguous and require inspection before you
+choose a new task. The original one-shot CLI does not resume an old session by
+simply being launched again. Cancellation also cannot undo a sent web request
+or a file already written by a local tool. Timeout, connection loss, unconfirmed
+cancellation and a pre-dispatch browser abort have distinct failure codes.
+
+Do not delete the journal or extension index to retry uncertain work. Damaged
+or future-version data is preserved and blocks the bridge. At capacity, new
+requests stop rather than silently forgetting old identities. Only one process
+may own a profile journal; an uncertain lock owner requires inspection.
+
 This P2 package is installable as a local link from the current checkout. It is not a release artifact: the private adapter, transport, and protocol workspaces do not yet form a self-contained tarball dependency closure.
 
 ## Controlled read-only acceptance profile
