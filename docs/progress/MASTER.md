@@ -142,21 +142,21 @@
 
 ## 当前状态与下一步
 
-**当前状态**：M0–M4、T4.5 已验证，不再重复单轮、只读或 Linux 命令测试。真实网页已作为本机 DSH 模型完成本地读取、写入、执行短测试及最终回答；尚非完整交付版。
+**当前状态**：M0–M4、T4.5–T4.6 已验证。P5 断线、取消和崩溃恢复已实现，实际 CLI、真实工具及运行时定向回归通过；全量 252 个测试文件共 2280 项通过、0 失败、6 项既有平台跳过，三端扩展构建通过。真实网页已作为本机 DSH 模型完成读取、写入、执行短测试及最终回答；P5 新扩展尚需真实只读复验，P6 尚未开始，因此仍不是完整交付版。
 
 M4/T4.1–T4.4 的真实只读运行保持有效。T4.5 的文件编辑及 Linux 命令组合均已通过实际 DSH/fake browser 闭环，工作区写入/越界拒绝/取消清理已实测；本次操作者真实网页运行 `command-0469b0dc-bf30-44fb-ac29-ddbc1e8bcf36` 又完成 2 model steps、1 Bash call/result、文件和短测试验证、同一 session completed。原始 Linux session 与文件哈希只读复验一致，新增网页请求为零。独立 editor 专用真实网页检查未执行，不能以本次 Bash 验收冒充。
 
-T4.6 已补齐可压缩历史的消息数／编码字节保护：fork 独立分支的真实发送前预算检查复用原恢复及压缩事务，两项旧 `current-gap` 已从安全拒绝改为自动摘要后继续成功。最终候选在独立 checkout 离线安装，4 份定向测试 61/61 通过；包含实际 65 轮、当次输入跨界、摘要合法前缀、工具对保留、失败不提交、持久化恢复及外部保留码拒绝。它不承诺固定系统／工具包络或不可分单元总能容纳。P5 断线／崩溃恢复和 P6 安装交付仍未完成，不是完整交付版。
+T4.6 已补齐可压缩历史的消息数／编码字节保护：fork 独立分支的真实发送前预算检查复用原恢复及压缩事务，两项旧 `current-gap` 已从安全拒绝改为自动摘要后继续成功。最终候选在独立 checkout 离线安装，4 份定向测试 61/61 通过；包含实际 65 轮、当次输入跨界、摘要合法前缀、工具对保留、失败不提交、持久化恢复及外部保留码拒绝。它不承诺固定系统／工具包络或不可分单元总能容纳。P5 尚待新扩展真实验收，P6 安装交付尚未开始，不是完整交付版。
 
 T4.2 的明确调整与边界见计划：官方 read-only 本身不约束读取，故窄组合复用官方 scope/guard/canonicalPath/resolve/contains，只有原生 read 可见；不复制文件工具，不声称是 OS 沙箱。首验只读取生成的临时文件，不接触真实用户项目。原单轮 profile 保持不变。
 
 **立即下一步**：
 
-1. 操作者本次测试已完成，当前无需继续操作或重装扩展。原始记录保留在 Ubuntu 项目忽略目录 `command-runs/command-0469b0dc-bf30-44fb-ac29-ddbc1e8bcf36`；不提交原始日志或配对信息。
-2. T4.6 最小扩展已在 Harness fork 的 `codex/web-request-budget` 提交 `34d57aed2e386af0b61874390c86fc5915c51b1a`；本地源码 `C:\temp\deepseek-harness-request-budget`。master 仍为 `76fda729...`，未推送远端。只有在官方包级、原 CLI 回放、独立产品候选测试通过后，才将三份固定摘要归档接入开发 checkout；[来源与重建](../../vendor/harness-request-budget/README.md)。不需要重新加载扩展或重复真实网页测试。
-3. P5 已进入实现与定向验证：Host 现有 ledger 替换为版本化持久记录，Browser coordinator 使用单一持久元数据索引；生产 profile/扩展接线已加入。恢复仅查同一 request ID，`unknown` 不是 `not_started`，completed 状态索引不能冒充已恢复终答／工具内容。正在验证取消、原 CLI 进程 kill 与 worker 重启；尚未通过 Batch C 完整门禁或新的真实只读验收。PR #568、无关功能整改和 release 继续隔离。
+1. P5 新扩展待一次真实只读验收：[三步测试说明](../verification/P5_简短测试.md)。Windows 即可，不需要 Ubuntu，也不需要操作者手动制造失败。未操作已安装扩展或重新调用真实网页。
+2. T4.6 的三份固定摘要归档已接入开发 checkout；[来源与重建](../../vendor/harness-request-budget/README.md)。Harness fork 只修改独立 `codex/web-request-budget` 分支，master 保持 `76fda729...`；本轮 P5 不修改它，也没有推送远端。
+3. P5 恢复仅查询原 request ID：`unknown` 不是 `not_started`，completed 状态索引不等于恢复了终答／工具内容。只有新的真实只读验收通过后才能关闭 M5/Batch C，随后进入 P6 安装交付；PR #568、无关整改和发布保持隔离。已有真实 Linux 命令证据及两份 Ubuntu stash 保留不变。
 
-本机开发版仍为提交 `5f110ba` 的产物：继续加载 `C:\temp\deepseek-pp-build-e4dcc34\dist\chrome-mv3`，扩展 ID 不变。操作者已成功完成加载后的真实工具验收。本次文件编辑/Harness 增量和串行调度只改变本机代码；主/子请求沿用 `purpose=agent` 与独立 session ID，摘要沿用 `purpose=compaction`，没有扩展 purpose 枚举，不需要更新浏览器产物。
+已安装的旧开发版仍在 `C:\temp\deepseek-pp-build-e4dcc34\dist\chrome-mv3`，本轮未覆盖。P5 新构建为 `C:\temp\deepseek-pp-p5-5e9e641\dist\chrome-mv3`，Chrome/Edge/Firefox 均已验证；需禁用旧版并加载新目录，使用新扩展 ID 配对。构建来源 `5e9e641`，后续 `08e651e` 仅测试/smoke、`4fa7ac7` 仅真实验收校验与 fixture、`6ccffae` 仅测试时序，浏览器生产代码未变。不打 ZIP、不安装到浏览器、不发布。
 
 **T4.5 Linux 环境已准备**：Ubuntu 26.04 LTS / WSL2，Linux Node 24.18.0、Bubblewrap 0.11.1。源码从 Windows 当前分支本地 clone 到 `/home/worker/deepseek-web-harness`，Linux `npm ci --ignore-scripts --no-audit --no-fund` 安装锁定的 1024 包，包含可用 Linux Koffi 原生模块，WXT prepare 通过；Windows `node_modules` 未动。官方 Windows ACL current-gap 仍保留，但不再阻断这条显式 Linux 路线。
 
@@ -168,6 +168,10 @@ Windows 启动器只临时用 `WSLENV` 的 `/u` 标记传递固定配对配置�
 
 | Date | Scope | Command | Result | Notes |
 |:--|:--|:--|:--|:--|
+| 2026-09-05 | P5 full automated regression | Ubuntu / Node 24.18.0：原 Vitest `run --shard=N/4 --maxWorkers=4 --reporter=json`，每组 `timeout --kill-after=2s 55s` | `passed` | 全部 252 文件，无遗漏、重复或额外文件；2280 passed / 0 failed / 6 既有平台 skip（共 2286）。报告保留于 Linux `.tmp/p5-full-4fa7ac7/`：2–4 组为 `4fa7ac7`；第 1 组最终为 `6ccffae` 的 `shard-1-after-barrier-fix.json`。首次第 1 组旧 buffer-overflow 测试未等待消费／socket 关闭导致 1 项失败，`6ccffae` 仅补明确观察屏障，无生产变更；原失败报告保留。Windows 该文件 34/34；Windows/Linux compile 通过。不是新的真实网页证据，不据此关闭 M5 |
+| 2026-09-05 | P5 original CLI and side effects | Windows `node scripts/dsh-web-agent-recovery-smoke.mjs`；实际 editor/runtime 原Vitest | `passed` | smoke 9/9，32.45s，55s上限；4个实际CLI阶段kill/restart均在持久状态确认后执行，同profile/原journal/同ID查询、0新generate，远端completed仍本地ambiguous。取消5项：预取消零发送、accepted/streaming重入、丢ack超时、终态后幂等，单终态和进程/端口/临时目录清理。editor前/后与runtime/fake联合17/17：半工具流不执行，已创建文件恢复后bytes/inode/mtimeNs/ctimeNs不变，真实summary不造checkpoint、真实child独立Session可恢复 |
+| 2026-09-05 | P5 independent browser build | owned clone `5e9e641`：离线ci、prepare、compile、prompt、3端build和静态检查 | `passed` | Node24.18；1019包26.653s；prepare6.649s、compile2.934s；prompt7/7；Chrome/Edge/Firefox8.732/8.952/8.360s；manifest、177文件UTF8、3端chunks全过。lock SHA4440b0e2b669ddfef9416ed25d74827ada9277ea5071b39e036f377cf6526e90不变，clone干净，background SHA8639ea10cd99098c4c4e822eb46b6bc43ca5edf66e5d57dd674a2371bd469c6c；仅既有Pyodide externalization及依赖弃用警告，无ZIP/浏览器安装 |
+| 2026-09-05 | P5 real preflight regression | 全仓首轮后修复；4份真实入口离线原Vitest | `passed targeted` | 首轮2283项中2272pass/5fail/6既有skip；5例均因旧Host配置白名单遗漏新增journalPath。4fa7ac7严格绑定原profile自有路径并更新唯一dump fixture，新增缺失/任意路径/其他profile拒绝回归，Windows74/74、7.81s；Windows/Linux compile通过。未放宽校验或删除失败用例 |
 | 2026-09-05 | P5 production integration targeted | Windows Node24.18：11份协议/journal/cache/settings/真实socket/adapter/bundle/scheduler/真实runtime/cancel/real-preflight 原Vitest；compile | `passed targeted` | 167/167，8.23s，外层55s watchdog；compile exit0。覆盖metadata-only快照、损坏/未来保存、单owner、存盘后响应、自动同ID查询、真实adapter取消、实际自动摘要失败无checkpoint、真实child独立session恢复。原CLI profile导入时发现新增参数属性不兼容Node strip-only，已改显式字段后原bundle通过。不等于P5完整门禁：实际CLI kill/restart矩阵仍在完成，全仓及新的真实只读验收未跑 |
 | 2026-09-05 | T4.6 actual Windows/Linux checkout delivery | Windows compile及原CLI/Profile安装；Ubuntu原生离线安装、61项定向及CLI/bundle7项 | `passed` | 实现提交412826959e3a8156a4d0c7cffedf7390d54b571f；Windows compile exit0，实际profile/CLI/bundle解析同一份patched包、CLI1/1和安装6/6通过。Ubuntu worker ff-only更新、Linux Node24.18.0、npm ci --offline 1024包24s、wxt prepare3.783s；两批各timeout55s：61/61（5.81s）、7/7（2.82s）。三补丁包路径／SHA跨锚点一致，锁SHA4440b0e2b669ddfef9416ed25d74827ada9277ea5071b39e036f377cf6526e90未变。两份stash、ignored真实证据保留，无Node/DSH/Vitest遗留，不改Ubuntu配置、不调用真实网页 |
 | 2026-09-05 | T4.6 fixed dependency integration | 独立 `C:\temp\deepseek-web-budget-integration`：最终归档 `npm ci --ignore-scripts --offline`；context/helper/features/adapter 四份原 Vitest 定向 | `passed` | 61/61，8.57s，hard60。128消息／1MiB不增限；65轮自动摘要后继续、新输入字节越界恢复、完整最新工具对、失败／不缩小摘要保留历史及恢复会话通过。外部 Browser 冒用本地预算码转 WEB_MODEL_PROTOCOL，只有本地未发送请求可进入此恢复。1172条锁记录、全部依赖版本不变，只固定3包的路径和integrity；7个消费者解析同一LLM实例 |
