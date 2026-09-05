@@ -144,7 +144,7 @@
 
 **立即下一步**：
 
-1. `a5b9380` 修复构建已原位更新到 `C:\temp\deepseek-pp-build-e4dcc34\dist` 的三端目录（目录名保留以稳定已安装扩展 ID，不代表当前源码提交）。操作者在扩展管理页重新加载开发版，再刷新已登录的 DeepSeek 网页；隔离测试 profile 不需重建。
+1. `a5b9380` 修复构建已原位更新到 `C:\temp\deepseek-pp-build-e4dcc34\dist` 的三端目录（目录名保留以稳定已安装扩展 ID，不代表当前源码提交）。操作者再次复测仍两次返回 `MODEL_PREPARATION_FAILED`；下一步先核对扩展详情的实际加载路径及运行版本，不能仅凭磁盘已更新断言浏览器已运行新代码。隔离测试 profile 不需重建。
 2. 在 PowerShell 执行 `.\scripts\start-dsh-web-smoke.ps1 -ConfirmRealWeb`：按提示输入扩展 ID、粘贴新配对令牌并保存，再启动同进程环境下的真实网页单回合。令牌只进入本机剪贴板和进程环境；记录 runner 的脱敏 JSON。
 3. 真实单回合通过后按 T4.1 → T4.4 推进官方只读工具多回合。全仓既有失败回流其原文件 owner，不混入模型代理主线；PR #568 与 release 工作继续隔离。
 
@@ -202,3 +202,5 @@
 | 2026-09-05 | P3-T1 repaired local integration | Node owned-process runner（硬 60s）：`node scripts/dsh-web-agent-fake-smoke.mjs` | `passed` | 真 DSH CLI/Agent loop → adapter → 认证回环 → fake browser：唯一 modelRequests=1、terminal=completed、durable=true；不是实际 DeepSeek 网页证明 |
 | 2026-09-05 | P3-T1 installed build refresh | 比较新旧构建文件 SHA-256；备份并原位更新三个 `background.js`；完整再次比较 | `passed` | 安装目录 `C:\temp\deepseek-pp-build-e4dcc34\dist` 下 300 个文件与 `a5b9380` 新构建逐文件一致；原三文件保存在同级 `authfix-backup-a5b9380`。未删除旧 worktree 的源文件/未提交修改，未变更用户扩展数据或 ID；需操作者点重新加载 |
 | 2026-09-05 | P3-T1 repaired real web / full gate | 更新后的真实网页复测；`npm run ci:quality` | `not_run` | 本轮未读取/转交操作者的配对秘密；真实复测继续由原 PowerShell 启动。未执行发布闭环或重跑全仓既有失败，M3 未宣布完成 |
+| 2026-09-05 | P3-T1 real retry | 操作者两次运行配对脚本；读取 13:09/13:11 新增 session 的稳定终态字段 | `failed` | 两次均 `MODEL_PREPARATION_FAILED`，无最终 assistant/message。测试子进程退出会关闭本地 Broker，扩展经历有限重连后离线；该离线不是独立模型失败。磁盘 Chrome background SHA-256 仍为 `696d25b16a352cafdd2e6c2c4e4100cb2e2dbc999c3b568157ed014439453719`，实际浏览器运行版本尚待详情截图确认 |
+| 2026-09-05 | P3-T1 composition diagnostic | 硬 60s：`vitest run tests/harness-browser-composition.test.ts`; `npm run compile`; `git diff --check` | `passed` | 新增实际 Host + 实际浏览器 WebSocket Client + 实际 Coordinator + 实际 Turn Adapter 纵切片（仅 DeepSeek 外部 I/O 用本地 fixture）：2/2，空工具正常回合 completed、缺认证精确 AUTH_REQUIRED 且零派发。编译通过；不将此证据当作真实网页通过，未修改生产代码或要求用户重复相同测试 |
