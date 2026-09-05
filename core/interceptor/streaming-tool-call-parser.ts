@@ -37,6 +37,9 @@ export interface ToolCallPayloadChunk {
 }
 
 export interface StreamingToolCallParserOptions {
+  // Only Mode A opts in: reject truncated advertised openings and unknown
+  // bare tags followed by JSON-object/array bodies. Ordinary HTML stays text.
+  strictToolCalls?: boolean;
   // The active local skill's skillDir for the request owning the current response; when non-empty, parsed
   // shell_exec / shell_session_begin calls carry localSkillDir as the "initial cwd hint" at the background
   // runtime (not a hard persistent binding; Review #4 Route A).
@@ -52,7 +55,9 @@ export function createStreamingToolCallParser(
 
 class XmlStreamingToolCallParser implements StreamingToolCallParser {
   private readonly invocationNames: ReadonlySet<string>;
-  private state: 'NORMAL' | 'SUPPRESSING' = 'NORMAL';
+  private readonly strictToolCalls: boolean;
+  private state: 'NORMAL' | 'SUPPRESSING' | 'UNKNOWN_TAG' = 'NORMAL';
+  private unknownTag: { name: string; raw: string } | null = null;
   private pendingNormal = '';
   private pendingSuppressed = '';
   private current: {
@@ -72,6 +77,7 @@ class XmlStreamingToolCallParser implements StreamingToolCallParser {
     options?: StreamingToolCallParserOptions,
   ) {
     this.invocationNames = new Set(catalog.invocationNames);
+    this.strictToolCalls = options?.strictToolCalls === true;
     this.activeLocalSkillDir = options?.activeLocalSkillDir || undefined;
   }
 
@@ -79,13 +85,15 @@ class XmlStreamingToolCallParser implements StreamingToolCallParser {
 
   append(chunk: string): StreamingToolCallParserEvent {
     const event = createEmptyParserEvent();
-    if (!chunk || this.invocationNames.size === 0) return event;
+    if (!chunk || (this.invocationNames.size === 0 && !this.strictToolCalls)) return event;
 
     let remaining = chunk;
     while (remaining.length > 0) {
       remaining = this.state === 'SUPPRESSING'
         ? this.consumeSuppressedText(remaining, event)
-        : this.consumeNormalText(remaining, event);
+        : this.state === 'UNKNOWN_TAG'
+          ? this.consumeUnknownTagBody(remaining, event)
+          : this.consumeNormalText(remaining, event);
     }
     return event;
   }
@@ -95,10 +103,20 @@ class XmlStreamingToolCallParser implements StreamingToolCallParser {
     if (this.current && !this.current.failed) {
       event.failed.push(this.createIncompleteCall(this.current, this.pendingSuppressed));
     }
+    if (this.strictToolCalls && this.state === 'NORMAL' && /[A-Za-z_]/.test(this.pendingNormal)) {
+      const name = this.catalog.invocationNames.find((candidate) => (
+        getPartialXmlToolTagTailLength(this.pendingNormal, new Set([candidate]), { closing: false }) ===
+        this.pendingNormal.length
+      ));
+      if (name) event.failed.push(createToolCallFromInvocation(name, {}, this.pendingNormal, this.catalog, {
+        parseError: createToolParseError(INCOMPLETE_TOOL_CALL_ERROR_CODE, name, 'Tool call opening tag ended before >.'),
+      }));
+    }
     this.state = 'NORMAL';
     this.pendingNormal = '';
     this.pendingSuppressed = '';
     this.current = null;
+    this.unknownTag = null;
     return event;
   }
 
@@ -106,11 +124,18 @@ class XmlStreamingToolCallParser implements StreamingToolCallParser {
     const text = this.pendingNormal + input;
     this.pendingNormal = '';
 
-    const found = findFirstXmlToolTag(text, this.invocationNames, { closing: false });
+    const scannedNames = this.strictToolCalls ? null : this.invocationNames;
+    const found = findFirstXmlToolTag(text, scannedNames, { closing: false });
     if (!found) {
-      const tailLength = getPartialXmlToolTagTailLength(text, this.invocationNames, { closing: false });
+      const tailLength = getPartialXmlToolTagTailLength(text, scannedNames, { closing: false });
       this.pendingNormal = tailLength > 0 ? text.slice(-tailLength) : '';
       return '';
+    }
+
+    if (!this.invocationNames.has(found.name)) {
+      this.state = 'UNKNOWN_TAG';
+      this.unknownTag = { name: found.name, raw: found.raw };
+      return text.slice(found.endIndex);
     }
 
     const id = crypto.randomUUID();
@@ -135,6 +160,23 @@ class XmlStreamingToolCallParser implements StreamingToolCallParser {
       { id },
     ));
     return text.slice(found.endIndex);
+  }
+
+  private consumeUnknownTagBody(input: string, event: StreamingToolCallParserEvent): string {
+    const body = input.trimStart();
+    if (body.length === 0) return '';
+    const unknown = this.unknownTag;
+    this.unknownTag = null;
+    this.state = 'NORMAL';
+    if (unknown && (body[0] === '{' || body[0] === '[')) {
+      event.failed.push(createToolCallFromInvocation(unknown.name, {}, unknown.raw, this.catalog, {
+        parseError: createToolParseError('tool_call_unknown', unknown.name, 'Tool call names must match the advertised catalog.'),
+      }));
+      return '';
+    }
+    // Not a JSON tool body. Continue scanning for advertised calls inside
+    // ordinary markup instead of suppressing the whole HTML/XML element.
+    return input;
   }
 
   private consumeSuppressedText(input: string, event: StreamingToolCallParserEvent): string {

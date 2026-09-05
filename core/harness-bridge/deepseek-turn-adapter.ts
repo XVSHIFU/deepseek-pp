@@ -192,7 +192,9 @@ export class DeepSeekWebModelTurnAdapter implements WebModelTurnPort {
       }
 
       const textAccumulator = createStreamingToolTextAccumulator(descriptors);
-      const toolParser = createStreamingToolCallParser(descriptors);
+      const toolParser = createStreamingToolCallParser(descriptors, { strictToolCalls: true });
+      const toolNames = new Set(descriptors.map((descriptor) => descriptor.invocationName));
+      const toolCallIds = new Set<string>();
       let lastVisibleText = '';
 
       const emitEvent = <T extends ModelEvent>(event: T, callback: (value: T) => void): void => {
@@ -226,9 +228,11 @@ export class DeepSeekWebModelTurnAdapter implements WebModelTurnPort {
         for (const call of parsed.completed) {
           const toolCallId = call.id;
           const invocationName = call.invocationName;
-          if (call.parseError || !toolCallId || !invocationName || !isJsonObject(call.payload)) {
+          if (call.parseError || !toolCallId || !invocationName || !isJsonObject(call.payload) ||
+              !toolNames.has(invocationName) || toolCallIds.has(toolCallId)) {
             raiseFault('tool');
           }
+          toolCallIds.add(toolCallId as string);
           const event = {
             type: 'tool_call',
             tool_call_id: toolCallId as string,
@@ -327,9 +331,9 @@ export class DeepSeekWebModelTurnAdapter implements WebModelTurnPort {
       if (!result.finished) return this.terminal(request.request_id, ambiguous('deepseek_stream_incomplete'));
 
       try {
-        emitText(textAccumulator.flush());
-        throwIfAborted();
         consumeParsed(toolParser.flush());
+        throwIfAborted();
+        emitText(textAccumulator.flush());
       } catch {
         if (fault === 'budget') return this.terminal(request.request_id, failedBudget());
         if (fault === 'tool') return this.terminal(request.request_id, failedToolCall());

@@ -1,4 +1,5 @@
 const PARTIAL_TAG_WHITESPACE_LIMIT = 8;
+const UNKNOWN_TAG_NAME_LIMIT = 128;
 
 export interface XmlToolTagMatch {
   index: number;
@@ -10,10 +11,11 @@ export interface XmlToolTagMatch {
 
 export function findFirstXmlToolTag(
   text: string,
-  toolNames: ReadonlySet<string>,
+  // null is an explicit opt-in to scan bare XML names outside a tool catalog.
+  toolNames: ReadonlySet<string> | null,
   options: { closing: boolean; fromIndex?: number },
 ): XmlToolTagMatch | null {
-  if (!text || toolNames.size === 0) return null;
+  if (!text || toolNames?.size === 0) return null;
 
   let searchFrom = Math.max(0, options.fromIndex ?? 0);
   // Adversarial input such as a long run of '<' closed by a single '>' would
@@ -47,13 +49,15 @@ export function findFirstXmlToolTag(
 
 export function getPartialXmlToolTagTailLength(
   text: string,
-  toolNames: ReadonlySet<string>,
+  toolNames: ReadonlySet<string> | null,
   options: { closing: boolean },
 ): number {
-  if (!text || toolNames.size === 0) return 0;
+  if (!text || toolNames?.size === 0) return 0;
 
-  const names = Array.from(toolNames);
-  const maxNameLength = Math.max(0, ...names.map((name) => name.length));
+  const names = toolNames === null ? null : Array.from(toolNames);
+  const maxNameLength = names === null
+    ? UNKNOWN_TAG_NAME_LIMIT
+    : Math.max(0, ...names.map((name) => name.length));
   const limit = Math.min(
     text.length,
     2 + maxNameLength + PARTIAL_TAG_WHITESPACE_LIMIT * 2,
@@ -69,7 +73,7 @@ function parseCompleteXmlToolTag(
   text: string,
   index: number,
   tagEnd: number,
-  toolNames: ReadonlySet<string>,
+  toolNames: ReadonlySet<string> | null,
 ): XmlToolTagMatch | null {
   let cursor = index + 1;
   cursor = skipWhitespace(text, cursor, tagEnd);
@@ -89,7 +93,7 @@ function parseCompleteXmlToolTag(
   }
 
   const name = text.slice(nameStart, cursor);
-  if (!toolNames.has(name)) return null;
+  if (toolNames !== null && !toolNames.has(name)) return null;
 
   cursor = skipWhitespace(text, cursor, tagEnd);
   if (cursor !== tagEnd) return null;
@@ -105,7 +109,7 @@ function parseCompleteXmlToolTag(
 
 function isPartialXmlToolTag(
   value: string,
-  toolNames: readonly string[],
+  toolNames: readonly string[] | null,
   closing: boolean,
 ): boolean {
   if (!value.startsWith('<')) return false;
@@ -133,7 +137,7 @@ function isPartialXmlToolTag(
   }
 
   const typedName = value.slice(nameStart, cursor);
-  if (!toolNames.some((name) => name.startsWith(typedName))) return false;
+  if (toolNames !== null && !toolNames.some((name) => name.startsWith(typedName))) return false;
 
   const afterName = skipLimitedWhitespace(value, cursor);
   return afterName === value.length;
