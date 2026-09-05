@@ -9,6 +9,7 @@
   name: '@deepseek-pp/dsh-web-agent-bundle/host'
   config:
     port: !!js Number(process.env.DSH_WEB_BROKER_PORT ?? 43123)
+    journalPath: !!js dshHomePath('profiles', 'deepseek-web-agent', 'web-model-journal')
     pairingToken: !!js process.env.DSH_WEB_PAIRING_TOKEN
     allowedExtensionOrigins: !!js (process.env.DSH_WEB_ALLOWED_EXTENSION_ORIGINS ?? '').split(',').filter(Boolean)
 - id: llm

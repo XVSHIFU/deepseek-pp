@@ -239,6 +239,16 @@ describe("real DeepSeek Web smoke offline preflight", () => {
     expect(BARRIER).not.toMatch(/WebSocket|fetch\(|playwright|cookie|authorization|cdp/i);
   });
 
+  it.each(["", "    journalPath: /tmp/other-profile\n",
+    "    journalPath: !!js dshHomePath('profiles', 'other', 'web-model-journal')\n"])(
+    "requires the production profile-owned journal path: %s", (replacement) => {
+      expect(() => validateProfileDump(PROFILE_DUMP)).not.toThrow();
+      const changed = PROFILE_DUMP.replace(/^    journalPath:.*\r?\n/mu, replacement);
+      expect(changed).not.toBe(PROFILE_DUMP);
+      expect(() => validateProfileDump(changed)).toThrow(expect.objectContaining({ code: "REAL_WEB_PROVIDER_INVALID" }));
+    },
+  );
+
   it.each(["WEB_MODEL_PROTOCOL", "WEB_MODEL_TIMEOUT_AMBIGUOUS", "WEB_MODEL_DISCONNECTED_AMBIGUOUS",
     "WEB_MODEL_CANCEL_UNCONFIRMED", "WEB_MODEL_BROWSER_ABORTED", "JOURNAL_UNAVAILABLE"])(
     "reports allowlisted durable %s without exposing DSH or session details", async (code) => {

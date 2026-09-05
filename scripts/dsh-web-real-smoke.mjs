@@ -381,8 +381,9 @@ export function validateProfileRows(parsed) {
     throw new RealWebSmokeError("REAL_WEB_PROVIDER_INVALID");
   }
   const host = rows.get("deepseek-web-model-host")?.config;
-  if (!isRecord(host) || !hasExactKeys(host, ["port", "pairingToken", "allowedExtensionOrigins"]) ||
+  if (!isRecord(host) || !hasExactKeys(host, ["port", "journalPath", "pairingToken", "allowedExtensionOrigins"]) ||
       !isExactJsExpression(host.port, "Number(process.env.DSH_WEB_BROKER_PORT ?? 43123)") ||
+      !isExactJsExpression(host.journalPath, "dshHomePath('profiles', 'deepseek-web-agent', 'web-model-journal')") ||
       !isExactJsExpression(host.pairingToken, "process.env.DSH_WEB_PAIRING_TOKEN") ||
       !isExactJsExpression(
         host.allowedExtensionOrigins,
