@@ -23,6 +23,7 @@ import {
   DEEPSEEK_WEB_PROVIDER,
 } from "./constants.ts";
 import { canonicalJson, serializeGenerateRequest, type RequestIdentityFactory } from "./request.ts";
+import { GenerationScheduler } from "./generation-scheduler.ts";
 
 const NO_RETRY_POLICY: ResolvedRetryPolicy = resolveRetryPolicy(
   { mode: "normal", maxRetries: 0 },
@@ -40,6 +41,7 @@ export class DeepSeekWebAdapter extends LlmAdapter {
   private readonly createRequestId: RequestIdentityFactory | undefined;
   private readonly abortSettleTimeoutMs: number;
   private cleanupState: "ready" | "pending" | "failed" = "ready";
+  private readonly scheduler = new GenerationScheduler();
 
   constructor(options: DeepSeekWebAdapterOptions) {
     super();
@@ -78,6 +80,14 @@ export class DeepSeekWebAdapter extends LlmAdapter {
   }
 
   async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+    const release = await this.scheduler.acquire(options.signal);
+    if (release === undefined) { yield abortedFinish(); return; }
+    try {
+      yield* this.streamExclusive(options);
+    } finally { release(); }
+  }
+
+  private async *streamExclusive(options: GenerateOptions): AsyncIterable<StreamChunk> {
     if (this.cleanupState !== "ready") {
       throw ambiguousFailure("A previous DeepSeek Web request has not confirmed transport cleanup.");
     }

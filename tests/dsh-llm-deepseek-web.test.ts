@@ -397,7 +397,7 @@ describe("DeepSeek Web DSH adapter", () => {
     expect(() => new DeepSeekWebAdapter({ broker: new FakeBroker([]) })).not.toThrow();
 
     const sourceRoot = join(process.cwd(), "packages", "dsh-llm-deepseek-web", "src");
-    const sources = await Promise.all(["adapter.ts", "constants.ts", "index.ts", "request.ts"]
+    const sources = await Promise.all(["adapter.ts", "constants.ts", "generation-scheduler.ts", "index.ts", "request.ts"]
       .map((file) => readFile(join(sourceRoot, file), "utf8")));
     const source = sources.join("\n");
     expect(source).not.toMatch(/@deepseek-ai\/[^"']+\/src\//);

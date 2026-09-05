@@ -1,0 +1,48 @@
+# Explicit opt-in addition after cordis.workspace-files.patch.yml. Replace its
+# editor-only admission with one exact-definition admission for three tools.
+# DSH_WEB_WORKSPACE_ROOT is the same operator-selected absolute root.
+# No shell, alternate model, model settings, background job or telemetry plugin.
+- id: deepseek-web-workspace-files-policy
+  disabled: true
+
+- insert:
+    - id: harness-skills
+      name: '@deepseek-ai/dsh-skill'
+
+    - id: harness-workspace-skills
+      name: '@deepseek-ai/dsh-skill-filesystem'
+      config:
+        includeDefaultRoots: false
+        customSkillDirs: !!js ([process.env.DSH_WEB_WORKSPACE_ROOT + '/.agents/skills'])
+        watch: false
+
+    - id: harness-token-meter
+      name: '@deepseek-ai/dsh-token-meter'
+
+    - id: harness-tool-result-pruner
+      name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+
+    - id: harness-web-compaction
+      name: '@deepseek-pp/dsh-web-agent-bundle/web-compaction'
+      config:
+        auto: true
+        thresholdRatio: 0.35
+        retainRatio: 0.08
+        summarizationProvider: deepseek-web
+        summarizationModel: current-web-session
+        compactionRetries: 0
+        maxOverflowRetries: 0
+
+    - id: harness-subagents
+      name: '@deepseek-ai/dsh-subagent'
+
+    - id: harness-subagent-spawn
+      name: '@deepseek-ai/dsh-subagent-spawn-in-process'
+      config:
+        providerName: spawn
+
+    - id: harness-tools-policy
+      name: '@deepseek-pp/dsh-web-agent-bundle/harness-tools-policy'
+      config:
+        workspaceRoot: !!js process.env.DSH_WEB_WORKSPACE_ROOT
+        maxOutputChars: 16000

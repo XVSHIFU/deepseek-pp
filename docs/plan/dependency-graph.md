@@ -37,6 +37,7 @@ flowchart TD
     T43 --> T44
     T44 --> T45["T4.5 Compose Official Write/Edit/Pwsh"]
     T45 --> T46["T4.6 Harness Features"]
+    T44 -. "文件增量完成后，可并行开发无 shell 部分" .-> T46
     T46 --> GB
     T44 --> GB
   end
@@ -75,6 +76,8 @@ flowchart TD
 | Final Gate | T6.1-T6.4 | `npm run ci:quality`、workspace build/test、候选包 fake/real/recovery 验收 | 发布 |
 
 任何单任务不得提前执行完整门禁或发行。真实网页测试不能替代默认自动测试，默认自动测试也不能替代 T4.4。
+
+2026-09-05 调整仅允许 T4.5 命令路线未定时并行实现 T4.6 的无 shell 部分；T4.5 → T4.6 的完整验收要求和 Batch B 放行条件不变。Ubuntu 不是文件编辑、Skill、压缩或子会话接入的前置条件。
 
 ## 3. 可并行 Lane 与文件热点
 

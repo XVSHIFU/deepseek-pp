@@ -97,6 +97,7 @@
 | P3 | P3-T1 | 无 API key 的真实网页单回合 E2E | `—` | `—` | `dsh_real_smoke_implement`; review: `dsh_adapter_implement`, orchestration | `verified` |
 | P4 | P4-T1 | DSH 本地只读工具多回合与最终结果 E2E（T4.1–T4.4） | `—` | `—` | `harness_tool_mapping`, `dsh_readonly_tools`, `dsh_tool_loop_e2e`; integration: orchestration | `verified` |
 | P4 | T4.5 | 官方受控写入、编辑与 PowerShell | `—` | `—` | 同三 lane；integration: orchestration | `in_progress` |
+| P4 | T4.6 | 官方 Skills/剪枝/压缩/串行子 Agent/会话恢复增量 | `—` | `—` | `harness_features`, `windows_command_route`, `file_write_acceptance`; integration: orchestration | `in_progress` |
 | P5 | P5-T1 | disconnect/cancel/recovery、`waiting_for_browser` 与不重放 | `TBD` | `TBD` | `TBD` | `not_started` |
 | P6 | P6-T1 | 安装、升级、文档和 release readiness | `TBD` | `TBD` | `TBD` | `not_started` |
 | S1 | S1-T1 | PR #568 独立评估；只服务模式 B 兼容，不作为模式 A 前置 | `TBD` | `TBD` | `TBD` | `not_started` |
@@ -143,17 +144,17 @@
 
 **当前状态**：M0–M4 已验证，不再重复单轮或只读测试。真实网页已作为本机 DSH 模型完成工具往返与最终回答。
 
-M4/T4.1–T4.4 已完整验收：操作者真实网页运行 `readonly-9347d1d1-2330-4a5c-9571-c19f4c5ee36c` 返回 2 个模型步骤、1 次本机 read、1 次 tool result 和 completed。编排随后对该次原始 session 只读复验通过，终答 SHA-256 与用户 JSON 一致，没有再次调用模型。T4.5 的文件编辑增量已实现并通过实际 DSH + fake 模型三轮、82 项联合回归及编译；命令执行因以下实测隔离缺口未接入。T4.6 Skills/subagent 仍未开始，不能声称完整开发完成。
+M4/T4.1–T4.4 已完整验收：操作者真实网页运行 `readonly-9347d1d1-2330-4a5c-9571-c19f4c5ee36c` 返回 2 个模型步骤、1 次本机 read、1 次 tool result 和 completed。原始 session 只读复验与用户终答 SHA-256 一致，没有重复调用模型。T4.5 文件编辑已实现，并新增真实网页 `-FileEdit` 验收入口；该新网页验收尚未执行。T4.6 的无 shell 增量已实现并通过本地集成：官方 Skill 按需加载、前台独立子会话、文件实际落盘、JSONL 恢复、剪枝及网页路由压缩。最终 14 个定向文件 144/144 通过，根/adapter/bundle 编译与 prompt 7/7 通过。命令执行、长会话协议边界、完整断线/崩溃恢复和安装交付仍未完成，不把这批 fake browser 证据当作新的真实网页验收，也不标 T4.5/T4.6 整阶段完成。
 
 T4.2 的明确调整与边界见计划：官方 read-only 本身不约束读取，故窄组合复用官方 scope/guard/canonicalPath/resolve/contains，只有原生 read 可见；不复制文件工具，不声称是 OS 沙箱。首验只读取生成的临时文件，不接触真实用户项目。原单轮 profile 保持不变。
 
 **立即下一步**：
 
-1. 编排负责合并代码、自动回归、构建和更新本机开发版产物，不再把这些步骤交给操作者。
-2. 操作者已完成真实只读验收，暂时无需操作，不重复单轮或只读测试。配对令牌仍只在本机剪贴板与浏览器中传递。
-3. 文件编辑已接入独立增量，操作者已允许检查现有 WSL2 Ubuntu。回环连接通过，现有 Node/Bubblewrap 可用，但 Linux 原生依赖缺失、Windows 程序互操作仍可用，命令尚未接入。下一步需要确认项目专用 Linux 依赖安装，以及备份后禁用 Ubuntu 的 Windows 程序互操作并重启该发行版；这会影响整个 Ubuntu，不能擅自操作。之后由编排继续实际官方工具链验证和接线，再完成 T4.6。不重复已通过的网页测试，不把无隔离 shell 作为替代。PR #568、既有全仓失败和 release 工作继续隔离。
+1. 本轮由编排完成代码集成、自动回归、编译与本地 Git 提交。没有浏览器或协议变更，不要求重新加载扩展。新能力是 `base → workspace-files → harness-features` 的显式增量，原单轮/只读/文件编辑配置保持兼容；实际 DSH CLI 加载与一次文件创建已通过。
+2. 下一项操作者验收仅为新增文件编辑：`scripts/start-dsh-web-smoke.ps1 -ConfirmRealWeb -FileEdit`。步骤见 `tests/real/dsh-web-file-edit-acceptance.md`，只改新建临时文件，失败不重放；不重复旧单轮/只读测试。配对令牌仍只在本机剪贴板与浏览器中传递，不经聊天。
+3. 按操作者“Ubuntu 绕不开再说明”，没有继续操作 Ubuntu。窄核对已确认锁版官方 Windows 后端只有未通过实测的 partial ACL，没有第二个现成严格后端；自造 AppContainer/放行 raw shell 都不符合本计划。因此命令执行仍需另行确认 Linux 隔离路线及其依赖/配置变更，不能把整个 Ubuntu 的系统调整当普通代码编辑。其余无 shell 能力已独立推进；长会话边界与 P5 恢复仍不声称完成，PR #568、全仓既有失败和 release 工作继续隔离。
 
-本机开发版仍为提交 `5f110ba` 的产物：继续加载 `C:\temp\deepseek-pp-build-e4dcc34\dist\chrome-mv3`，扩展 ID 不变。操作者已成功完成加载后的真实工具验收。本次文件编辑改动仅在本机 bundle，不需要再次更新浏览器产物。
+本机开发版仍为提交 `5f110ba` 的产物：继续加载 `C:\temp\deepseek-pp-build-e4dcc34\dist\chrome-mv3`，扩展 ID 不变。操作者已成功完成加载后的真实工具验收。本次文件编辑/Harness 增量和串行调度只改变本机代码；主/子请求沿用 `purpose=agent` 与独立 session ID，摘要沿用 `purpose=compaction`，没有扩展 purpose 枚举，不需要更新浏览器产物。
 
 **T4.5 命令执行的具体阻断**：官方 Windows ACL backend 在本机临时 fixture 中未满足工作目录外写入拒绝，因此不接入生产 shell。该行为测试仍是 current-gap，不是安全验收通过。本轮按操作者授权启动并检查已有 Ubuntu 26.04 LTS / WSL2：Linux Node 24.18.0、Bubblewrap 0.11.1 已存在，无需重装；Linux 导入官方 subprocess/sandbox 时缺少 Koffi 原生模块，不能直接共用 Windows `node_modules`。按锁版官方只读参数直接运行 Bubblewrap，Windows `cmd.exe` 的固定 echo 成功，说明搬进 WSL 本身尚未阻断宿主执行路径。`/etc/wsl.conf` 当前只有 systemd/default user 设置，没有 interop 限制；本轮没有安装、提权、改配置或重启发行版。更改 `[interop] enabled=false` 会影响整个 Ubuntu 启动 Windows 程序的能力，需先获得明确授权并备份配置，再验证实际效果（[Microsoft 官方配置说明](https://learn.microsoft.com/en-us/windows/wsl/wsl-config)）。
 
@@ -161,6 +162,12 @@ T4.2 的明确调整与边界见计划：官方 read-only 本身不约束读取�
 
 | Date | Scope | Command | Result | Notes |
 |:--|:--|:--|:--|:--|
+| 2026-09-05 | T4.5/T4.6 final integration | owned-process hard 60s：14 个 adapter/scheduler/bundle/只读/编辑/三工具/Harness features/CLI/真实入口离线测试文件联合 Vitest | `passed` | 144/144，16.72s。实际 DSH CLI + 两个生产增量加载并由官方 editor 创建文件；实际官方 loop + authenticated fake peer 验证 Skill→独立 child→parent 编辑落盘→JSONL resume；一次 compaction 与 checkpoint resume、pruner 重写/恢复、失败不造摘要和非法摘要拒绝。全部本机 Windows，无真实网页请求、无 Ubuntu 操作 |
+| 2026-09-05 | T4.5/T4.6 compile and compatibility | hard 60s：root/adapter/bundle tsc；prompt:freeze；离线 package-lock-only（ignore-scripts）；`git diff --check` | `passed` | 最终三处编译通过，prompt 7/7。修正测试的官方事件一参签名、pruner type import 和 accepted 后失败 external_outcome 后根编译复跑通过；修正内部 driver 精确包名后离线 lock 成功，未升级版本。未重建浏览器、未跑全仓/发布门禁 |
+| 2026-09-05 | T4.5 FileEdit operator entry | lane hard 60s：新旧真实入口离线 Vitest；PowerShell 三模式入口测试 | `passed offline; real web not_run` | 38/38，9.42s，PS 通过；新增 `-FileEdit` 复用既有准备/启动/清理，验证 view→唯一修改→终答及磁盘精确字节，临时证据保留。实现提交 `886d2b4`；操作者尚未回传新网页结果，不把 fake 通过当真网页成功 |
+| 2026-09-05 | T4.6 shared model admission | hard 60s：scheduler + adapter 定向 Vitest | `passed` | 28/28；新增 FIFO 最多 16 个待执行请求，取消排队不创建/取消 Browser 请求，溢出不损伤已接受项，cleanup 未确认不发送后继。沿用 Protocol v1：主/子均 agent purpose，以独立 session 区分；没有第二 request journal/终态账本。源码复核确认官方 child scopes 共用原 LLM runtime/adapter |
+| 2026-09-05 | T4.6 exact official tool composition | lane hard 60s：harness-tools policy + workspace-files policy | `passed` | 30/30，3.21s；新组合只捕获自己安装的原官方 editor/skill/subagent 定义，拒绝同名 scoped shadow、改名拷贝、后置替换、短路放行和取消/卸载。普通 editor/readonly 仍不准其它工具；Skill 来源是可信项目指令，不声称上游 Skill 发现对符号链接提供 OS 读取隔离 |
+| 2026-09-05 | T4.5 Windows route decision | 锁版 sandbox-local/windows-acl 已安装源码与已有失败 fixture 只读核对 | `no in-scope native alternative` | Windows chain 仅 windows-acl/partial；runnerCommand 只是外部 runner override，不是已存在第二沙箱。没有重复越界写探测、系统安装或配置更改；Linux 依赖及 interop 决策仍待另行确认，不妨碍无 shell 增量 |
 | 2026-09-05 | T4.5 authorized WSL environment | `wsl -d Ubuntu --exec` 下有界版本、程序路径和 `/etc/wsl.conf` 只读检查 | `passed inventory` | Ubuntu 26.04 LTS，WSL2 kernel 6.18.33.2；uid 1000；已有 Linux Node 24.18.0、bwrap 0.11.1。配置只有 boot/systemd 和 default user，无 interop 设置；未安装、改配置、提权或重启 |
 | 2026-09-05 | T4.5 Linux official imports | Windows owned-process hard 60s + Linux `timeout 30s`；实际 Linux Node 从项目导入锁版官方包 | `blocked native dependency` | cordis/bash-sandbox 可导入；subprocess-local/sandbox-local 缺少 Linux Koffi native module。未把 Windows 依赖替换成 Linux 版本，也未安装依赖；完整 DSH Linux 工具探测未执行 |
 | 2026-09-05 | T4.5 direct Bubblewrap prerequisites | 独立有界 `/usr/bin/bwrap --ro-bind / / --dev /dev --unshare-pid --proc /proc --die-with-parent`，分别运行 `/usr/bin/true` 和固定 Windows echo | `current-gap: Windows interop available` | 两次 exit 0，后者返回固定 `DSH_WSL_INTEROP_PROBE`。只验证直接 Bubblewrap，不是实际 DSH 工具链；没有 Windows 写入/配置变更。官方后端不屏蔽 WSL 互操作，也不提供完整读取/网络隔离，不接生产 shell |

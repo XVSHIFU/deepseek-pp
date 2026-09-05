@@ -73,3 +73,61 @@ acceptance on this host. Stronger command isolation remains a separate decision.
 This file-editing increment is not a release or a complete interactive Harness
 UI. Its fake model/real DSH integration evidence does not claim a new real-web
 write test. The successful real-web read-only acceptance remains valid.
+
+## Optional Harness capabilities (Windows, no shell)
+
+Apply `cordis.harness-features.patch.yml` **after** the workspace-files patch to
+use the original editor, workspace Skills, and one foreground child Agent in
+the same session. The increment replaces the editor-only gate with one gate
+bound to the exact official tool definitions; it does not add a second file
+executor. The base and editor-only profiles keep their previous behavior.
+
+Skills come only from `<workspace>/.agents/skills`, with the official catalog
+and on-demand loader. Global user Skill directories are not scanned. Each child
+has an independent persisted DSH session, inherits the same workspace and web
+model, and cannot delegate again or choose another model. Parent and child
+requests both retain protocol `purpose=agent`; session IDs and official session
+lineage distinguish them. This is serialized delegation, not parallel web models.
+
+Workspace Skills are trusted operator-supplied instructions. The upstream
+filesystem Skill provider can follow existing links; selecting a project Skill
+directory is not a claim that every Skill read is OS-isolated to that directory.
+The model selects registered Skill names, not arbitrary Skill paths.
+
+All calls share the one registered adapter's FIFO (at most 16 waiting calls).
+Cancelling while queued sends no browser request. The next call is admitted only
+after the previous stream finishes cleanup; unresolved cleanup remains an error.
+
+The official token meter, tool-result pruner and compaction engine retain their
+session algorithms. A small subclass overrides only the public summarizer hook
+to make one explicit `purpose=compaction` web request with a short checkpoint
+instruction. The web route cannot set `maxTokens`; no token cap is silently
+ignored or falsely recorded. Failed summaries do not become checkpoints and are
+not automatically retried. Token counts are estimates; protocol limits still
+apply (including 1 MiB per frame and 128 messages). Long-session boundary and
+crash/reconnect acceptance are not complete.
+
+The configured compaction threshold is 35% of the adapter's conservative context
+capacity, retaining 8% verbatim. This starts earlier than the upstream default
+but does not guarantee that every message-count or encoded-byte limit is avoided.
+
+After the checkout installation and pairing setup above, run from the selected
+workspace, with `DSH_WEB_WORKSPACE_ROOT` set to that same absolute directory:
+
+```powershell
+$harnessRepo = 'C:\Users\worker\Documents\deepseek+++++'
+dsh --profile deepseek-web-agent --patch "$harnessRepo\packages\dsh-web-agent-bundle\cordis.workspace-files.patch.yml" --patch "$harnessRepo\packages\dsh-web-agent-bundle\cordis.harness-features.patch.yml" 'Your task'
+```
+
+This remains a development, one-task/headless entry, not the planned interactive
+installation experience. It grants file editing within the chosen root; no
+PowerShell/Bash command execution is available. Official session resume and
+checkpoint behavior are exercised in the feature integration tests, not claimed
+as a finished user-facing resume command. The combined features' integration
+uses a scripted browser peer; it is not new real-web acceptance evidence.
+
+For the next real-web **file-edit-only** check, use
+`scripts/start-dsh-web-smoke.ps1 -ConfirmRealWeb -FileEdit`. It creates its own
+fixture and never selects a user project for the test. The short instructions
+are in `tests/real/dsh-web-file-edit-acceptance.md`; the passed read-only check
+does not need repeating.

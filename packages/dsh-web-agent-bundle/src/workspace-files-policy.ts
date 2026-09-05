@@ -19,6 +19,11 @@ export const Config = z.object({
 /** Publish only the pinned official editor, behind the shared workspace gate. */
 export async function apply(ctx: Context, config: Config) {
   await installFileAccessPolicy(ctx, { workspaceRoot: config.workspaceRoot, tool: "str_replace_editor" });
+  await mountWorkspaceEditor(ctx, config);
+}
+
+/** Shared official registration; callers install their admission gate first. */
+export async function mountWorkspaceEditor(ctx: Context, config: Config) {
   const privateKey = {};
   const privateScope = createScope(ctx, privateKey);
   const { workspaceRoot: _workspaceRoot, ...editorConfig } = config;
@@ -28,4 +33,5 @@ export async function apply(ctx: Context, config: Config) {
     throw new Error("WORKSPACE_FILES_OFFICIAL_TOOL_COMPOSITION_CHANGED");
   }
   ctx.tools.register(editor);
+  return editor;
 }

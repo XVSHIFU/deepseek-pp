@@ -194,7 +194,7 @@ npm test
 
 ### T4.5 装配官方受控写入、编辑与 PowerShell 工具
 
-- **文件范围**：同 bundle 的增量 `cordis.workspace-files.patch.yml`、`src/file-access-policy.ts`/`workspace-files-policy.ts` 与原只读入口、该 bundle 的 `package.json`/README、`tests/dsh-local-mutation-tools.test.ts`、`tests/dsh-workspace-files-policy.test.ts`、`tests/dsh-local-exec-tools.test.ts`、实际 DSH 文件编辑 E2E fixture 与精确依赖 lock。保留已验收的基础/只读 patch，不另造 FS/shell 包。
+- **文件范围**：同 bundle 的增量 `cordis.workspace-files.patch.yml`、`src/file-access-policy.ts`/`workspace-files-policy.ts` 与原只读入口、该 bundle 的 `package.json`/README、`tests/dsh-local-mutation-tools.test.ts`、`tests/dsh-workspace-files-policy.test.ts`、`tests/dsh-local-exec-tools.test.ts`、实际 DSH 文件编辑 E2E fixture 与精确依赖 lock。真实编辑入口为 `scripts/dsh-web-file-edit-acceptance.mjs`、共享只读 runner、PowerShell `-FileEdit` 及 `tests/real/` 对应测试/说明，复用既有生命周期。保留已验收的基础/只读 patch，不另造 FS/shell 包。
 - **前置**：T4.4。
 - **实现技术**：在 T4.2 的同一 profile 中装配审核锁版的官方 `@deepseek-ai/dsh-tool-str-replace-editor`、Windows `@deepseek-ai/dsh-tool-pwsh`、`@deepseek-ai/dsh-pwsh-local`/`@deepseek-ai/dsh-pwsh-sandbox`、`@deepseek-ai/dsh-fs-sandbox`、`@deepseek-ai/dsh-sandbox-local`、`@deepseek-ai/dsh-user-approval` 和相应 permission/sandbox-policy 服务。使用官方 effect boundary、workspace-write sandbox 与 ask approval；以 composition/golden 固定工具目录、权限和平台条件。若包名或依赖在锁版源码中不同，以锁版正式 package 名为准并在测试 fixture 中冻结。
 - **2026-09-05 实装边界**：先交付文件编辑增量，官方 `str_replace_editor` 与 `fs-observation-policy` 负责实际 view/create/str_replace/insert、先读及 CAS。上游实测 workspace-write 另含系统 temp 权限、view 不限根，故复用 T4.2 的官方准入 hooks，把 read/editor 的根检查集中到单一 `file-access-policy`；不复制路径算法。Editor 当前只允许普通文件 view，不开放可能沿 junction 递归的目录列表。固定 root 内为 standing 写权限，`ask` 不等于每次写都确认；现有 headless 无答复 UI，真正触发 ask 时拒绝，不自动允许。
@@ -206,9 +206,10 @@ npm test
 
 ### T4.6 启用 session、skills、compaction 与 subagent 合同
 
-- **文件范围**：`packages/dsh-web-agent-bundle/cordis.patch.yml`、该包配置/README、`tests/dsh-web-harness-features.test.ts`、`tests/fixtures/dsh-web-agent/harness-features/**`。
-- **前置**：T4.5。
-- **实现技术**：启用审核过的 DSH session persistence/checkpoint、skill progressive load、tool result prune/compaction、in-process subagent。所有网页模型请求共用 broker scheduler 串行执行，并保留 `purpose` 和 child session identity；compaction/session-title 是显式辅助请求，不能伪装成主 turn。
+- **文件范围**：`packages/dsh-web-agent-bundle/cordis.harness-features.patch.yml`、该包配置/README、`src/harness-tools-policy.ts`/`web-compaction.ts` 与共享文件准入 helper、`tests/dsh-web-harness-features.test.ts`/`dsh-harness-tools-policy.test.ts`/`dsh-web-harness-profile-e2e.test.ts`、`tests/fixtures/dsh-web-agent/harness-features/**`。共享模型调度只改 `packages/dsh-llm-deepseek-web/src/adapter.ts`/`generation-scheduler.ts` 及定向测试；精确依赖由根统一锁定。基础 `cordis.patch.yml` 不变，不修改浏览器协议。
+- **前置**：完整验收仍要求 T4.5；2026-09-05 根据操作者“继续执行，Ubuntu 绕不开再说明”的指示，允许在已实现的文件编辑增量上并行开发不依赖 shell 的能力，不因此提前放行 Batch B 或声称命令完成。
+- **实现技术**：启用审核过的 DSH session persistence/checkpoint、skill progressive load、tool result prune/compaction、in-process subagent。所有网页模型请求共用串行调度，并保留 `purpose` 和 child session identity；compaction/session-title 是显式辅助请求，不能伪装成主 turn。具体放在唯一注册的 `DeepSeekWebAdapter.stream` 入口：主回合、压缩和子会话共用 16 个待执行名额的 FIFO，前一请求清理确认后才发送下一请求；排队取消在生成请求 ID/派发前结束，不在 Host 之外再造状态账本。Host 继续独占 socket 和终态事实源。
+- **网页兼容增量**：用单独 opt-in `cordis.harness-features.patch.yml` 保持已验收基础/文件入口不变。Skill 来源只取选定工作区的 `.agents/skills`，不扫描用户全局目录；子 Agent 固定同一网页路由、前台串行、最多一层。主/子 Agent 都保持既有 wire `purpose=agent`，子任务由独立 `session_id` 及官方 session header 的 origin/parentSession/delegationDepth 区分；摘要仍显式 `purpose=compaction`，不扩大协议 purpose 枚举。官方 `BasicCompactionEngine` 总传网页不支持的 maxTokens，故只覆盖其公开 `summarize` hook（`src/web-compaction.ts`）：一次同路由摘要请求、独立短检查点指令、官方 BlockAssembler；不复制区段选择/剪枝/持久化算法，不忽略不支持的参数或记录未生效 token 上限，失败不伪造摘要/自动重试。
 - **明确禁止**：不得启动 Pi AgentSession；不得让 subagent 使用本地/云 fallback 模型；不得声称 P0 并发 subagent；不得在 Browser 离线时静默跳过 compaction 或伪造摘要。
 - **验收**：fake peer fixture 覆盖 session resume、skill load、一次 compaction purpose 和一个串行 child agent；各 child 有独立 DSH session，所有模型调用 route 都是 `deepseek-web`。
 - **定向测试**：`npx vitest run tests/dsh-web-harness-features.test.ts`。

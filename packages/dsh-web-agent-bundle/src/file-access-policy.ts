@@ -3,12 +3,14 @@ import { isAbsolute } from "node:path";
 import type { Context } from "@deepseek-ai/cordis";
 import type {} from "@deepseek-ai/dsh-fs";
 import { canonicalPath } from "@deepseek-ai/dsh-sandbox";
-import type { ToolExecution, ToolExecutionToken } from "@deepseek-ai/dsh-tools";
+import type { ToolDefinition, ToolExecution, ToolExecutionToken } from "@deepseek-ai/dsh-tools";
 
 type FileTool = "read" | "str_replace_editor";
 interface FileAccessConfig {
   workspaceRoot: string;
   tool: FileTool;
+  /** Composition-owned definitions, never names supplied by model/config. */
+  toolDefinitions?: ReadonlyMap<string, ToolDefinition>;
 }
 interface Admission {
   readonly arguments: unknown;
@@ -50,6 +52,11 @@ export async function installFileAccessPolicy(ctx: Context, config: FileAccessCo
 
   const prepared = new Map<ToolExecutionToken, Admission>();
   let active = true;
+  const matchesDefinition = (exec: ToolExecution): boolean => {
+    if (config.toolDefinitions === undefined) return exec.name === config.tool;
+    const definition = config.toolDefinitions.get(exec.name);
+    return definition !== undefined && ctx.tools.get(exec.name, exec.agent) === definition;
+  };
   ctx.effect(() => () => { active = false; prepared.clear(); });
   // A later allowing listener cannot override a missing or denied admission.
   // Bind the result to the exact runtime-frozen arguments and session as well
@@ -57,7 +64,7 @@ export async function installFileAccessPolicy(ctx: Context, config: FileAccessCo
   ctx.tools.guard((exec) => {
     const admission = prepared.get(exec.token);
     prepared.delete(exec.token);
-    const allowed = active && !exec.signal.aborted && exec.name === config.tool
+    const allowed = active && !exec.signal.aborted && matchesDefinition(exec)
       && admission !== undefined && admission.arguments === exec.arguments
       && admission.agent === exec.agent && admission.sessionCwd === exec.agent?.session.header.cwd;
     return allowed ? undefined : `${rules.prefix}_WORKSPACE_ACCESS_DENIED`;
@@ -65,9 +72,20 @@ export async function installFileAccessPolicy(ctx: Context, config: FileAccessCo
   ctx.on("tools/result", (exec) => { prepared.delete(exec.token); });
   ctx.on("tools/pre-execute", async (exec, next) => {
     prepared.delete(exec.token);
+    // Only definitions installed and captured by the opt-in composition can
+    // use their own non-file policies. A same-name scoped shadow is not that
+    // capability. File tools still traverse the unchanged path admission.
+    if (exec.name !== config.tool && matchesDefinition(exec) && active && !exec.signal.aborted) {
+      prepared.set(exec.token, {
+        arguments: exec.arguments,
+        agent: exec.agent,
+        sessionCwd: exec.agent?.session.header.cwd,
+      });
+      return next();
+    }
     const args = plainArguments(exec.arguments);
     const path = args?.[rules.pathField];
-    if (exec.name === config.tool && args !== undefined && typeof path === "string"
+    if (exec.name === config.tool && matchesDefinition(exec) && args !== undefined && typeof path === "string"
       && Object.keys(args).every((field) => rules.fields.has(field))
       && (config.tool !== "str_replace_editor" || (isAbsolute(path)
         && typeof args.command === "string" && EDITOR_COMMANDS.has(args.command)))) {
