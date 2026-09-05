@@ -12,7 +12,7 @@
    C:\temp\deepseek-pp-build-e4dcc34\dist\chrome-mv3
    ```
 
-   Edge 使用同一构建下的 `edge-mv3` 目录。Firefox 临时加载 `firefox-mv3/manifest.json`。这些是本机已核实的开发构建，项目里的 `dist/chrome-mv3` 当前为空。复制扩展管理页面显示的 **DeepSeek++ 扩展 ID**（不是网页会话 ID）。
+   Edge 使用同一构建下的 `edge-mv3` 目录。Firefox 临时加载 `firefox-mv3/manifest.json`。这些目录已于 2026-09-05 原位更新为 `a5b9380` 登录接线修复构建，目录名保留不变；项目里的 `dist/chrome-mv3` 当前为空。复制扩展管理页面显示的 **DeepSeek++ 扩展 ID**（不是网页会话 ID）。
 
 2. **在 PowerShell 中执行下面这一段，按提示配对。**
 

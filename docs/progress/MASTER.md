@@ -144,7 +144,7 @@
 
 **立即下一步**：
 
-1. 隔离测试 profile 已在 `.tmp-deepseek-live/dsh-home` 初始化并通过实际配置 dump 校验。按 `tests/real/dsh-web-single-turn.md` 加载已核实的扩展并登录 DeepSeek。
+1. `a5b9380` 修复构建已原位更新到 `C:\temp\deepseek-pp-build-e4dcc34\dist` 的三端目录（目录名保留以稳定已安装扩展 ID，不代表当前源码提交）。操作者在扩展管理页重新加载开发版，再刷新已登录的 DeepSeek 网页；隔离测试 profile 不需重建。
 2. 在 PowerShell 执行 `.\scripts\start-dsh-web-smoke.ps1 -ConfirmRealWeb`：按提示输入扩展 ID、粘贴新配对令牌并保存，再启动同进程环境下的真实网页单回合。令牌只进入本机剪贴板和进程环境；记录 runner 的脱敏 JSON。
 3. 真实单回合通过后按 T4.1 → T4.4 推进官方只读工具多回合。全仓既有失败回流其原文件 owner，不混入模型代理主线；PR #568 与 release 工作继续隔离。
 
@@ -198,3 +198,7 @@
 | 2026-09-05 | P3-T1 real web | 操作者运行 `.\scripts\start-dsh-web-smoke.ps1 -ConfirmRealWeb`；检查该次唯一新增 session | `failed` | 外层 `REAL_WEB_DSH_FAILED`；durable `turn/end` 为 `error`，code=`WEB_MODEL_PROTOCOL`，无最终 assistant/message。已进入请求阶段；后台漏接既有认证缓存/刷新流程是本轮确认并修复的代码缺陷，不把此次失败记为通过 |
 | 2026-09-05 | P3-T1 auth repair | Node owned-process runner（硬 60s）执行 9 份 Harness/Transport/DSH/real-preflight/Mode-B 定向测试 | `passed` | 191/191；含无网页 localStorage 的真实缓存读取函数、缺认证零派发、异步取消与迟到结果零派发、已知安全错误透传、未知错误不外泄、唯一关联失败 session 的 cause_code；独立窄复核无阻断 |
 | 2026-09-05 | P3-T1 auth repair | `npm run compile`; `npm run prompt:freeze` | `passed` | 根编译通过；7/7 prompt golden 通过，未更新任何 prompt golden；修复后的真实网页请求未由本轮 agent 执行 |
+| 2026-09-05 | P3-T1 auth repair build | 无特殊字符 detached worktree `C:\temp\deepseek-pp-build-authfix-20260905`（`a5b9380`）：`npm run build:all`; manifest/UTF-8/sidepanel chunk 验证 | `passed` | Chrome、Edge、Firefox MV3 均构建成功；manifest 通过、177 个文本资源编码通过、三端 chunk 预算通过。构建沿用既有 Pyodide browser-externalization warnings，未修改依赖 |
+| 2026-09-05 | P3-T1 repaired local integration | Node owned-process runner（硬 60s）：`node scripts/dsh-web-agent-fake-smoke.mjs` | `passed` | 真 DSH CLI/Agent loop → adapter → 认证回环 → fake browser：唯一 modelRequests=1、terminal=completed、durable=true；不是实际 DeepSeek 网页证明 |
+| 2026-09-05 | P3-T1 installed build refresh | 比较新旧构建文件 SHA-256；备份并原位更新三个 `background.js`；完整再次比较 | `passed` | 安装目录 `C:\temp\deepseek-pp-build-e4dcc34\dist` 下 300 个文件与 `a5b9380` 新构建逐文件一致；原三文件保存在同级 `authfix-backup-a5b9380`。未删除旧 worktree 的源文件/未提交修改，未变更用户扩展数据或 ID；需操作者点重新加载 |
+| 2026-09-05 | P3-T1 repaired real web / full gate | 更新后的真实网页复测；`npm run ci:quality` | `not_run` | 本轮未读取/转交操作者的配对秘密；真实复测继续由原 PowerShell 启动。未执行发布闭环或重跑全仓既有失败，M3 未宣布完成 |
