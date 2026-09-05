@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
+import { encodeSeqRanges, packChunkRuns, SessionSeq } from "@deepseek-ai/dsh-session";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 interface SmokeModule {
@@ -350,6 +351,72 @@ describe("real DeepSeek Web smoke offline preflight", () => {
     expect(serialized).not.toMatch(/cookie|authorization|reasoning|api[_-]?key/i);
   });
 
+  it("accepts mixed ordinary events and officially packed text chunks with encoded source sequences", async () => {
+    const fixture = await makeFixture({ sessionStorage: "packed" });
+
+    await expect(runWith(fixture)).resolves.toMatchObject({
+      ok: true,
+      status: "completed",
+      session_id: "session-real-smoke",
+      final_text_bytes: Buffer.byteLength(FINAL_TEXT, "utf8"),
+    });
+
+    const records = await readFixtureSession(fixture.home);
+    expect(records.find((record) => record.type === "text-chunks")).toEqual({
+      type: "text-chunks",
+      seq0: 5,
+      time0: 1_788_480_000_005,
+      data: {
+        turn: 1,
+        step: 1,
+        index: 0,
+        dt: [1, 1],
+        texts: [FINAL_TEXT.slice(0, 8), FINAL_TEXT.slice(8, 20), FINAL_TEXT.slice(20)],
+      },
+    });
+    expect(records.find((record) => record.type === "request/context")).toMatchObject({ seq: 4 });
+    expect(records.find((record) => record.type === "assistant/message")).toMatchObject({
+      seq: 8,
+      sourceEventSeqs: [[5, 7]],
+    });
+    expect(records.at(-1)).toMatchObject({ type: "turn/end", seq: 10 });
+  });
+
+  it("rejects malformed packed rows, decoded sequence gaps, and invalid source-sequence ranges", async () => {
+    for (const sessionStorage of ["malformed-chunks", "sequence-gap", "invalid-source-seqs"] as const) {
+      const fixture = await makeFixture({ sessionStorage });
+      await expect(runWith(fixture)).rejects.toMatchObject({ code: "REAL_WEB_SESSION_EVIDENCE_INVALID" });
+    }
+  });
+
+  it("preserves the allowlisted failure cause after officially packed text was already streamed", async () => {
+    const fixture = await makeFixture({
+      sessionStorage: "packed",
+      actual: { exitCode: 1, stdout: "partial response", stderr: "private model failure" },
+      failureSession: { code: "WEB_MODEL_PROTOCOL", message: "private model failure" },
+    });
+    const output = captureOutput();
+
+    await expect(main(CONFIRM, {
+      ...output.options,
+      cwd: fixture.cwd,
+      env: fixture.env,
+      nodeVersion: "24.18.0",
+      dependencies: fixture.dependencies,
+    })).resolves.toBe(1);
+
+    expect(JSON.parse(output.stderr())).toEqual({
+      schema_version: 1,
+      ok: false,
+      status: "failed",
+      error: "REAL_WEB_DSH_FAILED",
+      cause_code: "WEB_MODEL_PROTOCOL",
+    });
+    expect(output.stdout()).toBe("");
+    expect(output.stderr()).not.toMatch(/partial response|private model failure/);
+    expect((await readFixtureSession(fixture.home)).some((record) => record.type === "text-chunks")).toBe(true);
+  });
+
   it("settles and removes signal handlers when tree cleanup rejects or never settles", async () => {
     for (const cleanup of ["reject", "hang"] as const) {
       const root = await mkdtemp(join(tmpdir(), `dsh-real-smoke-cleanup-${cleanup}-`));
@@ -413,6 +480,7 @@ interface FixtureOptions {
   readonly writeEvidence?: boolean;
   readonly sessionLeak?: "reasoning" | "pairing";
   readonly sessionVariant?: "bad-seq" | "duplicate-context" | "duplicate-assistant" | "wrong-order";
+  readonly sessionStorage?: "packed" | "malformed-chunks" | "sequence-gap" | "invalid-source-seqs";
   readonly failureSession?: {
     readonly code: string;
     readonly message: string;
@@ -453,6 +521,7 @@ async function makeFixture(options: FixtureOptions = {}) {
         options.sessionLeak,
         options.sessionVariant,
         options.failureSession,
+        options.sessionStorage,
       );
     }
     return options.actual ?? { exitCode: 0, stdout: `${FINAL_TEXT}\n`, stderr: "" };
@@ -515,6 +584,7 @@ async function writeSession(
     readonly message: string;
     readonly association?: "wrong-task" | "wrong-cwd";
   },
+  storage?: FixtureOptions["sessionStorage"],
 ) {
   const directory = join(home, "sessions", "2026", "09", "04", "session-real-smoke");
   await mkdir(directory, { recursive: true });
@@ -524,6 +594,10 @@ async function writeSession(
     { type: "user/message", data: { content: [{ type: "text", text: failure?.association === "wrong-task" ? `${task}-other` : task }] } },
     { type: "request/header", data: { header: { config: { provider: "deepseek-web", model: "current-web-session" } } } },
     { type: "request/context", data: { provider: "deepseek-web", model: "current-web-session" } },
+    ...(storage === undefined ? [] : [finalText.slice(0, 8), finalText.slice(8, 20), finalText.slice(20)].map((text) => ({
+      type: "assistant/chunk",
+      data: { turn: 1, step: 1, chunk: { type: "text-delta", index: 0, text } },
+    }))),
     ...(failure === undefined ? [{
       type: "assistant/message",
       data: {
@@ -561,12 +635,34 @@ async function writeSession(
   }
   const events = eventBodies.map((event, seq) => ({ ...event, seq, time: 1_788_480_000_000 + seq }));
   if (variant === "bad-seq") events[3]!.seq = 2;
+  // The preflight fixtures intentionally omit unrelated event fields. The
+  // complete text-delta envelopes above are packed by DSH's production codec.
+  const packedEvents = storage === undefined
+    ? undefined
+    : packChunkRuns(events as unknown as Parameters<typeof packChunkRuns>[0]);
+  const packedRow = packedEvents?.find((event) => event.type === "text-chunks");
+  if (packedRow !== undefined) {
+    if (storage === "malformed-chunks") packedRow.data.dt.pop();
+    if (storage === "sequence-gap") packedRow.seq0 = SessionSeq(packedRow.seq0 + 1);
+  }
+  const storageRecords: Record<string, unknown>[] = packedEvents ?? events;
+  const assistant = storageRecords.find((event) => event.type === "assistant/message");
+  if (storage !== undefined && assistant !== undefined) {
+    assistant.sourceEventSeqs = storage === "invalid-source-seqs"
+      ? [[7, 5]]
+      : encodeSeqRanges([SessionSeq(5), SessionSeq(6), SessionSeq(7)]);
+  }
   const records = [{
     type: "session",
     id: "session-real-smoke",
     cwd: failure?.association === "wrong-cwd" ? `${cwd}-other` : cwd,
-  }, ...events];
+  }, ...storageRecords];
   await writeFile(join(directory, "session.jsonl"), `${records.map((record) => JSON.stringify(record)).join("\n")}\n`, "utf8");
+}
+
+async function readFixtureSession(home: string): Promise<Record<string, unknown>[]> {
+  const raw = await readFile(join(home, "sessions", "2026", "09", "04", "session-real-smoke", "session.jsonl"), "utf8");
+  return raw.trimEnd().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>);
 }
 
 function captureOutput() {

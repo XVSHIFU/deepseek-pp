@@ -4,7 +4,7 @@
 >
 > **Tracking mode**: `LOCAL_ONLY`（尚未创建 GitHub Issue、Milestone 或 PR）
 >
-> **Started / last updated**: 2026-09-04
+> **Started / last updated**: 2026-09-04 / 2026-09-05
 >
 > **Active repository**: `XVSHIFU/deepseek-pp`
 >
@@ -73,7 +73,7 @@
 | M0 Protocol + fake Broker | 纯 TypeScript 版本化协议、严格 codec、fake browser/fake Broker 纵切片 | `verified` | 握手/认证、生成、增量、唯一终态、幂等取消、状态查询、预算和未知字段拒绝均有自动化测试 |
 | M1 Browser Broker | DeepSeek++ 建立 authenticated loopback WebSocket，并委托现有网页客户端 | `verified` | 只连 `127.0.0.1`；凭据不越界；模式 B 行为/chunk 不变 |
 | M2 DSH adapter + profile | out-of-tree `deepseek-web` LLM adapter、profile 与最小安装 bundle | `verified` | DSH 可显式选择 `provider=deepseek-web`；无隐式 provider fallback；不修改 DSH `master` |
-| M3 Real one-turn | 本机 DSH 经已登录浏览器完成一次真实网页模型回合 | `in_progress` | 无 DeepSeek API key/其他 provider；流正常结束；最终文本进入同一 DSH session |
+| M3 Real one-turn | 本机 DSH 经已登录浏览器完成一次真实网页模型回合 | `verified` | 无 DeepSeek API key/其他 provider；流正常结束；最终文本进入同一 DSH session |
 | M4 Local-tool multi-turn | 网页模型请求 DSH 本地只读搜索/读取工具，结果进入下一模型回合并返回最终结果 | `not_started` | 首个完整 P0 验收通过；工具只执行一次且可审计，DSH 始终拥有 loop authority |
 | M5 Disconnect/cancel/recovery | 浏览器离线、取消、断连、重连查询和不明结果处理 | `not_started` | 离线=`waiting_for_browser`；取消幂等；`ambiguous` 不自动重放；唯一终态可重复查询 |
 | M6 Install/release readiness | 本机 Broker、DSH adapter/profile 的安装升级、文档、供应链和发布门禁 | `not_started` | 仅在 M0–M5 验证完成且获得明确 release 授权后执行完整门禁 |
@@ -94,7 +94,7 @@
 | P2 | P2-T1 | out-of-tree DSH `deepseek-web` LLM adapter | `—` | `—` | `dsh_adapter_implement`; review: `dsh_api_surface` | `verified` |
 | P2 | P2-T2 | DSH profile、显式 provider 选择与最小安装 bundle | `—` | `—` | `dsh_bundle_implement`; review: `dsh_api_surface`, `dsh_adapter_implement` | `verified` |
 | P2 | P2-T3 | 实际 `dsh` 入口到 fake browser peer 的单轮闭环 | `—` | `—` | `dsh_fake_e2e_implement`; review: `dsh_fake_e2e_audit`, orchestration | `verified` |
-| P3 | P3-T1 | 无 API key 的真实网页单回合 E2E | `—` | `—` | `dsh_real_smoke_implement`; review: `dsh_adapter_implement`, orchestration | `in_progress` |
+| P3 | P3-T1 | 无 API key 的真实网页单回合 E2E | `—` | `—` | `dsh_real_smoke_implement`; review: `dsh_adapter_implement`, orchestration | `verified` |
 | P4 | P4-T1 | DSH 本地只读工具多回合与最终结果 E2E | `TBD` | `TBD` | `TBD` | `not_started` |
 | P5 | P5-T1 | disconnect/cancel/recovery、`waiting_for_browser` 与不重放 | `TBD` | `TBD` | `TBD` | `not_started` |
 | P6 | P6-T1 | 安装、升级、文档和 release readiness | `TBD` | `TBD` | `TBD` | `not_started` |
@@ -140,18 +140,23 @@
 
 ## 当前状态与下一步
 
-**当前状态**：架构决策 `docs/decisions/web-harness-model-broker.md` 已接受，模式 A 是唯一主开发线。M0 已由提交 `a9dab85`、`eaebb4a`、`9cbe43b` 完整冻结。P1-T1 已由提交 `4d111e6` 完成 MV3 可重建的 WebSocket client；P1-T2 已由提交 `ac87871` 完成不依赖 Pi 的网页模型 Turn Adapter；P1-T3 已由提交 `781d029`、`e4dcc34`、`e712fec` 将二者组合进 Background，并交付默认关闭、browser-local 配对设置、可见状态、显式重连、authority epoch 隔离和按需加载的设置页。M1 Browser Broker 已完成自动化、独立复核和 Chrome/Edge/Firefox 构建验证。P2-T1 已实现并验证 out-of-tree `deepseek-web/current-web-session` `LlmAdapter`；P2-T2 已交付基于 Harness `0.1.2-rc.1` 正式 headless 入口的独立 allowlist bundle；P2-T3 又从实际 `dsh` 入口、临时独立 profile 和 Agent loop，经 T2.1 adapter 与真实认证回环 WebSocket 到独立 fake browser，完成流式终答并 durable flush 到唯一 DSH JSONL session。M2 因而已完成 fake 集成验证。P3-T1 已交付默认零副作用、必须显式 opt-in 的真实网页 runner：离线预检会核验 Node/Harness、独立 profile 完整 allowlist、认证 Browser readiness、环境及两层 `.env` 无模型凭证、单轮 durable session 和脱敏证据；2026-09-05 操作者已实际执行真实测试；新增 DSH session 在请求阶段以 `WEB_MODEL_PROTOCOL` 结束，尚无最终回答，M3/P3-T1 仍为 `in_progress`。本轮已修复 Harness 后台没有接入既有登录缓存/刷新流程的接线缺陷，补上可取消的异步取登录头依赖、固定安全错误码传递和 runner 的关联失败诊断；定向回归与编译通过，修复后的真实网页复测仍待执行。Batch A 的 `compile` 通过；全仓 `npm test` 在 60 秒硬上限终止前暴露 7 个既有非 Harness 路径失败，故完整仓库门禁仍如实记为失败，不能宣称全绿。当前 checkout-link 安装不是自包含发行 tarball；私有 TS workspace 的构建/打包闭包明确留给 P6，不得据此宣称 release-ready。reasoning 不允许进入历史消息，只能在双边显式协商后作为 `retention: ephemeral` 的流事件出现。模式 B 只保持兼容，当前分支没有 release 授权。
+**当前状态**：模式 A 是唯一主开发线，M0–M2 已完成协议、浏览器 Broker、官方 DSH adapter/profile 与 fake 集成验证。M3/P3-T1 现已验证：2026-09-05 15:07:37 与 15:08:10（Asia/Shanghai）操作者发起的两次真实网页单回合，都返回了精确的随机测试标记，并以同一 DSH session 的 `assistant/message` 和 `turn/end(completed)` 持久化。外层 `REAL_WEB_SESSION_EVIDENCE_INVALID` 是测试读取器未解码官方 `text-chunks` 存储行造成的误报，不是这两次模型请求失败。读取器现复用锁定版本 DSH 的公开 `decodeStorageRecord` / `decodeSeqRanges`，成功验证和失败原因提取共用解码入口；仍保留序号、任务、provider、终答、终态及原有敏感值检查。
+
+本次没有重新发起真实模型调用：修改后的正式 `readNewSessionEvidence` 对上述两份原始日志只读复验均通过，文件 SHA-256 保持不变。历史配对令牌未读取或恢复；原运行已越过含令牌精确检查的步骤，本轮只使用固定扩展 origin 做禁存值复验。15/15 定向回归、根 TypeScript、脚本语法和差异检查通过。M4 本地工具多回合仍为 `not_started`，不能将单轮模型连通当作完整 Agent 验收。全仓既有非 Harness 测试失败、P6 自包含发行闭包和 release 授权状态均未改变；本次未运行浏览器构建、全仓审计或发布任务。
 
 **立即下一步**：
 
-1. `a5b9380` 修复构建已原位更新到 `C:\temp\deepseek-pp-build-e4dcc34\dist` 的三端目录（目录名保留以稳定已安装扩展 ID，不代表当前源码提交）。操作者 13:23 截图已确认 Chrome 加载路径正确；该磁盘 bundle 的离线 VM 三类探针也符合预期，尚未复现两次实际 `MODEL_PREPARATION_FAILED`。下一步关闭再开启已安装扩展以确保后台重新启动，再刷新网页，从原 PowerShell 复用现有配对环境测试；未断言旧 worker 已是确定根因。隔离测试 profile 不需重建。
-2. 在 PowerShell 执行 `.\scripts\start-dsh-web-smoke.ps1 -ConfirmRealWeb`：按提示输入扩展 ID、粘贴新配对令牌并保存，再启动同进程环境下的真实网页单回合。令牌只进入本机剪贴板和进程环境；记录 runner 的脱敏 JSON。
-3. 真实单回合通过后按 T4.1 → T4.4 推进官方只读工具多回合。全仓既有失败回流其原文件 owner，不混入模型代理主线；PR #568 与 release 工作继续隔离。
+1. 本次仅修复单轮测试误报，已完成；无需重新安装扩展、重新配对或再次运行单轮测试。开发版安装目录和 `a5b9380` 浏览器产物不变。
+2. 下一项为 T4.1 → T4.4：在独立测试目录验证官方 DSH 只读工具多回合，检查工具结果进入下一网页模型回合并在同一会话完成。本次未启动该任务，未扩大工具或网页执行授权。
+3. PR #568、全仓既有失败、其他功能与 release 工作继续隔离；完成工具闭环后再整理日常启动入口。
 
 ## 活动验证记录
 
 | Date | Scope | Command | Result | Notes |
 |:--|:--|:--|:--|:--|
+| 2026-09-05 | P3-T1 real one-turn / historical evidence | 操作者 15:07:37、15:08:10 的两次真实运行；修复后的 `readNewSessionEvidence` 只读复验原始日志 | `passed` | 两次均精确随机终答、唯一逻辑回合和 `turn/end(completed)`；原外层失败为存储行误读。session `af26141f-5c07-4beb-87f7-a0f0d2cf3b2a` SHA-256=`73f98cd76b88c07013acd2680d11979410b3684b95ea48b5377b624a0d22468a`；session `13b1dc75-8880-4b9a-afe1-a87d7417f834` SHA-256=`1a6087c4d00d5282b0f1cafb6013a2096e4eaabf331ddda0859e2090f4607c60`。复验前后哈希一致，新增模型请求=0；未读取历史配对令牌或将日志纳入 Git |
+| 2026-09-05 | P3-T1 packed JSONL regression | owned-process hard 60s：`vitest run tests/real/dsh-web-real-smoke-preflight.test.ts` | `passed` | 先在旧实现复现 13/15、2 项预期失败；修复后 15/15。fixture 使用官方 `packChunkRuns` / `encodeSeqRanges`，覆盖打包成功、损坏行、解码序号缺口、非法来源范围及部分流输出后失败的安全 cause_code；窄复核无发现 |
+| 2026-09-05 | P3-T1 packed JSONL checks | `tsc --noEmit`（hard 60s）；`node --check scripts/dsh-web-real-smoke.mjs`；`git diff --check`；`npm install --package-lock-only --ignore-scripts --offline --no-audit --no-fund` | `passed` | 复用已安装的 `@deepseek-ai/dsh-session@0.1.2-rc.1`，补 root 精确直接开发依赖声明，无版本升级。未修改生产扩展、prompt、模型/工具协议或 profile，不重建浏览器产物，不把历史日志复验说成新真实网页运行 |
 | 2026-09-04 | G0-T1 | `git remote -v`; `git branch --show-current`; `git rev-parse HEAD` | `passed` | 核实本地 DeepSeek++ remote、活动分支与基线 SHA |
 | 2026-09-04 | G0-T1 | GitHub API repo/branch/compare/PR 查询 | `passed` | 核实两个 fork、两个 upstream 和 PR #568 状态；只读 |
 | 2026-09-04 | G0-T1 | Runtime/compile/test/build | `not_run` | 本任务只新增治理文档，不改变运行时代码 |

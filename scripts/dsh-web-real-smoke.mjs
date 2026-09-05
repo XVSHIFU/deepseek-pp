@@ -5,6 +5,7 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseEnv } from "node:util";
+import { decodeSeqRanges, decodeStorageRecord } from "@deepseek-ai/dsh-session";
 import { JSON_SCHEMA, Type, load as loadYaml } from "js-yaml";
 
 const EXPECTED_DSH_VERSION = "0.1.2-rc.1";
@@ -419,7 +420,32 @@ function hasExactKeys(value, keys) {
   return actual.length === keys.length && actual.every((key, index) => key === [...keys].sort()[index]);
 }
 
-async function readNewSessionEvidence(root, priorLogs, expected) {
+// JSONL rows are storage records, not necessarily individual events: DSH can
+// pack many deltas into one row even when file compression is disabled.
+function decodeSessionLog(raw) {
+  try {
+    const [header, ...records] = raw.split("\n").filter(Boolean).map((line) => JSON.parse(line));
+    const events = records.flatMap((record) => {
+      if (!isRecord(record)) throw new TypeError("Invalid stored session record");
+      if (record.sourceEventSeqs !== undefined) {
+        if (!Number.isSafeInteger(record.seq) || record.seq < 0) {
+          throw new TypeError("Invalid stored session sequence");
+        }
+        record = { ...record, sourceEventSeqs: decodeSeqRanges(record.sourceEventSeqs, record.seq) };
+      }
+      return decodeStorageRecord(record);
+    });
+    if (events.length === 0 || events.some((event, index) => !isRecord(event) || event.seq !== index ||
+        !Number.isSafeInteger(event.time) || !isRecord(event.data))) {
+      throw new TypeError("Invalid session event sequence");
+    }
+    return { header, events };
+  } catch (cause) {
+    throw new RealWebSmokeError("REAL_WEB_SESSION_EVIDENCE_INVALID", { cause });
+  }
+}
+
+export async function readNewSessionEvidence(root, priorLogs, expected) {
   const after = await listSessionLogs(root);
   const created = [...after].filter((entry) => !priorLogs.has(entry));
   if (created.length !== 1) throw new RealWebSmokeError("REAL_WEB_SESSION_EVIDENCE_INVALID");
@@ -429,18 +455,7 @@ async function readNewSessionEvidence(root, priorLogs, expected) {
       expected.forbiddenExact.some((value) => value !== "" && raw.includes(value))) {
     throw new RealWebSmokeError("REAL_WEB_SESSION_SENSITIVE_DATA");
   }
-  let records;
-  try {
-    records = raw.split("\n").filter(Boolean).map((line) => JSON.parse(line));
-  } catch (cause) {
-    throw new RealWebSmokeError("REAL_WEB_SESSION_EVIDENCE_INVALID", { cause });
-  }
-  const header = records[0];
-  const events = records.slice(1);
-  if (events.length === 0 || events.some((event, index) => !isRecord(event) || event.seq !== index ||
-      !Number.isSafeInteger(event.time) || !isRecord(event.data))) {
-    throw new RealWebSmokeError("REAL_WEB_SESSION_EVIDENCE_INVALID");
-  }
+  const { header, events } = decodeSessionLog(raw);
   const logicalTypes = [
     "turn/start",
     "step/start",
@@ -493,12 +508,8 @@ async function readNewFailureCause(root, priorLogs, expected, dependencies) {
     if (created.length !== 1) return undefined;
     const raw = await dependencies.readText(join(root, created[0]));
     if (!raw.endsWith("\n")) return undefined;
-    const records = raw.split("\n").filter(Boolean).map((line) => JSON.parse(line));
-    const header = records[0];
-    const events = records.slice(1);
-    if (!isRecord(header) || header.type !== "session" || header.cwd !== expected.cwd ||
-        events.length === 0 || events.some((event, index) => !isRecord(event) || event.seq !== index ||
-          !Number.isSafeInteger(event.time) || !isRecord(event.data))) return undefined;
+    const { header, events } = decodeSessionLog(raw);
+    if (!isRecord(header) || header.type !== "session" || header.cwd !== expected.cwd) return undefined;
     const users = events.filter((event) => event.type === "user/message");
     const requestHeaders = events.filter((event) => event.type === "request/header");
     const terminals = events.filter((event) => event.type === "turn/end");
