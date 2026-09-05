@@ -1,5 +1,5 @@
 import { spawn, type ChildProcessByStdio } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -64,6 +64,8 @@ const HEADLESS_SYSTEM_ENVIRONMENT = [
 
 interface FakeHeadlessCommonOptions {
   readonly task: string | ((workspace: string) => string);
+  /** Existing absolute parent for one owned mkdtemp; defaults to OS temp. */
+  readonly temporaryBaseDirectory?: string;
   readonly inheritedEnvironmentProbe?: Readonly<NodeJS.ProcessEnv>;
   readonly patches?: readonly string[];
   readonly prepareWorkspace?: (workspace: string) => Promise<void>;
@@ -118,7 +120,7 @@ type HeadlessChild = ChildProcessByStdio<null, Readable, Readable>;
 
 export async function runFakeDshHeadless(options: FakeHeadlessOptions): Promise<FakeHeadlessResult> {
   validateOptions(options);
-  const tempRoot = await mkdtemp(join(tmpdir(), "dsh-web-agent-fake-"));
+  const tempRoot = await mkdtemp(join(options.temporaryBaseDirectory ?? tmpdir(), "dsh-web-agent-fake-"));
   const home = join(tempRoot, "dsh-home");
   const workspace = join(tempRoot, "workspace");
   const releaseFile = join(tempRoot, "browser-ready");
@@ -171,7 +173,7 @@ export async function runFakeDshHeadless(options: FakeHeadlessOptions): Promise<
     );
     await runManagedCommand(
       process.execPath,
-      [DSH_BIN, "plugin", "--profile", PROFILE_NAME, "add", "--offline", BUNDLE_ROOT],
+      [DSH_BIN, "plugin", "--profile", PROFILE_NAME, "add", "--offline", "--workspace-root", BUNDLE_ROOT],
       workspace,
       preparationEnv,
       30_000,
@@ -220,6 +222,12 @@ export async function runFakeDshHeadless(options: FakeHeadlessOptions): Promise<
     peer.throwIfFailed();
     if (childResult.stdout.includes(pairingToken) || childResult.stderr.includes(pairingToken)) {
       throw new Error("PAIRING_TOKEN_DISCLOSURE");
+    }
+    // A Loader failure may close the CLI before persistence exists. Preserve
+    // its bounded fake-run startup cause instead of replacing it with ENOENT;
+    // the credential-free child environment and pairing check above still apply.
+    if (childResult.exitCode !== 0 && !existsSync(join(home, "sessions"))) {
+      throw new Error(`DSH_HEADLESS_EXIT_${childResult.exitCode}: ${childResult.stderr.trim().slice(0, 4_096)}`);
     }
     const persisted = await readOnlySessionLog(join(home, "sessions"));
     if (persisted.raw.includes(pairingToken)) throw new Error("PAIRING_TOKEN_PERSISTED");
@@ -283,6 +291,10 @@ export async function runFakeDshHeadless(options: FakeHeadlessOptions): Promise<
 }
 
 function validateOptions(options: FakeHeadlessOptions): void {
+  if (options.temporaryBaseDirectory !== undefined &&
+      (!isAbsolute(options.temporaryBaseDirectory) || !existsSync(options.temporaryBaseDirectory) || !statSync(options.temporaryBaseDirectory).isDirectory())) {
+    throw new Error("FAKE_HEADLESS_TEMPORARY_BASE_INVALID");
+  }
   if (typeof options.task !== "function" && options.task.trim() === "") throw new Error("FAKE_HEADLESS_TASK_REQUIRED");
   if (options.patches?.some((patch) => !isAbsolute(patch) || !existsSync(patch))) {
     throw new Error("FAKE_HEADLESS_PATCH_INVALID");

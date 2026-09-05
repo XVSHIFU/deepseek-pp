@@ -22,6 +22,11 @@ export async function apply(ctx: Context, config: Config) {
     tool: "str_replace_editor",
     toolDefinitions: definitions,
   });
+  await mountHarnessToolDefinitions(ctx, config, definitions);
+}
+
+/** Shared fixed official definitions for the explicitly composed tool profiles. */
+export async function mountHarnessToolDefinitions(ctx: Context, config: Config, definitions: Map<string, ToolDefinition>) {
   definitions.set("str_replace_editor", await mountWorkspaceEditor(ctx, config));
   await ctx.plugin(SkillTool);
   const skill = ctx.tools.get("skill");

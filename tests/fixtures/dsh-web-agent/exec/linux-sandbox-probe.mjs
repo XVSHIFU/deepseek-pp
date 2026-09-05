@@ -187,7 +187,7 @@ async function probe() {
     ]);
     cancel.abort();
     const cancellation = await cancelled;
-    requireFact(cancellation.isError === true && errorCode(cancellation.error) === "TOOL_ABORTED", "LINUX_SANDBOX_CANCEL_NOT_OBSERVED");
+    requireFact(cancellation.isError === true && errorCode(cancellation.error) === toolsModule.TOOL_ABORTED, "LINUX_SANDBOX_CANCEL_NOT_OBSERVED");
     await assertQuiescent(handles.at(-1));
     completed.push("cancel_tree_exited");
     stage = "complete";

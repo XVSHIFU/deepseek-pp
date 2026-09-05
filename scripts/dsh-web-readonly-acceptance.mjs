@@ -125,10 +125,11 @@ export async function runToolAcceptance(options, injected, scenario) {
   }
   const fixture = await deps.prepareFixture(cwd);
   const runEnv = { ...env, DSH_HOME: fixture.home, DSH_WEB_WORKSPACE_ROOT: fixture.workspace, DSH_TELEMETRY_DISABLED: "1" };
-  const install = await deps.runCommand(command([DSH, "plugin", "--profile", PROFILE, "add", "--offline", BUNDLE], fixture.workspace, 30_000, runEnv));
+  const install = await deps.runCommand(command([DSH, "plugin", "--profile", PROFILE, "add", "--offline", "--workspace-root", BUNDLE], fixture.workspace, 30_000, runEnv));
   if (install.exitCode !== 0) throw new RealWebSmokeError("REAL_WEB_PROFILE_NOT_INSTALLED");
   validateProfileManifest(await deps.readText(join(fixture.home, "profiles", PROFILE, "package.json")));
-  const baseArgs = [DSH, "--profile", PROFILE, "--patch", scenario.patch];
+  const patches = scenario.patches ?? [scenario.patch];
+  const baseArgs = [DSH, "--profile", PROFILE, ...patches.flatMap((patch) => ["--patch", patch])];
   const dump = await deps.runCommand(command([...baseArgs, "--dump-config"], fixture.workspace, 30_000, runEnv));
   if (dump.exitCode !== 0 || dump.stderr !== "") throw new RealWebSmokeError("REAL_WEB_PROFILE_INVALID");
   scenario.validateProfileDump(dump.stdout);

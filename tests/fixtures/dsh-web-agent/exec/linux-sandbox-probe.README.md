@@ -20,12 +20,15 @@ blocks product wiring even if the Linux backend reports `full` enforcement.
 The claimed scope is filesystem **write** confinement, not restrictions on all
 readable host files or network access. `product_acceptance` is always false.
 
-As of 2026-09-05 this full DSH probe has **not run**: Linux imports of the current
-Windows dependency tree fail for missing native Koffi. Separate bounded direct
-Bubblewrap tests ran `/usr/bin/true` and the fixed Windows echo successfully.
-Those tests demonstrate working Bubblewrap and still-available Windows interop,
-not successful DSH command isolation. The Windows-to-WSL loopback result is
-recorded separately in `wsl-loopback-probe.README.md`.
+On 2026-09-05, after authorized independent Linux dependency installation and
+Ubuntu interop disable/restart, this full official DSH probe passed: bwrap/full,
+workspace write, sibling denial, Windows echo exit 126, timeout/cancel process
+exit and cleanup (six managed processes). The initial cancellation assertion
+was corrected to compare the official exported `TOOL_ABORTED` value (`ABORTED`),
+not its constant name. No executor or success criterion was substituted.
+Earlier direct Bubblewrap tests had exposed still-enabled Windows interop;
+those historical results are not the post-setup state. Exact setup/backup and
+current validation evidence live in `docs/progress/MASTER.md`.
 
 No installation or system change is performed by this script. Disabling Windows
 process interop via `/etc/wsl.conf` affects the whole Ubuntu distribution and

@@ -68,7 +68,7 @@ before each edit. Approval remains `ask`; an actual ask without an official
 answerer is rejected. No elevation, arbitrary environment, shell or networking
 tool is published. In particular, native Windows command execution is not
 included: the pinned ACL backend did not satisfy the out-of-workspace-write
-acceptance on this host. Stronger command isolation remains a separate decision.
+acceptance on this host. The optional Linux command profile below is separate.
 
 This file-editing increment is not a release or a complete interactive Harness
 UI. Its fake model/real DSH integration evidence does not claim a new real-web
@@ -131,3 +131,30 @@ For the next real-web **file-edit-only** check, use
 fixture and never selects a user project for the test. The short instructions
 are in `tests/real/dsh-web-file-edit-acceptance.md`; the passed read-only check
 does not need repeating.
+
+## Optional Linux commands (including WSL Ubuntu)
+
+Apply `cordis.linux-commands.patch.yml` after workspace-files and harness-features
+to add the original official foreground Bash tool. Run the whole DSH process,
+filesystem and command runtime inside Linux, using Linux Node 24 and a separate
+Linux dependency installation. Do not share Windows `node_modules`.
+
+Use an unprivileged Linux user. On WSL, Windows executable interop must be
+disabled and the distro restarted; the command profile checks the running
+interface and refuses enabled or unknown interop state. This is an explicit
+operator setup choice for the distro, not a change made by the profile itself.
+
+Commands inherit the chosen workspace-write boundary. Only `command`,
+`description` and optional `timeoutMs` (maximum 60000) are admitted; no model
+working-directory override, environment override, escalation or background mode
+is allowed. The same guard applies to child Agents. This is filesystem write
+confinement, **not** isolation of all readable files, network access or a hostile
+local administrator. The official sandbox also owns its private temporary area.
+
+The Windows development launcher is
+`scripts/start-dsh-web-smoke.ps1 -ConfirmRealWeb -LinuxCommands`.
+It starts Linux DSH and shares only the pairing setup with WSL; it does not
+execute the model's shell command on Windows or load a local model. No browser
+extension rebuild is needed. See `tests/real/dsh-web-command-acceptance.md` for
+the short test steps. Real-web command acceptance is separate from fake-peer
+integration and is not claimed before an actual paired run.

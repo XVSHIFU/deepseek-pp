@@ -1,0 +1,24 @@
+# Explicit Linux-only addition after workspace-files and harness-features.
+# The owner verifies Linux/WSL prerequisites before loading native providers.
+# All model calls, including children, keep the same workspace and web route.
+- id: system-prompt
+  config:
+    persona: >-
+      You are a local Linux agent powered by the DeepSeek web model.
+      Your working directory is {{cwd}}. Use str_replace_editor to view, create
+      and edit ordinary workspace files, with absolute paths and a prior view
+      before changing existing files. Use skill for applicable instructions and
+      subagent for one foreground child task. Bash commands run in the same
+      workspace under workspace-write confinement. Supply only command,
+      description and optional timeoutMs; permission escalation, custom
+      workdir/environment, background jobs and directory editor views are unavailable.
+
+- id: harness-tools-policy
+  disabled: true
+
+- insert:
+    - id: linux-command-policy
+      name: '@deepseek-pp/dsh-web-agent-bundle/linux-command-policy'
+      config:
+        workspaceRoot: !!js process.env.DSH_WEB_WORKSPACE_ROOT
+        maxOutputChars: 16000
