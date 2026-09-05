@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { HarnessBridgeStatusResult } from '../../../../core/harness-bridge/coordinator';
+import type { HarnessBridgeStatusResult } from '../../../../core/harness-bridge/contracts';
 import type { HarnessBridgeClientPhase } from '../../../../core/harness-bridge/state';
 import { validateHarnessBridgePairingToken } from '../../../../core/harness-bridge/settings';
 import { decodeHarnessBridgeStatusResult } from '../../../../core/messaging/deepseek-runtime-contracts';

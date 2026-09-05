@@ -190,7 +190,7 @@ describe("DeepSeek Web Agent standalone bundle", () => {
     });
     expect(resolve(seeded.stdout.trim())).toBe(join(home, "profiles", PROFILE_NAME));
 
-    await execFileAsync(process.execPath, [DSH_BIN, "plugin", "--profile", PROFILE_NAME, "add", PACKAGE_ROOT], {
+    await execFileAsync(process.execPath, [DSH_BIN, "plugin", "--profile", PROFILE_NAME, "add", "--offline", "--workspace-root", PACKAGE_ROOT], {
       cwd: process.cwd(),
       env,
       timeout: 30_000,

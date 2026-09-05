@@ -10,7 +10,7 @@ import type {
 } from '../multimodal/media';
 import type { MultimodalSettingsStatus } from '../multimodal/settings-contracts';
 import type { MessageAction } from '../types';
-import type { HarnessBridgeStatusResult } from '../harness-bridge/coordinator';
+import type { HarnessBridgeStatusResult } from '../harness-bridge/contracts';
 import type { HarnessBridgeSettingsPatch } from '../harness-bridge/settings';
 
 type DeclaredRuntimeRequest<TType extends MessageAction['type']> = Extract<

@@ -1,8 +1,16 @@
 import { createSerialOperationQueue } from '../persistence/serial-operation-queue';
 import { validateHarnessBridgeClientConfig } from './client';
+import {
+  HARNESS_BRIDGE_SETTINGS_VERSION,
+  type PublicHarnessBridgeSettings,
+} from './contracts';
+
+export {
+  HARNESS_BRIDGE_SETTINGS_VERSION,
+  type PublicHarnessBridgeSettings,
+} from './contracts';
 
 export const HARNESS_BRIDGE_SETTINGS_STORAGE_KEY = 'deepseek_pp_harness_bridge';
-export const HARNESS_BRIDGE_SETTINGS_VERSION = 1 as const;
 export const DEFAULT_HARNESS_BRIDGE_PORT = 43_123;
 
 export type HarnessBridgeSettingsErrorCode =
@@ -32,13 +40,6 @@ export interface HarnessBridgeSettingsPatch {
   readonly port: number;
   /** Omit to preserve the existing browser-local token. */
   readonly pairingToken?: string;
-}
-
-export interface PublicHarnessBridgeSettings {
-  readonly version: typeof HARNESS_BRIDGE_SETTINGS_VERSION;
-  readonly enabled: boolean;
-  readonly port: number;
-  readonly pairingTokenConfigured: boolean;
 }
 
 export interface HarnessBridgeSettingsStorage {

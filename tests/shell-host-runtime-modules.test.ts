@@ -112,7 +112,16 @@ describe('Shell Host modular runtime ownership', () => {
       cwd: resolve('packages/shell-host'),
       encoding: 'utf8',
     });
-    const [{ filename }] = JSON.parse(packOutput) as Array<{ filename: string }>;
+    // npm versions emit either an array or a package-name keyed record.
+    const packed = JSON.parse(packOutput);
+    const entries = Array.isArray(packed) ? packed : Object.values(packed);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      name: shellPackage.name,
+      version: shellPackage.version,
+      filename: `${shellPackage.name}-${shellPackage.version}.tgz`,
+    });
+    const { filename } = entries[0] as { filename: string };
     const tarball = resolve(packDir, filename);
     execFileSync(npm, [
       'install',

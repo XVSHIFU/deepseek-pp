@@ -29,6 +29,15 @@ beforeEach(() => {
       getManifest: vi.fn(() => ({ version: '0.7.0' })),
       sendMessage: vi.fn(async (message: { type?: string }) => {
         if (message.type === 'GET_AUTH_STATUS') return { available: true, provider: 'deepseek-web' };
+        if (message.type === 'GET_CONFIG') return { version: '0.7.0' };
+        if (message.type === 'GET_MEMORIES') return [];
+        if (message.type === 'GET_HARNESS_BRIDGE_STATUS') {
+          return {
+            ok: true,
+            settings: { version: 1, enabled: false, port: 43_123, pairingTokenConfigured: false },
+            state: { phase: 'stopped', attempt: 0 },
+          };
+        }
         if (message.type === 'GET_VOICE_SETTINGS') return {};
         if (message.type === 'GET_USAGE_SUMMARY') return createUsageSummary();
         if (message.type === 'CLEAR_USAGE_STATS') return { ok: true };
@@ -88,7 +97,7 @@ describe('sidepanel navigation', () => {
     await vi.waitFor(() => expect(container.textContent).toContain('连接本机或远程 MCP 服务'));
   });
 
-  it('keeps the voice settings surface reachable from Settings', async () => {
+  it('keeps the ordered Settings tabs and reaches Harness before returning to voice settings', async () => {
     await renderElement(React.createElement(SettingsPage));
 
     // Settings is split into sub-tabs; voice lives under the Voice tab.
@@ -97,6 +106,7 @@ describe('sidepanel navigation', () => {
     expect(navButtonLabels('设置子导航')).toEqual([
       '通用',
       'API',
+      '本机 Harness',
       '提示词',
       '语音',
       '外观',
@@ -108,6 +118,17 @@ describe('sidepanel navigation', () => {
     expect(navButtonLabels('设置子导航').indexOf('用量')).toBeLessThan(
       navButtonLabels('设置子导航').indexOf('数据'),
     );
+
+    await clickNavButton('设置子导航', '本机 Harness');
+    await vi.waitFor(() => {
+      expect(container.textContent).toContain('启用本机 Harness 桥接');
+      expect(container.textContent).toContain('连接状态: 已停止');
+    });
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({ type: 'GET_HARNESS_BRIDGE_STATUS' });
+    expect(chrome.runtime.sendMessage).not.toHaveBeenCalledWith(expect.objectContaining({
+      type: 'UPDATE_HARNESS_BRIDGE_SETTINGS',
+    }));
+
     const voiceTab = Array.from(settingsNav!.querySelectorAll('button')).find(
       (button) => (button.textContent ?? '') === '语音',
     );

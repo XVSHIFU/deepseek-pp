@@ -12,6 +12,11 @@ import type {
   HarnessBridgeHostRequest,
 } from './client';
 import type { HarnessBridgeClientState } from './state';
+import type {
+  HarnessBridgeStatus,
+  HarnessBridgeStatusResult,
+  SafeHarnessBridgeState,
+} from './contracts';
 import { DeepSeekTurnAdapterError } from './deepseek-turn-adapter';
 import type { WebModelTurnPort } from './model-turn-port';
 import {
@@ -19,31 +24,17 @@ import {
   type HarnessBridgeSettings,
   type HarnessBridgeSettingsPatch,
   type HarnessBridgeSettingsStore,
-  type PublicHarnessBridgeSettings,
   projectHarnessBridgeSettings,
 } from './settings';
 
+export type {
+  HarnessBridgeStatus,
+  HarnessBridgeStatusFailure,
+  HarnessBridgeStatusResult,
+  SafeHarnessBridgeState,
+} from './contracts';
+
 const MAX_REQUEST_RECORDS = 1_024;
-
-export interface SafeHarnessBridgeState {
-  readonly phase: HarnessBridgeClientState['phase'];
-  readonly attempt: number;
-  readonly nextRetryAtMs?: number;
-  readonly errorCode?: string;
-}
-
-export interface HarnessBridgeStatus {
-  readonly ok: true;
-  readonly settings: PublicHarnessBridgeSettings;
-  readonly state: SafeHarnessBridgeState;
-}
-
-export interface HarnessBridgeStatusFailure {
-  readonly ok: false;
-  readonly error: string;
-}
-
-export type HarnessBridgeStatusResult = HarnessBridgeStatus | HarnessBridgeStatusFailure;
 
 export interface HarnessBridgeClientPort {
   readonly state: HarnessBridgeClientState;

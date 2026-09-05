@@ -31,7 +31,7 @@ import type {
   MultimodalMediaAnalyzeRequest as MultimodalMediaAnalyzeRequestType,
 } from './multimodal/media';
 import type { VoiceSettings as VoiceSettingsType } from './voice/settings';
-import type { HarnessBridgeStatusResult } from './harness-bridge/coordinator';
+import type { HarnessBridgeStatusResult } from './harness-bridge/contracts';
 import type {
   ToolCall as GenericToolCall,
   ToolPayload,
