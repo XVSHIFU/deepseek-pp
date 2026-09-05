@@ -152,10 +152,14 @@ T4.2 的明确调整与边界见计划：官方 read-only 本身不约束读取�
 2. 操作者只需重新加载已安装的开发版，按 [本地工具两轮测试](../../tests/real/dsh-web-readonly-acceptance.md) 运行带 `-ReadOnlyTools` 的一个命令；新的配对令牌仍只在本机剪贴板与浏览器中传递。
 3. 收到真实两轮成功后继续 T4.5 受控写入/编辑/PowerShell，再做 T4.6；不重复单轮。PR #568、既有全仓失败和 release 工作继续隔离。
 
+本机开发版已原位更新为提交 `5f110ba` 的产物：继续加载 `C:\temp\deepseek-pp-build-e4dcc34\dist\chrome-mv3`，扩展 ID 不变。操作者需重新加载扩展并刷新 DeepSeek 页；本轮没有代替用户激活浏览器扩展或完成真实网页工具请求。
+
 ## 活动验证记录
 
 | Date | Scope | Command | Result | Notes |
 |:--|:--|:--|:--|:--|
+| 2026-09-05 | T4 browser build | 无特殊字符 detached worktree `C:\temp\deepseek-pp-build-tools-20260905`，提交 `5f110ba`：`npm run build:all`；manifest/UTF-8/chunk 检查 | `passed` | Chrome/Edge/Firefox MV3 构建通过；manifest 通过，177 个文本资源编码通过，三端 Side Panel chunk 预算通过。沿用既有 Pyodide externalization warnings，不修改依赖或预算 |
+| 2026-09-05 | T4 installed artifact refresh | 原位文件备份/复制；300 个构建文件逐个 SHA-256 比对 | `passed` | 仅 9 个 background/content/main-world JS 变更；原文件备份在 `C:\temp\deepseek-pp-build-e4dcc34\readonly-backup-before-5f110ba`，没有删除文件。安装 dist 与新构建 300/300 相同；Chrome background SHA-256=`f1fb83388476c5be831d7a6d62c883e2ef12e03e54ce29965f347c8b7f797944`。扩展 ID/用户设置不变；未宣称运行中 worker 已刷新 |
 | 2026-09-05 | P3-T1 user-confirmed new run | 操作者运行 `start-dsh-web-smoke.ps1 -ConfirmRealWeb` 并回传 JSON | `passed` | `ok=true/status=completed`；request `web-smoke-0ed11068b66d5ff9f4b8cb4ea423e959`；session `session-f0c01d68-1607-4450-93bd-f246ca73639c`；final SHA-256 `94585b3ee9edca4169b98cc00b65664f4ce371e4d20143ffeb3507c7bf22a3f8`，53 bytes。不要求再次单轮测试 |
 | 2026-09-05 | T4.1–T4.4 offline | owned-process hard 60s：14 个 parser/Mode-B/Harness/bundle/tool-loop/real-preflight 文件联合 Vitest | `passed` | 145/145，16.69s。T4.1 复用原 parser；模式 B 默认行为不变。T4.2 官方读取缺口保留 current-gap 证据；静态 junction cwd 语义回归先失败后修复 |
 | 2026-09-05 | T4 final integration | owned-process hard 60s：6 个 readonly/bundle/单双轮/新旧 real-preflight 文件；`node scripts/dsh-web-agent-tool-smoke.mjs` | `passed` | 最后代码 54/54，10.14s；真实 CLI 的 fake 两轮正常/错误均通过，modelRequests=2、durable/cleanup=true。新验收测试共 17 条，包括实际 DSH 离线安装/配置解析到模型启动前、真实 fake session 原文验证、相同文件相对/绝对写法；没有调用网页 |

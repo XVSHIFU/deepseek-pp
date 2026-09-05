@@ -4,7 +4,7 @@
 
 ## 你只需做这些
 
-1. Chrome 扩展管理页找到开发版 DeepSeek++，点一次「重新加载」；保持 DeepSeek 网页已登录。无需卸载或更换扩展目录。
+1. Chrome 扩展管理页找到开发版 DeepSeek++，点一次「重新加载」，然后刷新已登录的 DeepSeek 网页。无需卸载或更换扩展目录。
 2. 在 PowerShell 7 执行：
 
    ```powershell
