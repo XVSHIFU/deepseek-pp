@@ -151,16 +151,21 @@ T4.2 的明确调整与边界见计划：官方 read-only 本身不约束读取�
 
 1. 编排负责合并代码、自动回归、构建和更新本机开发版产物，不再把这些步骤交给操作者。
 2. 操作者已完成真实只读验收，暂时无需操作，不重复单轮或只读测试。配对令牌仍只在本机剪贴板与浏览器中传递。
-3. 文件编辑已接入独立增量，接下来需要操作者确认是否在已有 WSL2 Ubuntu 中继续验证命令隔离；确定可用后再完成 T4.5 命令和 T4.6。不把无隔离 shell 作为替代。PR #568、既有全仓失败和 release 工作继续隔离。
+3. 文件编辑已接入独立增量，操作者已允许检查现有 WSL2 Ubuntu。回环连接通过，现有 Node/Bubblewrap 可用，但 Linux 原生依赖缺失、Windows 程序互操作仍可用，命令尚未接入。下一步需要确认项目专用 Linux 依赖安装，以及备份后禁用 Ubuntu 的 Windows 程序互操作并重启该发行版；这会影响整个 Ubuntu，不能擅自操作。之后由编排继续实际官方工具链验证和接线，再完成 T4.6。不重复已通过的网页测试，不把无隔离 shell 作为替代。PR #568、既有全仓失败和 release 工作继续隔离。
 
 本机开发版仍为提交 `5f110ba` 的产物：继续加载 `C:\temp\deepseek-pp-build-e4dcc34\dist\chrome-mv3`，扩展 ID 不变。操作者已成功完成加载后的真实工具验收。本次文件编辑改动仅在本机 bundle，不需要再次更新浏览器产物。
 
-**T4.5 命令执行的具体阻断**：官方 Windows ACL backend 在本机临时 fixture 中未满足工作目录外写入拒绝，因此不接入生产 shell。该行为测试虽可稳定复现，仍是 current-gap，不是安全验收通过。只读环境检查发现已有 `Ubuntu / WSL2 / Stopped`，PATH 未找到 Docker 命令；未启动该 Ubuntu、未安装软件、未提权。已向操作者请求选择隔离路线；不擅自把 Windows PowerShell 方案替换为 WSL，也不因它阻断而停止独立的文件编辑接入。
+**T4.5 命令执行的具体阻断**：官方 Windows ACL backend 在本机临时 fixture 中未满足工作目录外写入拒绝，因此不接入生产 shell。该行为测试仍是 current-gap，不是安全验收通过。本轮按操作者授权启动并检查已有 Ubuntu 26.04 LTS / WSL2：Linux Node 24.18.0、Bubblewrap 0.11.1 已存在，无需重装；Linux 导入官方 subprocess/sandbox 时缺少 Koffi 原生模块，不能直接共用 Windows `node_modules`。按锁版官方只读参数直接运行 Bubblewrap，Windows `cmd.exe` 的固定 echo 成功，说明搬进 WSL 本身尚未阻断宿主执行路径。`/etc/wsl.conf` 当前只有 systemd/default user 设置，没有 interop 限制；本轮没有安装、提权、改配置或重启发行版。更改 `[interop] enabled=false` 会影响整个 Ubuntu 启动 Windows 程序的能力，需先获得明确授权并备份配置，再验证实际效果（[Microsoft 官方配置说明](https://learn.microsoft.com/en-us/windows/wsl/wsl-config)）。
 
 ## 活动验证记录
 
 | Date | Scope | Command | Result | Notes |
 |:--|:--|:--|:--|:--|
+| 2026-09-05 | T4.5 authorized WSL environment | `wsl -d Ubuntu --exec` 下有界版本、程序路径和 `/etc/wsl.conf` 只读检查 | `passed inventory` | Ubuntu 26.04 LTS，WSL2 kernel 6.18.33.2；uid 1000；已有 Linux Node 24.18.0、bwrap 0.11.1。配置只有 boot/systemd 和 default user，无 interop 设置；未安装、改配置、提权或重启 |
+| 2026-09-05 | T4.5 Linux official imports | Windows owned-process hard 60s + Linux `timeout 30s`；实际 Linux Node 从项目导入锁版官方包 | `blocked native dependency` | cordis/bash-sandbox 可导入；subprocess-local/sandbox-local 缺少 Linux Koffi native module。未把 Windows 依赖替换成 Linux 版本，也未安装依赖；完整 DSH Linux 工具探测未执行 |
+| 2026-09-05 | T4.5 direct Bubblewrap prerequisites | 独立有界 `/usr/bin/bwrap --ro-bind / / --dev /dev --unshare-pid --proc /proc --die-with-parent`，分别运行 `/usr/bin/true` 和固定 Windows echo | `current-gap: Windows interop available` | 两次 exit 0，后者返回固定 `DSH_WSL_INTEROP_PROBE`。只验证直接 Bubblewrap，不是实际 DSH 工具链；没有 Windows 写入/配置变更。官方后端不屏蔽 WSL 互操作，也不提供完整读取/网络隔离，不接生产 shell |
+| 2026-09-05 | T4.5 Windows → WSL loopback | hard 60s：`node tests/fixtures/dsh-web-agent/exec/wsl-loopback-probe.mjs`；Linux 内部独立 timeout | `passed TCP direction` | Linux 仅绑定 127.0.0.1:43498，Windows 随机 echo 精确匹配，Linux 原端口重新绑定确认释放，owned child 已退出。Windows 即时重绑定仍 EADDRINUSE，未声称 Windows 转发端口释放；未改防火墙/网络、未开放 0.0.0.0、未连接浏览器或模型 |
+| 2026-09-05 | T4.5 reusable Linux diagnostic | `node --check` 两个独立 probe；`git diff --check` | `passed static; Linux DSH probe not_run` | 保存实际官方工具组合的 Linux fixture（正常命令、workspace 写入、兄弟目录拒绝、超时/取消、Windows interop）。动态导入前检查 Linux/Node 24；只操作唯一自建根并清理，不在 /tmp 制造隔离假阳性。未因语法通过而声称 runtime/产品通过；没有浏览器代码变化，不重建扩展 |
 | 2026-09-05 | T4.5 production file integration | owned-process hard 60s：9 个旧只读/新增编辑/bundle/单双三轮/real-preflight Vitest 文件联合运行 | `passed` | 82/82，13.47s；共享单一路径准入保留只读行为；官方 Editor 四操作、先读/CAS、temp例外/外部路径/junction/目录 view 拒绝、生命周期均覆盖。实际 DSH CLI + 正式 workspace-files patch 经 fake 模型完成 view→一次 str_replace→第三轮终答，清理前独立读取确认真实落盘，nonce 不从 prompt 或外部 getter 传入模型 |
 | 2026-09-05 | T4.5 compile and compatibility | owned-process hard 60s：root tsc、bundle tsc、prompt:freeze；两处测试类型修正后精确复跑相关用例 | `passed` | 根与 bundle 编译通过；prompt 7/7。改用官方 public snapshotEvents（不用私有 session.log）并修正 nonce fixture 类型后，两项选中用例通过，5 项未选中明确 skip；没有重跑已确认的原生越界演示。无浏览器代码改变，不重建扩展，不运行无关全仓/发布门禁 |
 | 2026-09-05 | T4.5 real web write / command production | 新增真实网页写入调用、生产命令接线 | `not_run` | 本轮未请求浏览器、未写用户项目；只读 M4 的实际成功记录不变。文件编辑的新三轮是实际 DSH + fake 模型证据，不冒充网页写入验收；命令隔离路线需要操作者选择 |
