@@ -74,7 +74,7 @@
 | M1 Browser Broker | DeepSeek++ 建立 authenticated loopback WebSocket，并委托现有网页客户端 | `verified` | 只连 `127.0.0.1`；凭据不越界；模式 B 行为/chunk 不变 |
 | M2 DSH adapter + profile | out-of-tree `deepseek-web` LLM adapter、profile 与最小安装 bundle | `verified` | DSH 可显式选择 `provider=deepseek-web`；无隐式 provider fallback；不修改 DSH `master` |
 | M3 Real one-turn | 本机 DSH 经已登录浏览器完成一次真实网页模型回合 | `verified` | 无 DeepSeek API key/其他 provider；流正常结束；最终文本进入同一 DSH session |
-| M4 Local-tool multi-turn | 网页模型请求 DSH 本地只读工具，结果进入下一模型回合并返回最终结果 | `in_progress` | 官方 read 与实际 DSH 两轮 fake 已通过；真实网页工具验收待操作者运行，不能提前标为 verified |
+| M4 Local-tool multi-turn | 网页模型请求 DSH 本地只读工具，结果进入下一模型回合并返回最终结果 | `verified` | 2026-09-05 操作者真实网页两轮：2 model steps、1 read、1 result、同一 session completed；本地只读复验与终答哈希一致 |
 | M5 Disconnect/cancel/recovery | 浏览器离线、取消、断连、重连查询和不明结果处理 | `not_started` | 离线=`waiting_for_browser`；取消幂等；`ambiguous` 不自动重放；唯一终态可重复查询 |
 | M6 Install/release readiness | 本机 Broker、DSH adapter/profile 的安装升级、文档、供应链和发布门禁 | `not_started` | 仅在 M0–M5 验证完成且获得明确 release 授权后执行完整门禁 |
 
@@ -95,7 +95,8 @@
 | P2 | P2-T2 | DSH profile、显式 provider 选择与最小安装 bundle | `—` | `—` | `dsh_bundle_implement`; review: `dsh_api_surface`, `dsh_adapter_implement` | `verified` |
 | P2 | P2-T3 | 实际 `dsh` 入口到 fake browser peer 的单轮闭环 | `—` | `—` | `dsh_fake_e2e_implement`; review: `dsh_fake_e2e_audit`, orchestration | `verified` |
 | P3 | P3-T1 | 无 API key 的真实网页单回合 E2E | `—` | `—` | `dsh_real_smoke_implement`; review: `dsh_adapter_implement`, orchestration | `verified` |
-| P4 | P4-T1 | DSH 本地只读工具多回合与最终结果 E2E | `—` | `—` | `harness_tool_mapping`, `dsh_readonly_tools`, `dsh_tool_loop_e2e`; integration: orchestration | `in_progress` |
+| P4 | P4-T1 | DSH 本地只读工具多回合与最终结果 E2E（T4.1–T4.4） | `—` | `—` | `harness_tool_mapping`, `dsh_readonly_tools`, `dsh_tool_loop_e2e`; integration: orchestration | `verified` |
+| P4 | T4.5 | 官方受控写入、编辑与 PowerShell | `—` | `—` | 同三 lane；integration: orchestration | `in_progress` |
 | P5 | P5-T1 | disconnect/cancel/recovery、`waiting_for_browser` 与不重放 | `TBD` | `TBD` | `TBD` | `not_started` |
 | P6 | P6-T1 | 安装、升级、文档和 release readiness | `TBD` | `TBD` | `TBD` | `not_started` |
 | S1 | S1-T1 | PR #568 独立评估；只服务模式 B 兼容，不作为模式 A 前置 | `TBD` | `TBD` | `TBD` | `not_started` |
@@ -140,24 +141,33 @@
 
 ## 当前状态与下一步
 
-**当前状态**：M0–M3 已验证。操作者最新运行单轮脚本返回 `ok=true/status=completed`：request `web-smoke-0ed11068b66d5ff9f4b8cb4ea423e959`，session `session-f0c01d68-1607-4450-93bd-f246ca73639c`。此前存储行误读的误报已修复，不再要求重复单轮测试。
+**当前状态**：M0–M4 已验证，不再重复单轮或只读测试。真实网页已作为本机 DSH 模型完成工具往返与最终回答。
 
-M4 已实施 T4.1–T4.3：模式 A 复用原 parser 的显式严格模式，官方 read 工具由本机 DSH 执行；actual DSH CLI + fake peer 已验证读取随机文件、结果进入第二次模型请求并完成，也验证读失败能反馈模型。T4.4 真实验收入口与离线测试已实现，真实网页工具结果尚未获取。T4.5 写入/编辑/PowerShell、T4.6 Skills/subagent 尚未开始，不能声称完整开发完成。
+M4/T4.1–T4.4 已完整验收：操作者真实网页运行 `readonly-9347d1d1-2330-4a5c-9571-c19f4c5ee36c` 返回 2 个模型步骤、1 次本机 read、1 次 tool result 和 completed。编排随后对该次原始 session 只读复验通过，终答 SHA-256 与用户 JSON 一致，没有再次调用模型。T4.5 的文件编辑增量已实现并通过实际 DSH + fake 模型三轮、82 项联合回归及编译；命令执行因以下实测隔离缺口未接入。T4.6 Skills/subagent 仍未开始，不能声称完整开发完成。
 
 T4.2 的明确调整与边界见计划：官方 read-only 本身不约束读取，故窄组合复用官方 scope/guard/canonicalPath/resolve/contains，只有原生 read 可见；不复制文件工具，不声称是 OS 沙箱。首验只读取生成的临时文件，不接触真实用户项目。原单轮 profile 保持不变。
 
 **立即下一步**：
 
 1. 编排负责合并代码、自动回归、构建和更新本机开发版产物，不再把这些步骤交给操作者。
-2. 操作者只需重新加载已安装的开发版，按 [本地工具两轮测试](../../tests/real/dsh-web-readonly-acceptance.md) 运行带 `-ReadOnlyTools` 的一个命令；新的配对令牌仍只在本机剪贴板与浏览器中传递。
-3. 收到真实两轮成功后继续 T4.5 受控写入/编辑/PowerShell，再做 T4.6；不重复单轮。PR #568、既有全仓失败和 release 工作继续隔离。
+2. 操作者已完成真实只读验收，暂时无需操作，不重复单轮或只读测试。配对令牌仍只在本机剪贴板与浏览器中传递。
+3. 文件编辑已接入独立增量，接下来需要操作者确认是否在已有 WSL2 Ubuntu 中继续验证命令隔离；确定可用后再完成 T4.5 命令和 T4.6。不把无隔离 shell 作为替代。PR #568、既有全仓失败和 release 工作继续隔离。
 
-本机开发版已原位更新为提交 `5f110ba` 的产物：继续加载 `C:\temp\deepseek-pp-build-e4dcc34\dist\chrome-mv3`，扩展 ID 不变。操作者需重新加载扩展并刷新 DeepSeek 页；本轮没有代替用户激活浏览器扩展或完成真实网页工具请求。
+本机开发版仍为提交 `5f110ba` 的产物：继续加载 `C:\temp\deepseek-pp-build-e4dcc34\dist\chrome-mv3`，扩展 ID 不变。操作者已成功完成加载后的真实工具验收。本次文件编辑改动仅在本机 bundle，不需要再次更新浏览器产物。
+
+**T4.5 命令执行的具体阻断**：官方 Windows ACL backend 在本机临时 fixture 中未满足工作目录外写入拒绝，因此不接入生产 shell。该行为测试虽可稳定复现，仍是 current-gap，不是安全验收通过。只读环境检查发现已有 `Ubuntu / WSL2 / Stopped`，PATH 未找到 Docker 命令；未启动该 Ubuntu、未安装软件、未提权。已向操作者请求选择隔离路线；不擅自把 Windows PowerShell 方案替换为 WSL，也不因它阻断而停止独立的文件编辑接入。
 
 ## 活动验证记录
 
 | Date | Scope | Command | Result | Notes |
 |:--|:--|:--|:--|:--|
+| 2026-09-05 | T4.5 production file integration | owned-process hard 60s：9 个旧只读/新增编辑/bundle/单双三轮/real-preflight Vitest 文件联合运行 | `passed` | 82/82，13.47s；共享单一路径准入保留只读行为；官方 Editor 四操作、先读/CAS、temp例外/外部路径/junction/目录 view 拒绝、生命周期均覆盖。实际 DSH CLI + 正式 workspace-files patch 经 fake 模型完成 view→一次 str_replace→第三轮终答，清理前独立读取确认真实落盘，nonce 不从 prompt 或外部 getter 传入模型 |
+| 2026-09-05 | T4.5 compile and compatibility | owned-process hard 60s：root tsc、bundle tsc、prompt:freeze；两处测试类型修正后精确复跑相关用例 | `passed` | 根与 bundle 编译通过；prompt 7/7。改用官方 public snapshotEvents（不用私有 session.log）并修正 nonce fixture 类型后，两项选中用例通过，5 项未选中明确 skip；没有重跑已确认的原生越界演示。无浏览器代码改变，不重建扩展，不运行无关全仓/发布门禁 |
+| 2026-09-05 | T4.5 real web write / command production | 新增真实网页写入调用、生产命令接线 | `not_run` | 本轮未请求浏览器、未写用户项目；只读 M4 的实际成功记录不变。文件编辑的新三轮是实际 DSH + fake 模型证据，不冒充网页写入验收；命令隔离路线需要操作者选择 |
+| 2026-09-05 | T4.5 official editor | hard 60s：`vitest run tests/dsh-local-mutation-tools.test.ts`（实现 lane） | `passed` | 9/9，2.47s；官方实际 Agent/registry 的 view/create/str_replace/insert、noclobber、先读/CAS、只读和越界/junction拒绝、取消/卸载。另将官方系统 temp 写入例外记为 current-gap，不能当 workspace-only 产品合同 |
+| 2026-09-05 | T4.5 native Windows command boundary | hard 60s：`vitest run tests/dsh-local-exec-tools.test.ts`（实现 lane） | `failed containment; behavior probes recorded` | 6/6 行为记录，8.19s；其中 1 项明确 current-gap：官方 partial ACL 未拒绝 fixture 兄弟目录写入，安全验收不通过。正向命令/工作目录写入、ask 无答复拒绝和 timeout/cancel 实际 PID 退出分别通过。仅自建临时根及专用 TEMP/TMP，清理完毕；无生产 shell、提权、安装或用户目录 ACL 变更 |
+| 2026-09-05 | T4.5 alternate environment inventory | `Get-Command wsl.exe,docker.exe`；`wsl --list --verbose` | `read-only check` | 已有 Ubuntu，WSL2，Stopped；PATH 未发现 docker.exe。只列清单，未启动/配置 Ubuntu；下一路线需操作者选择 |
+| 2026-09-05 | T4.4 real product acceptance | 操作者运行 `start-dsh-web-smoke.ps1 -ConfirmRealWeb -ReadOnlyTools`；编排只读 `verifyReadOnlySession` 复验 | `passed` | run `readonly-9347d1d1-2330-4a5c-9571-c19f4c5ee36c`；session `session-09bb262e-f89f-40eb-9ea0-d18db3f3988f`；2 model steps/1 tool call/1 result；final SHA-256=`1b66c8e8d20c808b3232c0b05d527a8dbaea7c8f0238b9cfcaee5a001bdbc4ed`，49 bytes；原始 session SHA-256=`3589ab84781fd323727455404e5087c7c32247d4b21383406877a8b254f031ce`。复验新增模型请求=0，不读取旧配对秘密；原 runner 成功已含当次精确敏感值检查 |
 | 2026-09-05 | T4 browser build | 无特殊字符 detached worktree `C:\temp\deepseek-pp-build-tools-20260905`，提交 `5f110ba`：`npm run build:all`；manifest/UTF-8/chunk 检查 | `passed` | Chrome/Edge/Firefox MV3 构建通过；manifest 通过，177 个文本资源编码通过，三端 Side Panel chunk 预算通过。沿用既有 Pyodide externalization warnings，不修改依赖或预算 |
 | 2026-09-05 | T4 installed artifact refresh | 原位文件备份/复制；300 个构建文件逐个 SHA-256 比对 | `passed` | 仅 9 个 background/content/main-world JS 变更；原文件备份在 `C:\temp\deepseek-pp-build-e4dcc34\readonly-backup-before-5f110ba`，没有删除文件。安装 dist 与新构建 300/300 相同；Chrome background SHA-256=`f1fb83388476c5be831d7a6d62c883e2ef12e03e54ce29965f347c8b7f797944`。扩展 ID/用户设置不变；未宣称运行中 worker 已刷新 |
 | 2026-09-05 | P3-T1 user-confirmed new run | 操作者运行 `start-dsh-web-smoke.ps1 -ConfirmRealWeb` 并回传 JSON | `passed` | `ok=true/status=completed`；request `web-smoke-0ed11068b66d5ff9f4b8cb4ea423e959`；session `session-f0c01d68-1607-4450-93bd-f246ca73639c`；final SHA-256 `94585b3ee9edca4169b98cc00b65664f4ce371e4d20143ffeb3507c7bf22a3f8`，53 bytes。不要求再次单轮测试 |

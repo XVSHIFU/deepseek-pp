@@ -194,9 +194,11 @@ npm test
 
 ### T4.5 装配官方受控写入、编辑与 PowerShell 工具
 
-- **文件范围**：`packages/dsh-web-agent-bundle/cordis.patch.yml`、该 bundle 的 `package.json`/README/composition fixture、`tests/dsh-local-mutation-tools.test.ts`、`tests/dsh-local-exec-tools.test.ts`、官方工具精确依赖对应的 `package-lock.json` 条目。只有经失败测试和编排层确认上游扩展缺口后，才允许另行分派一个窄 `packages/dsh-web-policy-adapter/**`；本任务不得预设或创建它。
+- **文件范围**：同 bundle 的增量 `cordis.workspace-files.patch.yml`、`src/file-access-policy.ts`/`workspace-files-policy.ts` 与原只读入口、该 bundle 的 `package.json`/README、`tests/dsh-local-mutation-tools.test.ts`、`tests/dsh-workspace-files-policy.test.ts`、`tests/dsh-local-exec-tools.test.ts`、实际 DSH 文件编辑 E2E fixture 与精确依赖 lock。保留已验收的基础/只读 patch，不另造 FS/shell 包。
 - **前置**：T4.4。
 - **实现技术**：在 T4.2 的同一 profile 中装配审核锁版的官方 `@deepseek-ai/dsh-tool-str-replace-editor`、Windows `@deepseek-ai/dsh-tool-pwsh`、`@deepseek-ai/dsh-pwsh-local`/`@deepseek-ai/dsh-pwsh-sandbox`、`@deepseek-ai/dsh-fs-sandbox`、`@deepseek-ai/dsh-sandbox-local`、`@deepseek-ai/dsh-user-approval` 和相应 permission/sandbox-policy 服务。使用官方 effect boundary、workspace-write sandbox 与 ask approval；以 composition/golden 固定工具目录、权限和平台条件。若包名或依赖在锁版源码中不同，以锁版正式 package 名为准并在测试 fixture 中冻结。
+- **2026-09-05 实装边界**：先交付文件编辑增量，官方 `str_replace_editor` 与 `fs-observation-policy` 负责实际 view/create/str_replace/insert、先读及 CAS。上游实测 workspace-write 另含系统 temp 权限、view 不限根，故复用 T4.2 的官方准入 hooks，把 read/editor 的根检查集中到单一 `file-access-policy`；不复制路径算法。Editor 当前只允许普通文件 view，不开放可能沿 junction 递归的目录列表。固定 root 内为 standing 写权限，`ask` 不等于每次写都确认；现有 headless 无答复 UI，真正触发 ask 时拒绝，不自动允许。
+- **命令执行前置待解决**：当前 Windows 官方 ACL 后端报告 partial；受控临时 fixture 实测未满足越界写拒绝，因此不能接入生产 shell 或标记 T4.5 完成。停止原生路线扩展，先与操作者确认是否利用已有 WSL2 Ubuntu 评估更强隔离，不自动安装/提权，不把 partial 改称完整隔离。
 - **明确禁止**：不得实现自有 FS/shell/process/policy；不得暴露 raw 宿主 shell、任意绝对 cwd/env、`danger-full-access`、未隔离 exec、模型可控提权或自动重放写入/命令；不得复制官方路径 guard。只有可复现测试证明官方扩展面缺少产品必要的策略 hook，才可回编排层批准窄 policy adapter，且不得实现工具本身。
 - **验收**：实际 registry、sandbox mode 和 approval policy 与 allowlist fixture 完全一致；允许的 fixture 编辑/命令可验证，越界和未批准操作拒绝；超时/取消后官方 runner 的 owned process tree 退出；不确定副作用不会被 Agent 自动重放。
 - **定向测试**：`npx vitest run tests/dsh-local-mutation-tools.test.ts tests/dsh-local-exec-tools.test.ts`。
