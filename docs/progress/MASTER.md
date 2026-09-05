@@ -145,7 +145,7 @@
 **立即下一步**：
 
 1. 准备隔离 `DSH_HOME`、已登录 DeepSeek 页面、扩展 Browser Broker 与配对配置；未带 `--confirm-real-web` 时不得请求网页模型。
-2. 用户明确 opt-in 后执行一次无 API Key/provider 的真实网页单回合，并保存 runner 输出的脱敏证据。
+2. 在持有上述临时环境变量的同一 PowerShell 中执行一次无 API Key/provider 的真实网页单回合，并保存 runner 输出的脱敏证据；配对令牌不得经聊天或日志转交。
 3. 真实单回合通过后按 T4.1 → T4.4 推进官方只读工具多回合。全仓既有失败回流其原文件 owner，不混入模型代理主线；PR #568 与 release 工作继续隔离。
 
 ## 活动验证记录
@@ -192,3 +192,4 @@
 | 2026-09-04 | P3-T1 offline | `npm run smoke:dsh-web-agent:real`（不带 opt-in） | `passed (expected refusal)` | 稳定输出 `REAL_WEB_CONFIRMATION_REQUIRED` 并返回非零；未启动 DSH、未连接网页 |
 | 2026-09-04 | P3-T1 offline | `node --check scripts/dsh-web-real-smoke.mjs`; `npm run compile`; `git diff --check`; `npm install --package-lock-only --ignore-scripts --offline` | `passed` | runner 语法、根 TypeScript、差异与 `js-yaml@4.3.2` 直接精确依赖锁均通过；独立 reviewer 最终高/中风险项已全部回流修复 |
 | 2026-09-04 | P3-T1 real web | `npm run smoke:dsh-web-agent:real -- --confirm-real-web` | `not_run` | 需要操作者明确准备已登录页面、扩展 Broker、配对值与隔离 DSH_HOME；未把离线测试冒充真实网页证据 |
+| 2026-09-05 | P3-T1 real web | `npm run smoke:dsh-web-agent:real -- --confirm-real-web` | `blocked at preflight` | 用户已明确 opt-in，但编排进程未继承 `DSH_HOME`/Broker 五项临时环境变量；runner 以 `REAL_WEB_BROWSER_ATTESTATION_REQUIRED` 在读取 profile、启动 DSH 或请求网页前停止。需从配置这些变量的同一 PowerShell 执行，不能把本地配对令牌经聊天转交 |
