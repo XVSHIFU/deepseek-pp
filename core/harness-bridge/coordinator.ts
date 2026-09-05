@@ -12,6 +12,7 @@ import type {
   HarnessBridgeHostRequest,
 } from './client';
 import type { HarnessBridgeClientState } from './state';
+import { DeepSeekTurnAdapterError } from './deepseek-turn-adapter';
 import type { WebModelTurnPort } from './model-turn-port';
 import {
   HarnessBridgeSettingsError,
@@ -306,11 +307,17 @@ export class HarnessBridgeCoordinator {
       if (this.binding === binding && acceptedSent && !controller.signal.aborted) {
         binding.client.send(this.eventFrame(active.requestId, record.lastSequence, terminal));
       }
-    } catch {
+    } catch (error) {
       if (!adapterAccepted) this.records.delete(request.params.request_id);
       if (this.binding === binding && !adapterAccepted && !controller.signal.aborted) {
         this.records.delete(request.params.request_id);
-        this.sendError(binding, request.id, request.params.request_id, request.params.request_digest, 'MODEL_PREPARATION_FAILED');
+        this.sendError(
+          binding,
+          request.id,
+          request.params.request_id,
+          request.params.request_digest,
+          safePreparationErrorCode(error),
+        );
       }
     } finally {
       if (this.active === active) this.active = undefined;
@@ -461,6 +468,14 @@ export class HarnessBridgeCoordinator {
     if (!active || (binding && active.binding !== binding)) return;
     if (!active.controller.signal.aborted) active.controller.abort(reason);
   }
+}
+
+function safePreparationErrorCode(error: unknown): string {
+  if (error instanceof DeepSeekTurnAdapterError &&
+      (error.code === 'DEEPSEEK_AUTH_REQUIRED' || error.code === 'DEEPSEEK_PREPARATION_FAILED')) {
+    return error.code;
+  }
+  return 'MODEL_PREPARATION_FAILED';
 }
 
 export function projectSafeState(state: HarnessBridgeClientState): SafeHarnessBridgeState {

@@ -488,7 +488,9 @@ export class DeepSeekWebModelHost implements DeepSeekWebBroker {
 
   private handleRpcError(peer: PeerConnection, operation: PendingOperation, frame: JsonRpcErrorResponse): void {
     const outcome = frame.error.data.external_outcome;
-    const error = new BrokerError("PROTOCOL_VIOLATION", outcome);
+    // The frame has passed the direction/correlation codec. Preserve only
+    // known pre-start classifications, never the browser's free-form message.
+    const error = preStartRemoteError(frame);
     if (operation.kind === "generate") {
       if (outcome === "not_started") {
         if (this.activeGeneration?.requestId === operation.identity.requestId) {
@@ -752,4 +754,18 @@ function trimMap<K, V>(map: Map<K, V>, maximum: number): void {
 
 function stableBrokerError(error: unknown, fallback: "PROTOCOL_VIOLATION", outcome: "not_started"): BrokerError {
   return error instanceof BrokerError ? error : new BrokerError(fallback, outcome);
+}
+
+function preStartRemoteError(frame: JsonRpcErrorResponse): BrokerError {
+  const outcome = frame.error.data.external_outcome;
+  if (outcome === "not_started") {
+    switch (frame.error.data.error_code) {
+      case "DEEPSEEK_AUTH_REQUIRED":
+      case "DEEPSEEK_PREPARATION_FAILED":
+      case "MODEL_PREPARATION_FAILED":
+      case "BROKER_BUSY":
+        return new BrokerError(frame.error.data.error_code, outcome);
+    }
+  }
+  return new BrokerError("PROTOCOL_VIOLATION", outcome);
 }

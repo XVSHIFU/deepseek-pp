@@ -249,6 +249,31 @@ describe("DeepSeek Web DSH adapter", () => {
     expect(broker.cancelRequests).toHaveLength(0);
   });
 
+  it.each([
+    "DEEPSEEK_AUTH_REQUIRED",
+    "DEEPSEEK_PREPARATION_FAILED",
+    "MODEL_PREPARATION_FAILED",
+  ] as const)("reports %s through the official runtime without retrying", async (code) => {
+    const ctx = new Context();
+    await ctx.plugin(LlmRuntime);
+    const broker = new ThrowingBroker(new BrokerError(code, "not_started"));
+    registerDeepSeekWebAdapter(ctx, broker);
+    const chunks = await collect(ctx.llm.stream(generateOptions()));
+    expect(chunks).toEqual([{
+      type: "finish",
+      reason: { kind: "error", failure: { code, message: expect.any(String) } },
+    }]);
+    expect(broker.generateCount).toBe(1);
+    expect(broker.cancelRequests).toHaveLength(0);
+  });
+
+  it("keeps a remote failure with unknown outcome ambiguous", async () => {
+    const broker = new ThrowingBroker(new BrokerError("DEEPSEEK_AUTH_REQUIRED", "unknown"));
+    const adapter = new DeepSeekWebAdapter({ broker });
+    await expect(collect(adapter.stream(generateOptions()))).rejects.toMatchObject({ code: "WEB_MODEL_AMBIGUOUS" });
+    expect(broker.generateCount).toBe(1);
+  });
+
   it("propagates AbortSignal through broker cancellation and emits one aborted finish", async () => {
     const broker = new AbortBroker();
     const controller = new AbortController();

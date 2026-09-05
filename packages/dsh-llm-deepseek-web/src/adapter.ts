@@ -431,6 +431,11 @@ function normalizeAdapterError(error: unknown, signal?: AbortSignal): Error {
         return new LlmError("Waiting for an authenticated DeepSeek++ browser broker.", "WAITING_FOR_BROWSER", { cause: error });
       case "BROKER_BUSY":
         return new LlmError("The DeepSeek Web browser broker is busy.", "BROKER_BUSY", { cause: error });
+      case "DEEPSEEK_AUTH_REQUIRED":
+        return new LlmError("Refresh the signed-in DeepSeek web page so the extension can use its login state.", error.code, { cause: error });
+      case "DEEPSEEK_PREPARATION_FAILED":
+      case "MODEL_PREPARATION_FAILED":
+        return new LlmError("The DeepSeek web model could not prepare the request before generation.", error.code, { cause: error });
       case "REQUEST_TIMEOUT":
         return new LlmError("The DeepSeek Web browser broker timed out.", "TIMEOUT", { cause: error });
       case "PROTOCOL_VIOLATION":

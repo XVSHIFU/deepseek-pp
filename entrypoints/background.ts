@@ -306,7 +306,10 @@ const AUTOMATION_AUTH_TOKEN_MISSING_MESSAGE =
 const deepSeekAutomationClient = createDeepSeekAutomationClient();
 const harnessBridgeCoordinator = new HarnessBridgeCoordinator({
   settings: createHarnessBridgeSettingsStore(),
-  turnPort: createDeepSeekWebModelTurnAdapter({ client: deepSeekAutomationClient }),
+  turnPort: createDeepSeekWebModelTurnAdapter({
+    client: deepSeekAutomationClient,
+    loadClientHeaders: ({ signal }) => loadOrRefreshClientHeaders(undefined, signal),
+  }),
   createClient(settings) {
     if (!settings.pairingToken) throw new Error('harness_bridge_pairing_token_required');
     return new HarnessBridgeClient({
@@ -1050,12 +1053,24 @@ async function broadcastToTabs(payload: Record<string, unknown>, excludeTabId?: 
   });
 }
 
-async function loadOrRefreshClientHeaders(preferredTabId?: number): Promise<Record<string, string> | null> {
+async function loadOrRefreshClientHeaders(
+  preferredTabId?: number,
+  signal?: AbortSignal,
+): Promise<Record<string, string> | null> {
+  assertBackgroundRequestActive(signal);
   const cached = await loadClientHeadersFromStorage();
+  assertBackgroundRequestActive(signal);
   if (cached) return cached;
 
   await refreshClientHeadersFromDeepSeekTabs(preferredTabId);
-  return loadClientHeadersFromStorage();
+  assertBackgroundRequestActive(signal);
+  const refreshed = await loadClientHeadersFromStorage();
+  assertBackgroundRequestActive(signal);
+  return refreshed;
+}
+
+function assertBackgroundRequestActive(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new Error('background_request_aborted');
 }
 
 async function refreshClientHeadersFromDeepSeekTabs(preferredTabId?: number): Promise<boolean> {

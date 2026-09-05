@@ -17,6 +17,17 @@ const DEFAULT_BROKER_PORT = 43_123;
 const COMMAND_TIMEOUT_MS = 180_000;
 const PROCESS_CLEANUP_DEADLINE_MS = 7_000;
 const MAX_COMMAND_OUTPUT_BYTES = 1024 * 1024;
+const REAL_WEB_FAILURE_CAUSE_CODES = new Set([
+  "BROKER_BUSY",
+  "DEEPSEEK_AUTH_REQUIRED",
+  "DEEPSEEK_PREPARATION_FAILED",
+  "MODEL_PREPARATION_FAILED",
+  "TIMEOUT",
+  "WAITING_FOR_BROWSER",
+  "WEB_MODEL_AMBIGUOUS",
+  "WEB_MODEL_PROTOCOL",
+  "WEB_MODEL_TRANSPORT",
+]);
 const REPO_ROOT = resolve(import.meta.dirname, "..");
 const DSH_BIN = join(REPO_ROOT, "node_modules", "@deepseek-ai", "dsh", "lib", "bin.js");
 const BROWSER_READY_PATCH = join(
@@ -116,6 +127,7 @@ export class RealWebSmokeError extends Error {
     super(code, options);
     this.name = "RealWebSmokeError";
     this.code = code;
+    this.causeCode = options?.causeCode;
   }
 }
 
@@ -172,7 +184,8 @@ export async function runRealWebSmoke(options, injected = {}) {
     if (actual.stderr.includes("WAITING_FOR_BROWSER") || actual.stderr.includes("REAL_WEB_BROWSER_NOT_READY")) {
       throw new RealWebSmokeError("REAL_WEB_BROWSER_NOT_READY");
     }
-    throw new RealWebSmokeError("REAL_WEB_DSH_FAILED");
+    const causeCode = await readNewFailureCause(sessionRoot, priorLogs, { cwd, task }, dependencies);
+    throw new RealWebSmokeError("REAL_WEB_DSH_FAILED", causeCode === undefined ? undefined : { causeCode });
   }
   if (actual.stderr !== "") throw new RealWebSmokeError("REAL_WEB_UNEXPECTED_DSH_STDERR");
   if (!actual.stdout.endsWith("\n")) throw new RealWebSmokeError("REAL_WEB_RESPONSE_INVALID");
@@ -215,12 +228,16 @@ export async function main(args, options = {}) {
     return 0;
   } catch (error) {
     const code = error instanceof RealWebSmokeError ? error.code : "REAL_WEB_SMOKE_INTERNAL_ERROR";
+    const causeCode = error instanceof RealWebSmokeError && isAllowedFailureCauseCode(error.causeCode)
+      ? error.causeCode
+      : undefined;
     const usageError = code === "REAL_WEB_CONFIRMATION_REQUIRED" || code === "REAL_WEB_ARGUMENTS_INVALID";
     stderr.write(`${JSON.stringify({
       schema_version: 1,
       ok: false,
       status: "failed",
       error: code,
+      ...(causeCode === undefined ? {} : { cause_code: causeCode }),
       ...(usageError ? { usage: "node scripts/dsh-web-real-smoke.mjs --confirm-real-web" } : {}),
     })}\n`);
     return usageError ? 2 : 1;
@@ -467,6 +484,44 @@ async function readNewSessionEvidence(root, priorLogs, expected) {
     throw new RealWebSmokeError("REAL_WEB_SESSION_EVIDENCE_INVALID");
   }
   return { sessionId: header.id };
+}
+
+async function readNewFailureCause(root, priorLogs, expected, dependencies) {
+  try {
+    const after = await dependencies.listSessionLogs(root);
+    const created = [...after].filter((entry) => !priorLogs.has(entry));
+    if (created.length !== 1) return undefined;
+    const raw = await dependencies.readText(join(root, created[0]));
+    if (!raw.endsWith("\n")) return undefined;
+    const records = raw.split("\n").filter(Boolean).map((line) => JSON.parse(line));
+    const header = records[0];
+    const events = records.slice(1);
+    if (!isRecord(header) || header.type !== "session" || header.cwd !== expected.cwd ||
+        events.length === 0 || events.some((event, index) => !isRecord(event) || event.seq !== index ||
+          !Number.isSafeInteger(event.time) || !isRecord(event.data))) return undefined;
+    const users = events.filter((event) => event.type === "user/message");
+    const requestHeaders = events.filter((event) => event.type === "request/header");
+    const terminals = events.filter((event) => event.type === "turn/end");
+    const user = users[0];
+    const requestHeader = requestHeaders[0];
+    const terminal = terminals[0];
+    if (users.length !== 1 || requestHeaders.length !== 1 || terminals.length !== 1 ||
+        !Array.isArray(user?.data?.content) || user.data.content.length !== 1 ||
+        user.data.content[0]?.type !== "text" || user.data.content[0].text !== expected.task ||
+        requestHeader?.data?.header?.config?.provider !== PROVIDER ||
+        requestHeader?.data?.header?.config?.model !== MODEL ||
+        terminal !== events.at(-1) || terminal?.data?.reason?.kind !== "error") return undefined;
+    const causeCode = terminal.data.reason.error?.code;
+    return isAllowedFailureCauseCode(causeCode) ? causeCode : undefined;
+  } catch {
+    // Cause enrichment is optional: a missing/corrupt durable record must not
+    // replace the original non-zero DSH failure or expose the read/parse error.
+    return undefined;
+  }
+}
+
+function isAllowedFailureCauseCode(value) {
+  return typeof value === "string" && REAL_WEB_FAILURE_CAUSE_CODES.has(value);
 }
 
 async function listSessionLogs(root) {

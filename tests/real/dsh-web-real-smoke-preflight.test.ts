@@ -238,6 +238,68 @@ describe("real DeepSeek Web smoke offline preflight", () => {
     expect(BARRIER).not.toMatch(/WebSocket|fetch\(|playwright|cookie|authorization|cdp/i);
   });
 
+  it("reports an allowlisted durable failure code without exposing DSH or session details", async () => {
+    const privateFailure = [
+      "The DeepSeek Web browser broker rejected the request contract.",
+      TOKEN,
+      ORIGIN,
+      "cookie=private authorization=private C:/private/home",
+    ].join(" ");
+    const fixture = await makeFixture({
+      actual: { exitCode: 1, stdout: "", stderr: privateFailure },
+      failureSession: { code: "WEB_MODEL_PROTOCOL", message: privateFailure },
+    });
+    const output = captureOutput();
+
+    await expect(main(CONFIRM, {
+      ...output.options,
+      cwd: fixture.cwd,
+      env: fixture.env,
+      nodeVersion: "24.18.0",
+      dependencies: fixture.dependencies,
+    })).resolves.toBe(1);
+
+    expect(JSON.parse(output.stderr())).toEqual({
+      schema_version: 1,
+      ok: false,
+      status: "failed",
+      error: "REAL_WEB_DSH_FAILED",
+      cause_code: "WEB_MODEL_PROTOCOL",
+    });
+    expect(output.stderr()).not.toContain(privateFailure);
+    expect(output.stderr()).not.toContain(TOKEN);
+    expect(output.stderr()).not.toContain(ORIGIN);
+    expect(output.stderr()).not.toContain(fixture.cwd);
+  });
+
+  it("keeps the generic failure when the durable cause is unknown or belongs to another task", async () => {
+    for (const failureSession of [
+      { code: "WEB_MODEL_PROTOCOL\",\"leak\":\"private", message: "private" },
+      { code: "WEB_MODEL_PROTOCOL", message: "private", association: "wrong-task" as const },
+      { code: "WEB_MODEL_PROTOCOL", message: "private", association: "wrong-cwd" as const },
+    ]) {
+      const fixture = await makeFixture({
+        actual: { exitCode: 1, stdout: "", stderr: "private stderr" },
+        failureSession,
+      });
+      const output = captureOutput();
+      await expect(main(CONFIRM, {
+        ...output.options,
+        cwd: fixture.cwd,
+        env: fixture.env,
+        nodeVersion: "24.18.0",
+        dependencies: fixture.dependencies,
+      })).resolves.toBe(1);
+      expect(JSON.parse(output.stderr())).toEqual({
+        schema_version: 1,
+        ok: false,
+        status: "failed",
+        error: "REAL_WEB_DSH_FAILED",
+      });
+      expect(output.stderr()).not.toContain("private");
+    }
+  });
+
   it("uses fixed shell-free DSH commands and emits only redacted success evidence", async () => {
     const fixture = await makeFixture();
     const output = captureOutput();
@@ -351,6 +413,11 @@ interface FixtureOptions {
   readonly writeEvidence?: boolean;
   readonly sessionLeak?: "reasoning" | "pairing";
   readonly sessionVariant?: "bad-seq" | "duplicate-context" | "duplicate-assistant" | "wrong-order";
+  readonly failureSession?: {
+    readonly code: string;
+    readonly message: string;
+    readonly association?: "wrong-task" | "wrong-cwd";
+  };
 }
 
 async function makeFixture(options: FixtureOptions = {}) {
@@ -378,7 +445,15 @@ async function makeFixture(options: FixtureOptions = {}) {
     }
     const task = spec.args.at(-1) ?? "";
     if (options.writeEvidence !== false) {
-      await writeSession(home, cwd, task, FINAL_TEXT, options.sessionLeak, options.sessionVariant);
+      await writeSession(
+        home,
+        cwd,
+        task,
+        FINAL_TEXT,
+        options.sessionLeak,
+        options.sessionVariant,
+        options.failureSession,
+      );
     }
     return options.actual ?? { exitCode: 0, stdout: `${FINAL_TEXT}\n`, stderr: "" };
   });
@@ -435,16 +510,21 @@ async function writeSession(
   finalText: string,
   leak?: "reasoning" | "pairing",
   variant?: "bad-seq" | "duplicate-context" | "duplicate-assistant" | "wrong-order",
+  failure?: {
+    readonly code: string;
+    readonly message: string;
+    readonly association?: "wrong-task" | "wrong-cwd";
+  },
 ) {
   const directory = join(home, "sessions", "2026", "09", "04", "session-real-smoke");
   await mkdir(directory, { recursive: true });
   const eventBodies = [
     { type: "turn/start", data: { turn: 1 } },
     { type: "step/start", data: { turn: 1, step: 1 } },
-    { type: "user/message", data: { content: [{ type: "text", text: task }] } },
+    { type: "user/message", data: { content: [{ type: "text", text: failure?.association === "wrong-task" ? `${task}-other` : task }] } },
     { type: "request/header", data: { header: { config: { provider: "deepseek-web", model: "current-web-session" } } } },
     { type: "request/context", data: { provider: "deepseek-web", model: "current-web-session" } },
-    {
+    ...(failure === undefined ? [{
       type: "assistant/message",
       data: {
         message: {
@@ -454,14 +534,23 @@ async function writeSession(
         turn: 1,
         step: 1,
       },
-    },
+    }] : [{
+      type: "assistant/chunk",
+      data: {
+        chunk: { type: "finish", reason: { kind: "error", failure: { code: failure.code, message: failure.message } } },
+        turn: 1,
+        step: 1,
+      },
+    }]),
     ...(leak === "reasoning"
       ? [{ type: "assistant/chunk", data: { chunk: { type: "reasoning-delta", text: "private" } } }]
       : leak === "pairing"
         ? [{ type: "debug", data: { value: TOKEN } }]
         : []),
     { type: "step/end", data: { turn: 1, step: 1 } },
-    { type: "turn/end", data: { turn: 1, reason: { kind: "completed" } } },
+    { type: "turn/end", data: { turn: 1, reason: failure === undefined
+      ? { kind: "completed" }
+      : { kind: "error", error: { code: failure.code, message: failure.message } } } },
   ];
   if (variant === "duplicate-context") {
     eventBodies.splice(5, 0, { type: "request/context", data: { provider: "deepseek-web", model: "current-web-session" } });
@@ -472,7 +561,11 @@ async function writeSession(
   }
   const events = eventBodies.map((event, seq) => ({ ...event, seq, time: 1_788_480_000_000 + seq }));
   if (variant === "bad-seq") events[3]!.seq = 2;
-  const records = [{ type: "session", id: "session-real-smoke", cwd }, ...events];
+  const records = [{
+    type: "session",
+    id: "session-real-smoke",
+    cwd: failure?.association === "wrong-cwd" ? `${cwd}-other` : cwd,
+  }, ...events];
   await writeFile(join(directory, "session.jsonl"), `${records.map((record) => JSON.stringify(record)).join("\n")}\n`, "utf8");
 }
 

@@ -63,6 +63,42 @@ describe("DSH web model loopback host", () => {
     });
   });
 
+  it.each([
+    ["DEEPSEEK_AUTH_REQUIRED", "DEEPSEEK_AUTH_REQUIRED"],
+    ["DEEPSEEK_PREPARATION_FAILED", "DEEPSEEK_PREPARATION_FAILED"],
+    ["MODEL_PREPARATION_FAILED", "MODEL_PREPARATION_FAILED"],
+    ["BROKER_BUSY", "BROKER_BUSY"],
+    ["PRIVATE_UPSTREAM_VALUE", "PROTOCOL_VIOLATION"],
+  ])("preserves only the safe pre-start remote error %s", async (remoteCode, expectedCode) => {
+    const { host, address } = await startHost();
+    const browser = await connectAndAuthenticate(address);
+    const result = collect(host.generate(generateInput()));
+    const assertion = expect(result).rejects.toMatchObject({
+      code: expectedCode,
+      message: expectedCode,
+      externalOutcome: "not_started",
+    });
+    const request = await nextFrame(browser);
+    if (!("method" in request) || request.method !== "model.generate") throw new Error("EXPECTED_GENERATE");
+    browser.send(encodeWebModelFrame({
+      jsonrpc: "2.0",
+      id: request.id,
+      error: {
+        code: -32_000,
+        message: "Private upstream response must not become a broker error message.",
+        data: {
+          schema_version: 1,
+          error_code: remoteCode,
+          retryable: false,
+          external_outcome: "not_started",
+          request_id: request.params.request_id,
+          request_digest: request.params.request_digest,
+        },
+      },
+    }));
+    await assertion;
+  });
+
   it("rejects an invalid local generate before sending and permits a corrected retry", async () => {
     const { host, address } = await startHost();
     const browser = await connectAndAuthenticate(address);

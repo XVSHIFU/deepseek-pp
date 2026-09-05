@@ -45,7 +45,16 @@ export const WEB_MODEL_TURN_BUDGETS = Object.freeze({
 export interface DeepSeekWebModelTurnAdapterDependencies {
   readonly client?: DeepSeekAutomationClient;
   readonly sessions?: WebModelSessionMap;
+  readonly loadClientHeaders?: DeepSeekClientHeadersLoader;
 }
+
+export interface DeepSeekClientHeadersContext {
+  readonly signal: AbortSignal;
+}
+
+export type DeepSeekClientHeadersLoader = (
+  context: DeepSeekClientHeadersContext,
+) => Promise<Record<string, string> | null>;
 
 export type DeepSeekTurnAdapterErrorCode =
   | 'INVALID_REQUEST'
@@ -57,6 +66,7 @@ export type DeepSeekTurnAdapterErrorCode =
   | 'REASONING_NOT_NEGOTIATED'
   | 'REASONING_CALLBACK_REQUIRED'
   | 'REQUEST_ABORTED'
+  | 'DEEPSEEK_AUTH_REQUIRED'
   | 'DEEPSEEK_PREPARATION_FAILED'
   | 'REQUEST_IDENTITY_MISMATCH';
 
@@ -91,11 +101,16 @@ interface ActiveTurn {
 export class DeepSeekWebModelTurnAdapter implements WebModelTurnPort {
   readonly sessions: WebModelSessionMap;
   private readonly client: DeepSeekAutomationClient;
+  private readonly loadClientHeaders: DeepSeekClientHeadersLoader;
   private readonly active = new Map<string, ActiveTurn>();
 
   constructor(dependencies: DeepSeekWebModelTurnAdapterDependencies = {}) {
     this.client = dependencies.client ?? createDeepSeekAutomationClient();
     this.sessions = dependencies.sessions ?? new WebModelSessionMap();
+    this.loadClientHeaders = dependencies.loadClientHeaders ?? (async ({ signal }) => {
+      if (signal.aborted) throw signal.reason ?? createSafeAbortReason('external');
+      return this.client.createClientHeaders();
+    });
   }
 
   async generate(
@@ -140,7 +155,12 @@ export class DeepSeekWebModelTurnAdapter implements WebModelTurnPort {
     };
 
     try {
-      const clientHeaders = this.client.createClientHeaders();
+      const loadedClientHeaders = await waitForClientHeaders(
+        this.loadClientHeaders,
+        turnSignal.signal,
+      );
+      throwIfAborted();
+      const clientHeaders = validateClientHeaders(loadedClientHeaders);
       const binding = await this.prepareBinding(
         request.request_id,
         existingBinding,
@@ -379,10 +399,11 @@ export class DeepSeekWebModelTurnAdapter implements WebModelTurnPort {
         );
       }
       this.releaseUnstarted(request.request_id);
+      if (turnSignal.signal.aborted) throw new DeepSeekTurnAdapterError('REQUEST_ABORTED');
       if (error instanceof DeepSeekTurnAdapterError) throw error;
       throw new DeepSeekTurnAdapterError(
-        turnSignal.signal.aborted ? 'REQUEST_ABORTED' : 'DEEPSEEK_PREPARATION_FAILED',
-        !turnSignal.signal.aborted,
+        'DEEPSEEK_PREPARATION_FAILED',
+        true,
       );
     } finally {
       turnSignal.dispose();
@@ -726,6 +747,49 @@ function isJsonObject(value: unknown): value is Record<string, unknown> {
   } catch {
     return false;
   }
+}
+
+async function waitForClientHeaders(
+  loader: DeepSeekClientHeadersLoader,
+  signal: AbortSignal,
+): Promise<Record<string, string> | null> {
+  if (signal.aborted) throw signal.reason ?? createSafeAbortReason('external');
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (outcome: { value: Record<string, string> | null } | { error: unknown }): void => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener('abort', onAbort);
+      if ('error' in outcome) reject(outcome.error);
+      else resolve(outcome.value);
+    };
+    const onAbort = (): void => finish({ error: signal.reason ?? createSafeAbortReason('external') });
+    signal.addEventListener('abort', onAbort, { once: true });
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+    void Promise.resolve()
+      .then(() => {
+        if (signal.aborted) throw signal.reason ?? createSafeAbortReason('external');
+        return loader({ signal });
+      })
+      .then(
+        (value) => finish({ value }),
+        (error: unknown) => finish({ error }),
+      );
+  });
+}
+
+function validateClientHeaders(value: Record<string, string> | null): Record<string, string> {
+  if (value === null || !isPlainRecord(value) ||
+      typeof value.Authorization !== 'string' || value.Authorization.trim() === '') {
+    throw new DeepSeekTurnAdapterError('DEEPSEEK_AUTH_REQUIRED', true);
+  }
+  if (Object.values(value).some((entry) => typeof entry !== 'string')) {
+    throw new DeepSeekTurnAdapterError('DEEPSEEK_PREPARATION_FAILED', true);
+  }
+  return { ...value };
 }
 
 function isAbortSignal(value: unknown): value is AbortSignal {

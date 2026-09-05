@@ -5,6 +5,7 @@ import {
   HarnessBridgeCoordinator,
   type HarnessBridgeClientPort,
 } from '../core/harness-bridge/coordinator';
+import { DeepSeekTurnAdapterError } from '../core/harness-bridge/deepseek-turn-adapter';
 import type { HarnessBridgeHostRequest } from '../core/harness-bridge/client';
 import type { HarnessBridgeClientState } from '../core/harness-bridge/state';
 import {
@@ -128,6 +129,51 @@ describe('Harness bridge browser-local settings', () => {
 });
 
 describe('Harness bridge background coordinator', () => {
+  it.each([
+    'DEEPSEEK_AUTH_REQUIRED',
+    'DEEPSEEK_PREPARATION_FAILED',
+  ] as const)('forwards only the safe pre-dispatch adapter code %s', async (code) => {
+    const client = new FakeClient();
+    const coordinator = new HarnessBridgeCoordinator({
+      settings: fixedSettingsStore(enabledSettings()),
+      turnPort: fakeTurnPort({
+        generate: vi.fn(async () => { throw new DeepSeekTurnAdapterError(code, true); }),
+      }),
+      createClient: () => client,
+    });
+    await coordinator.initialize();
+    client.ready();
+    client.receive(generateFrame());
+    await flush();
+
+    expect(client.sent.at(-1)).toMatchObject({
+      error: {
+        message: 'Web model request was not started.',
+        data: { error_code: code, external_outcome: 'not_started' },
+      },
+    });
+  });
+
+  it('maps an unknown pre-dispatch exception without exposing its message', async () => {
+    const client = new FakeClient();
+    const coordinator = new HarnessBridgeCoordinator({
+      settings: fixedSettingsStore(enabledSettings()),
+      turnPort: fakeTurnPort({
+        generate: vi.fn(async () => { throw new Error('secret upstream auth response'); }),
+      }),
+      createClient: () => client,
+    });
+    await coordinator.initialize();
+    client.ready();
+    client.receive(generateFrame());
+    await flush();
+
+    expect(client.sent.at(-1)).toMatchObject({
+      error: { data: { error_code: 'MODEL_PREPARATION_FAILED' } },
+    });
+    expect(JSON.stringify(client.sent)).not.toContain('secret upstream auth response');
+  });
+
   it('shares startup initialization, hides credentials, and does not recreate a client for a retried update', async () => {
     const readGate = deferred<HarnessBridgeSettings>();
     const settings = enabledSettings();

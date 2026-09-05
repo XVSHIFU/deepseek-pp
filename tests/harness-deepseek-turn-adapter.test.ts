@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import type {
@@ -6,7 +8,11 @@ import type {
   DeepSeekRequestContext,
   ModelTurn,
 } from '../core/deepseek/automation-client-port';
-import type { StreamCallbacks, SubmitPromptInput } from '../core/deepseek/active-client';
+import {
+  loadClientHeadersFromStorage,
+  type StreamCallbacks,
+  type SubmitPromptInput,
+} from '../core/deepseek/active-client';
 import {
   DeepSeekTurnAdapterError,
   WEB_MODEL_TURN_BUDGETS,
@@ -163,6 +169,105 @@ function adapterWith(
 }
 
 describe('DeepSeekWebModelTurnAdapter', () => {
+  it('uses the async background header dependency without page localStorage', async () => {
+    vi.stubGlobal('localStorage', undefined);
+    const localGet = vi.fn(async () => ({
+      deepseekCachedClientHeaders: {
+        Authorization: 'Bearer background-storage-token',
+        'X-App-Version': '2.0.0',
+      },
+    }));
+    vi.stubGlobal('chrome', { storage: { local: { get: localGet } } });
+    try {
+      const client = fakeClient({
+        createClientHeaders: vi.fn(() => {
+          throw new Error('page localStorage must not be read in background');
+        }),
+      });
+      const loadClientHeaders = vi.fn(async ({ signal }: { signal: AbortSignal }) => {
+        if (signal.aborted) throw new Error('request aborted');
+        return loadClientHeadersFromStorage();
+      });
+      const adapter = createDeepSeekWebModelTurnAdapter({ client, loadClientHeaders });
+
+      await expect(adapter.generate(request(), collectCallbacks().callbacks)).resolves.toMatchObject({
+        type: 'completed',
+      });
+
+      expect(loadClientHeaders).toHaveBeenCalledOnce();
+      expect(loadClientHeaders.mock.calls[0]?.[0].signal).toBeInstanceOf(AbortSignal);
+      expect(localGet).toHaveBeenCalledWith('deepseekCachedClientHeaders');
+      expect(client.createClientHeaders).not.toHaveBeenCalled();
+      expect(client.submitPromptStreaming).toHaveBeenCalledWith(
+        expect.objectContaining({
+          clientHeaders: expect.objectContaining({ Authorization: 'Bearer background-storage-token' }),
+        }),
+        expect.any(Object),
+        expect.any(Object),
+      );
+      const backgroundSource = readFileSync('entrypoints/background.ts', 'utf8');
+      expect(backgroundSource).toContain(
+        'loadClientHeaders: ({ signal }) => loadOrRefreshClientHeaders(undefined, signal)',
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('classifies missing background auth before any DeepSeek request is dispatched', async () => {
+    const client = fakeClient();
+    const loadClientHeaders = vi.fn(async () => null);
+    const sessions = new WebModelSessionMap();
+    const adapter = createDeepSeekWebModelTurnAdapter({ client, sessions, loadClientHeaders });
+    const collected = collectCallbacks();
+
+    await expect(adapter.generate(request(), collected.callbacks)).rejects.toMatchObject({
+      code: 'DEEPSEEK_AUTH_REQUIRED',
+      retryable: true,
+      externalOutcome: 'not_started',
+      message: 'DEEPSEEK_AUTH_REQUIRED',
+    });
+
+    expect(collected.accepted).toEqual([]);
+    expect(client.createClientHeaders).not.toHaveBeenCalled();
+    expect(client.createChatSession).not.toHaveBeenCalled();
+    expect(client.createPowHeaders).not.toHaveBeenCalled();
+    expect(client.submitPromptStreaming).not.toHaveBeenCalled();
+    expect(sessions.snapshot()).toMatchObject({ requestCount: 0, sessionCount: 0 });
+  });
+
+  it('cancels an unresolved async header load and never dispatches a DeepSeek request', async () => {
+    let resolveHeaders!: (value: Record<string, string> | null) => void;
+    const client = fakeClient();
+    const loadClientHeaders = vi.fn(({ signal: _signal }: { signal: AbortSignal }) => (
+      new Promise<Record<string, string> | null>((resolve) => { resolveHeaders = resolve; })
+    ));
+    const sessions = new WebModelSessionMap();
+    const adapter = createDeepSeekWebModelTurnAdapter({ client, sessions, loadClientHeaders });
+    const pending = adapter.generate(request(), collectCallbacks().callbacks);
+    await vi.waitFor(() => expect(loadClientHeaders).toHaveBeenCalledOnce());
+
+    expect(adapter.cancel({
+      schema_version: 1,
+      request_id: 'request-1',
+      request_digest: DIGEST_A,
+      reason: 'cancel_during_auth_refresh',
+    })).toMatchObject({ status: 'cancel_requested' });
+    await expect(pending).rejects.toMatchObject({ code: 'REQUEST_ABORTED', externalOutcome: 'not_started' });
+
+    expect(loadClientHeaders.mock.calls[0]?.[0].signal.aborted).toBe(true);
+    expect(client.createChatSession).not.toHaveBeenCalled();
+    expect(client.createPowHeaders).not.toHaveBeenCalled();
+    expect(client.submitPromptStreaming).not.toHaveBeenCalled();
+    expect(sessions.snapshot()).toMatchObject({ requestCount: 0, sessionCount: 0 });
+    resolveHeaders({ Authorization: 'Bearer too-late' });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(client.createChatSession).not.toHaveBeenCalled();
+    expect(client.createPowHeaders).not.toHaveBeenCalled();
+    expect(client.submitPromptStreaming).not.toHaveBeenCalled();
+  });
+
   it('serializes structured context deterministically and maps text plus terminal tool calls', async () => {
     const seenInputs: SubmitPromptInput[] = [];
     const streamer: TestStreamer = vi.fn(async (input, callbacks) => {
