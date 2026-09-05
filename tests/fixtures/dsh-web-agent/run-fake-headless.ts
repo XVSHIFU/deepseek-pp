@@ -337,7 +337,7 @@ function isRetryableConnectFailure(error: unknown): boolean {
   );
 }
 
-function captureChild(child: HeadlessChild, timeoutMs: number, timeoutCode: string): ChildCapture {
+export function captureChild(child: HeadlessChild, timeoutMs: number, timeoutCode: string): ChildCapture {
   let stdout = "";
   let stderr = "";
   let closed = false;
@@ -373,7 +373,7 @@ function captureChild(child: HeadlessChild, timeoutMs: number, timeoutCode: stri
   return { result, closed: closedPromise, isClosed: () => closed };
 }
 
-async function runManagedCommand(
+export async function runManagedCommand(
   executable: string,
   args: readonly string[],
   cwd: string,
@@ -421,7 +421,7 @@ async function runManagedCommand(
   if (result === undefined || result.exitCode !== 0) throw new Error(`${label}_EXIT_${result?.exitCode ?? -1}`);
 }
 
-async function readOnlySessionLog(root: string): Promise<{
+export async function readOnlySessionLog(root: string): Promise<{
   readonly raw: string;
   readonly records: Record<string, unknown>[];
   readonly logCount: number;
@@ -455,7 +455,7 @@ async function readOnlySessionLog(root: string): Promise<{
   return { raw: content, records, logCount: logs.length };
 }
 
-function createPreparationEnvironment(input: NodeJS.ProcessEnv, home: string): NodeJS.ProcessEnv {
+export function createPreparationEnvironment(input: NodeJS.ProcessEnv, home: string): NodeJS.ProcessEnv {
   const clean = { ...input };
   const secretLike = /(?:API[_-]?KEY|ACCESS[_-]?KEY|SECRET[_-]?KEY|(?:^|_)(?:TOKEN|PASSWORD|CREDENTIALS?)(?:$|_))/i;
   const modelProvider = /^(?:DEEPSEEK|DASHSCOPE|OPENAI|ANTHROPIC|GOOGLE|GEMINI|AZURE_OPENAI|MISTRAL|COHERE|GROQ|OPENROUTER|OLLAMA|AWS_(?:BEDROCK|ACCESS|SECRET|SESSION))/i;
@@ -467,7 +467,7 @@ function createPreparationEnvironment(input: NodeJS.ProcessEnv, home: string): N
   return clean;
 }
 
-function createHeadlessEnvironment(
+export function createHeadlessEnvironment(
   input: NodeJS.ProcessEnv,
   owned: Readonly<NodeJS.ProcessEnv>,
 ): NodeJS.ProcessEnv {
@@ -487,7 +487,7 @@ function environmentValue(input: NodeJS.ProcessEnv, name: string): string | unde
   return actualName === undefined ? undefined : input[actualName];
 }
 
-async function reserveLoopbackPort(): Promise<number> {
+export async function reserveLoopbackPort(): Promise<number> {
   const server = createServer();
   await new Promise<void>((resolveListen, reject) => {
     server.once("error", reject);
@@ -502,7 +502,7 @@ async function reserveLoopbackPort(): Promise<number> {
   return port;
 }
 
-async function canBindLoopback(port: number): Promise<boolean> {
+export async function canBindLoopback(port: number): Promise<boolean> {
   const server = createServer();
   try {
     await new Promise<void>((resolveListen, reject) => {
@@ -522,7 +522,7 @@ async function canBindLoopback(port: number): Promise<boolean> {
   }
 }
 
-async function terminateChildTree(
+export async function terminateChildTree(
   child: HeadlessChild,
   cwd: string,
   env: NodeJS.ProcessEnv,

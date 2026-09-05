@@ -100,4 +100,54 @@ describe("real Harness compaction and child turns with interrupted web transport
     expect(restoredParent.agent.session.snapshotEvents().filter(event => event.type === "tool/call")).toHaveLength(1);
     expect(fixture.peer.observedGenerateRequests).toHaveLength(2);
   }, 20_000);
+
+  it.each(["before", "after"] as const)("does not replay an official editor write when the socket drops %s tool execution", async boundary => {
+    const fixture = await setup();
+    const handle = await fixture.create();
+    const target = join(fixture.workspace, "created-once.txt");
+    const content = "ONE_CONFIRMED_EDITOR_WRITE\n";
+    const callId = "recovery-editor-create";
+    fixture.peer.enqueueGeneration({
+      events: [
+        { type: "tool_call", tool_call_id: callId, name: "str_replace_editor", arguments: { command: "create", path: target, file_text: content } },
+        { type: "completed", finish_reason: "tool_calls" },
+      ],
+      ...(boundary === "before" ? { disconnectAfterEvent: 1 } : {}),
+    });
+    if (boundary === "after") fixture.peer.enqueueGeneration(request => {
+      // Only the real official editor can supply this result and these bytes.
+      const results = request.input.messages.flatMap(message => message.content).filter(block => block.type === "tool_result");
+      expect(results).toHaveLength(1);
+      expect(results[0]).toMatchObject({ tool_call_id: callId, is_error: false });
+      expect(fs.readFileSync(target, "utf8")).toBe(content);
+      return { disconnectAfterAccepted: true };
+    });
+    await expect(fixture.turn(handle, `Create this file exactly once with the editor, then report the confirmed result: ${target}`)).rejects.toThrow();
+    const sessionId = handle.agent.session.id;
+    const before = handle.agent.session.snapshotEvents();
+    const count = boundary === "before" ? 0 : 1;
+    expect(before.filter(event => event.type === "tool/call")).toHaveLength(count);
+    expect(before.filter(event => event.type === "tool/result")).toHaveLength(count);
+    expect(before.filter(event => event.type === "turn/end")).toEqual([expect.objectContaining({ data: expect.objectContaining({ reason: expect.objectContaining({ kind: "error" }) }) })]);
+    const requests = fixture.peer.observedGenerateRequests;
+    expect(requests).toHaveLength(count + 1);
+    expect(journal(fixture).records.at(-1)).toMatchObject({ state: "ambiguous", requestId: requests.at(-1)!.request_id });
+    const originalStat = boundary === "after" ? fs.statSync(target, { bigint: true }) : undefined;
+    if (boundary === "before") expect(fs.existsSync(target)).toBe(false);
+    else expect(fs.readFileSync(target, "utf8")).toBe(content);
+    await fixture.disposeHandle(handle);
+    const resumed = await fixture.resume(sessionId);
+    const restored = resumed.agent.session.snapshotEvents();
+    expect(restored.filter(event => event.type === "tool/call")).toHaveLength(count);
+    expect(restored.filter(event => event.type === "tool/result")).toHaveLength(count);
+    expect(fixture.peer.observedGenerateRequests).toHaveLength(count + 1);
+    if (boundary === "before") expect(fs.existsSync(target)).toBe(false);
+    else {
+      expect(fs.readFileSync(target, "utf8")).toBe(content);
+      const unchanged = fs.statSync(target, { bigint: true });
+      expect(unchanged.ino).toBe(originalStat!.ino);
+      expect(unchanged.mtimeNs).toBe(originalStat!.mtimeNs);
+      expect(unchanged.ctimeNs).toBe(originalStat!.ctimeNs);
+    }
+  }, 20_000);
 });

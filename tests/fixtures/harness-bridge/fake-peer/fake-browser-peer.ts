@@ -34,6 +34,8 @@ export interface FakeGenerationScript {
   readonly events?: readonly ModelEvent[];
   readonly delivery?: "immediate" | "after_cancel";
   readonly disconnectAfterAccepted?: boolean;
+  /** One-based nonterminal event after which the real socket is dropped. */
+  readonly disconnectAfterEvent?: number;
 }
 
 /** A model script may inspect only the model request received over the broker. */
@@ -278,7 +280,11 @@ export class FakeBrowserPeer {
         jsonrpc: "2.0",
         method: "model.event",
         params: { schema_version: 1, request_id: requestId, sequence: record.lastSequence, event },
-      });
+      }, record.script.disconnectAfterEvent === record.lastSequence ? () => {
+        this.expectedClose = true;
+        this.socket.terminate();
+      } : undefined);
+      if (record.script.disconnectAfterEvent === record.lastSequence) return;
     }
   }
 
@@ -335,12 +341,16 @@ function defaultCapabilities(): BridgeCapabilities {
 function validateScript(script: FakeGenerationScript): void {
   const events = script.events ?? [];
   if (script.disconnectAfterAccepted === true) {
-    if (events.length > 0 || script.delivery === "after_cancel") throw new Error("INVALID_FAKE_SCRIPT");
+    if (events.length > 0 || script.delivery === "after_cancel" || script.disconnectAfterEvent !== undefined) throw new Error("INVALID_FAKE_SCRIPT");
     return;
   }
   let terminals = 0;
   for (const event of events) if (isTerminalEvent(event)) terminals += 1;
   if (events.length === 0 || terminals !== 1 || !isTerminalEvent(events[events.length - 1] as ModelEvent)) {
+    throw new Error("INVALID_FAKE_SCRIPT");
+  }
+  if (script.disconnectAfterEvent !== undefined && (!Number.isSafeInteger(script.disconnectAfterEvent)
+    || script.disconnectAfterEvent < 1 || script.disconnectAfterEvent >= events.length || script.delivery === "after_cancel")) {
     throw new Error("INVALID_FAKE_SCRIPT");
   }
 }
