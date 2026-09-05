@@ -25,3 +25,25 @@ dsh --profile deepseek-web-agent 'Reply with a short acknowledgement.'
 With no authenticated browser peer, the turn fails visibly as `WAITING_FOR_BROWSER`. There is no provider fallback. The Host listens only on `127.0.0.1`, accepts one model generation at a time, and stops with the owning Cordis plugin.
 
 This P2 package is installable as a local link from the current checkout. It is not a release artifact: the private adapter, transport, and protocol workspaces do not yet form a self-contained tarball dependency closure.
+
+## Controlled read-only acceptance profile
+
+The opt-in `cordis.readonly.patch.yml` adds the official `read` tool to the same
+base composition. The acceptance launcher supplies an owned temporary fixture
+directory through `DSH_WEB_WORKSPACE_ROOT`; it must not use a real user project
+as this initial test's root. The ordinary one-turn profile above is unchanged.
+
+Only `read` is published. It accepts `file_path`, with optional positive `offset`
+and `limit`; it reads UTF-8 files, not directories. Write, edit, image, search,
+shell, and network tools are not published. The official output includes the
+absolute temporary fixture path; the added persona does not include a project
+working directory.
+
+The pinned upstream `read-only` filesystem mode blocks mutations but does not
+restrict reads to a workspace. The small `readonly-policy` composition therefore
+uses the upstream registry and canonical filesystem `resolve`/`contains` methods
+to admit only reads inside the configured fixture. Traversal, outside absolute
+paths, and static junction escapes are denied. This is a model-path permission
+check, not OS isolation against a malicious local process concurrently changing
+paths between that check and the upstream read. No upstream filesystem, tool
+implementation, or path-containment algorithm is copied.

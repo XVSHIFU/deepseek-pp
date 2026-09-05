@@ -245,14 +245,14 @@ export async function main(args, options = {}) {
   }
 }
 
-function assertExplicitOptIn(args) {
+export function assertExplicitOptIn(args) {
   if (args.length === 0) throw new RealWebSmokeError("REAL_WEB_CONFIRMATION_REQUIRED");
   if (args.length !== 1 || args[0] !== "--confirm-real-web") {
     throw new RealWebSmokeError("REAL_WEB_ARGUMENTS_INVALID");
   }
 }
 
-function validateLaunchEnvironment(env, nodeVersion) {
+export function validateLaunchEnvironment(env, nodeVersion) {
   if (Number.parseInt(nodeVersion.split(".")[0] ?? "", 10) !== 24) {
     throw new RealWebSmokeError("REAL_WEB_NODE_VERSION_MISMATCH");
   }
@@ -307,7 +307,7 @@ export function findModelCredentialEnvironment(env) {
   }).sort();
 }
 
-async function assertNoLayeredModelCredentials(cwd, home, readOptionalText) {
+export async function assertNoLayeredModelCredentials(cwd, home, readOptionalText) {
   for (const path of new Set([join(cwd, ".env"), join(home, ".env")])) {
     const text = await readOptionalText(path);
     if (text === undefined) continue;
@@ -323,7 +323,7 @@ async function assertNoLayeredModelCredentials(cwd, home, readOptionalText) {
   }
 }
 
-function validateProfileManifest(text) {
+export function validateProfileManifest(text) {
   let value;
   try {
     value = JSON.parse(text);
@@ -340,13 +340,21 @@ function validateProfileManifest(text) {
   }
 }
 
-export function validateProfileDump(text) {
+export function parseProfileDump(text) {
   let parsed;
   try {
     parsed = loadYaml(text, { schema: DSH_CONFIG_SCHEMA });
   } catch (cause) {
     throw new RealWebSmokeError("REAL_WEB_PROFILE_INVALID", { cause });
   }
+  return parsed;
+}
+
+export function validateProfileDump(text) {
+  validateProfileRows(parseProfileDump(text));
+}
+
+export function validateProfileRows(parsed) {
   if (!Array.isArray(parsed) || parsed.length !== EXPECTED_PROFILE_ROWS.size) {
     throw new RealWebSmokeError("REAL_WEB_PROVIDER_INVALID");
   }
@@ -422,7 +430,7 @@ function hasExactKeys(value, keys) {
 
 // JSONL rows are storage records, not necessarily individual events: DSH can
 // pack many deltas into one row even when file compression is disabled.
-function decodeSessionLog(raw) {
+export function decodeSessionLog(raw) {
   try {
     const [header, ...records] = raw.split("\n").filter(Boolean).map((line) => JSON.parse(line));
     const events = records.flatMap((record) => {
@@ -501,7 +509,7 @@ export async function readNewSessionEvidence(root, priorLogs, expected) {
   return { sessionId: header.id };
 }
 
-async function readNewFailureCause(root, priorLogs, expected, dependencies) {
+export async function readNewFailureCause(root, priorLogs, expected, dependencies) {
   try {
     const after = await dependencies.listSessionLogs(root);
     const created = [...after].filter((entry) => !priorLogs.has(entry));
@@ -535,7 +543,7 @@ function isAllowedFailureCauseCode(value) {
   return typeof value === "string" && REAL_WEB_FAILURE_CAUSE_CODES.has(value);
 }
 
-async function listSessionLogs(root) {
+export async function listSessionLogs(root) {
   if (!existsSync(root)) return new Set();
   const entries = await readdir(root, { recursive: true });
   const logs = [];

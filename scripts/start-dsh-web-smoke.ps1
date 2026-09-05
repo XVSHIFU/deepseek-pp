@@ -1,6 +1,6 @@
 #Requires -Version 7.2
 [CmdletBinding()]
-param([switch]$ConfirmRealWeb)
+param([switch]$ConfirmRealWeb, [switch]$ReadOnlyTools)
 
 $ErrorActionPreference = 'Stop'
 if (-not $ConfirmRealWeb) {
@@ -10,7 +10,7 @@ if (-not $ConfirmRealWeb) {
 $smokeRepo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $smokeDshHome = Join-Path $smokeRepo '.tmp-deepseek-live\dsh-home'
 $smokeProfile = Join-Path $smokeDshHome 'profiles\deepseek-web-agent\package.json'
-if (-not (Test-Path -LiteralPath $smokeProfile -PathType Leaf)) {
+if (-not $ReadOnlyTools -and -not (Test-Path -LiteralPath $smokeProfile -PathType Leaf)) {
     throw '测试 profile 尚未准备，请按 tests/real/dsh-web-single-turn.md 的「其他 checkout」步骤初始化。'
 }
 
@@ -35,12 +35,17 @@ $env:DSH_TELEMETRY_DISABLED = '1'
 Write-Host '新配对令牌已复制到剪贴板。'
 Write-Host '打开 DeepSeek++：设置 → 本机 Harness；启用桥接，端口填 43123，配对令牌按 Ctrl+V 粘贴，然后保存。'
 Write-Host '此时显示「等待重试」是正常的。保持已登录的 DeepSeek 网页打开。'
+if ($ReadOnlyTools) {
+    Write-Host '本次自动创建临时文件，只测试本机读取→网页终答；不会读取你的项目文件。'
+    Write-Host '按回车后会先准备本地工具；若扩展已显示离线，看到准备完成提示后再点一次「保存」。'
+}
 $null = Read-Host '完成上述配置后按回车开始测试（Ctrl+C 退出）'
 $env:DSH_WEB_REAL_BROWSER_ATTESTATION = 'logged-in-and-broker-enabled'
 
 Push-Location -LiteralPath $smokeRepo
 try {
-    & node (Join-Path $PSScriptRoot 'dsh-web-real-smoke.mjs') --confirm-real-web
+    $smokeRunner = if ($ReadOnlyTools) { 'dsh-web-readonly-acceptance.mjs' } else { 'dsh-web-real-smoke.mjs' }
+    & node (Join-Path $PSScriptRoot $smokeRunner) --confirm-real-web
     $smokeExit = $LASTEXITCODE
 }
 finally {

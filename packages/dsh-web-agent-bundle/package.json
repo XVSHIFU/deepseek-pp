@@ -7,7 +7,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./host": "./src/host.ts",
+    "./readonly-policy": "./src/readonly-policy.ts",
     "./cordis.patch.yml": "./cordis.patch.yml",
+    "./cordis.readonly.patch.yml": "./cordis.readonly.patch.yml",
     "./package.json": "./package.json"
   },
   "types": "./src/index.ts",
@@ -15,6 +17,7 @@
     "src/**/*.ts",
     "scripts/seed-profile.mjs",
     "cordis.patch.yml",
+    "cordis.readonly.patch.yml",
     "README.md"
   ],
   "engines": {
@@ -33,8 +36,12 @@
     "@deepseek-ai/dsh-agent": "0.1.2-rc.1",
     "@deepseek-ai/dsh-agent-default-model": "0.1.2-rc.1",
     "@deepseek-ai/dsh-agent-loop": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-fs": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-fs-sandbox": "0.1.2-rc.1",
     "@deepseek-ai/dsh-headless": "0.1.2-rc.1",
     "@deepseek-ai/dsh-llm": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-sandbox": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-sandbox-policy": "0.1.2-rc.1",
     "@deepseek-ai/dsh-scope": "0.1.2-rc.1",
     "@deepseek-ai/dsh-session": "0.1.2-rc.1",
     "@deepseek-ai/dsh-session-checkpoint-policy": "0.1.2-rc.1",
@@ -42,6 +49,7 @@
     "@deepseek-ai/dsh-session-persistence-jsonl": "0.1.2-rc.1",
     "@deepseek-ai/dsh-session-projection": "0.1.2-rc.1",
     "@deepseek-ai/dsh-system-prompt": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-tool-fs": "0.1.2-rc.1",
     "@deepseek-ai/dsh-tools": "0.1.2-rc.1",
     "@deepseek-ai/schemastery": "3.18.2",
     "@deepseek-pp/dsh-llm-deepseek-web": "0.0.0-private",

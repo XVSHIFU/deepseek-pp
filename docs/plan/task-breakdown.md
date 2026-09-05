@@ -158,7 +158,7 @@ npm test
 
 ### T4.1 冻结工具描述与 structured tool-call 映射
 
-- **文件范围**：`packages/web-model-protocol/src/tool-*.ts`、对应 protocol fixture、`core/harness-bridge/tool-call-adapter.ts`、`packages/dsh-llm-deepseek-web/src/tool-*.ts`、`tests/harness-tool-wire.test.ts`。
+- **文件范围**：既有 `core/harness-bridge/deepseek-turn-adapter.ts`、`core/interceptor/streaming-tool-call-parser.ts`、`core/tool/xml-tags.ts` 与 `tests/harness-tool-wire.test.ts`；已有 schema/消息映射足够时不另建 adapter/parser。共享 parser 的严格检查必须默认关闭，只由模式 A 显式启用。
 - **前置**：T3.1、T1.2、T2.1。
 - **实现技术**：把 DSH tool schema 转为 DeepSeek++ 既有模型可见工具协议，复用现有 streaming XML/tool parser，并把结果映射成 DSH `tool-call` chunks。工具 ID 在 request 内稳定；未知工具、非法 JSON、重复调用 ID、半截 XML 和 parser overflow 显式失败。工具结果由 DSH 下一次模型请求提供，Browser 不执行本地工具。
 - **明确禁止**：不得复制现有 tool parser；不得让 Browser 直接调用 MCP/Native tool 代替 Harness；不得在 parser 失败时把疑似工具文本静默当普通成功终答；不得改变现有 inline-agent prompt golden，除非独立兼容决策批准。
@@ -167,11 +167,11 @@ npm test
 
 ### T4.2 装配官方 workspace-scoped 只读 DSH 工具
 
-- **文件范围**：`packages/dsh-web-agent-bundle/cordis.patch.yml`、该 bundle 的 `package.json`/README 和 composition fixture、`tests/dsh-local-read-tools.test.ts`、官方工具精确依赖对应的 `package-lock.json` 条目；不得创建 `packages/dsh-local-tools`。
+- **文件范围**：`packages/dsh-web-agent-bundle/cordis.readonly.patch.yml`、`src/readonly-policy.ts`、该 bundle 的 `package.json`/README 和 composition fixture、`tests/dsh-local-read-tools.test.ts`、官方工具精确依赖对应的 `package-lock.json` 条目；不改变已通过单轮的基础 patch，不创建 `packages/dsh-local-tools`。
 - **前置**：T3.1、T2.2。
-- **实现技术**：直接装配审核锁版的官方 `@deepseek-ai/dsh-fs-sandbox`、`@deepseek-ai/dsh-tool-fs`、`@deepseek-ai/dsh-tool-fs-search` 及其必需 sandbox/session-policy 服务；profile/preset 首验只发布官方 read/list/grep 类工具，权限固定 read-only，workspace root 只能由可信本机 profile 注入。先用锁版源码和官方测试确认其 realpath/symlink/junction、分片和输出边界，再以本仓库 composition/integration tests 固定实际行为。
-- **明确禁止**：不得重写 FS 工具、路径 guard、搜索器或 policy；不得直接暴露现有 DeepSeek++ `local_file_read`/MCP/Shell Host 工具；不得发布写入、编辑、PowerShell、网络或提权工具；不得由模型修改 workspace root/policy。若官方工具不能满足安全验收，本任务必须以可复现缺口阻塞并回编排层，不得自行造包补洞。
-- **验收**：实际 DSH tool registry 只出现审核过的官方只读工具；fixture 内文件可读/列出/搜索；越界、symlink/junction escape、Windows 大小写/drive 变体和敏感绝对路径输出均按锁版官方语义 fail closed 或被 profile 明确禁止；composition 不包含 mutation/shell tool。
+- **实现技术（2026-09-05 窄调整）**：锁定 `0.1.2-rc.1`。已由可复现 current-gap 测试确认：官方 fs-sandbox 的 read-only 模式只限制写入，不约束读取路径；官方 fs 工具一次注册 read/write/edit。首验只需官方 `read`，不加载需要子进程的搜索工具。编排层允许 bundle 内一个组合插件：官方私有 scope 装配原工具，仅把原生 read 定义发布到正式 registry；用官方 `tools/pre-execute` + 单调 `tools.guard` 执行准入，路径解析/包含判断全部复用官方 `canonicalPath`、`fs.resolve/contains`。可信 launcher 注入唯一临时 workspace。
+- **明确禁止**：不得复制 FS 工具或路径算法，不得新增另一工具执行链；不得直接暴露 DeepSeek++ 的 local_file_read/MCP/Shell Host；不发布 mutation/shell/network 工具。新增官方缺口仍先回报编排，不自行扩大策略。此组合不是抵御恶意本机进程并发替换路径的 OS 沙箱。
+- **验收**：registry 只有官方 read；临时文件可读，目录由官方工具拒绝；越界、静态 junction（含 session cwd 为 junction）、Windows 大小写/drive 变体均覆盖。工具输出保留官方格式，包含临时 fixture 的绝对路径；不得声称已隐藏所有路径。仅在生成的临时目录验收，不以真实用户项目作为安全测试目录。
 - **定向测试**：`npx vitest run tests/dsh-local-read-tools.test.ts tests/dsh-web-agent-bundle.test.ts`；`npm run build --workspace packages/dsh-web-agent-bundle --if-present`。
 
 ### T4.3 假模型工具多轮 E2E

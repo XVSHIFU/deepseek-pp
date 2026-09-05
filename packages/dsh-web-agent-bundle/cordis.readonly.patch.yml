@@ -1,0 +1,28 @@
+# Opt-in addition over cordis.patch.yml, never an overlay on upstream dsh-base.
+# The trusted launcher supplies one owned fixture root. No model-facing tool can
+# change it, and neither search subprocesses nor mutation tools are published.
+- id: system-prompt
+  name: '@deepseek-ai/dsh-system-prompt'
+  config:
+    includeHarnessIdentity: true
+    includeRuntimeContext: false
+    persona: >-
+      You are a local read-only agent powered by the DeepSeek web model.
+      Use the available read tool to inspect the requested fixture file.
+
+- insert:
+    - id: readonly-sandbox-policy
+      name: '@deepseek-ai/dsh-sandbox-policy'
+      config:
+        mode: read-only
+        workspaceRoot: !!js process.env.DSH_WEB_WORKSPACE_ROOT
+
+    - id: readonly-fs-sandbox
+      name: '@deepseek-ai/dsh-fs-sandbox'
+      config:
+        cwd: !!js process.env.DSH_WEB_WORKSPACE_ROOT
+
+    - id: deepseek-web-readonly-policy
+      name: '@deepseek-pp/dsh-web-agent-bundle/readonly-policy'
+      config:
+        workspaceRoot: !!js process.env.DSH_WEB_WORKSPACE_ROOT

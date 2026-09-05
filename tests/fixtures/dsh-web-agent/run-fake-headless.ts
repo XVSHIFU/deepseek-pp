@@ -6,6 +6,8 @@ import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import type { Readable } from "node:stream";
 
+import { decodeSeqRanges, decodeStorageRecord } from "@deepseek-ai/dsh-session";
+
 import {
   WEB_MODEL_PATH,
   WEB_MODEL_SUBPROTOCOL,
@@ -17,6 +19,7 @@ import type { ModelGenerateRequest } from "@deepseek-pp/web-model-protocol";
 import {
   FAKE_EXTENSION_ORIGIN,
   FakeBrowserPeer,
+  type FakeGenerationInput,
 } from "../harness-bridge/fake-peer/index.ts";
 
 const REPO_ROOT = resolve(import.meta.dirname, "..", "..", "..");
@@ -59,12 +62,22 @@ const HEADLESS_SYSTEM_ENVIRONMENT = [
   "WINDIR",
 ] as const;
 
-export interface FakeHeadlessOptions {
+interface FakeHeadlessCommonOptions {
   readonly task: string;
+  readonly inheritedEnvironmentProbe?: Readonly<NodeJS.ProcessEnv>;
+  readonly patches?: readonly string[];
+  readonly prepareWorkspace?: (workspace: string) => Promise<void>;
+}
+
+export type FakeHeadlessOptions = FakeHeadlessCommonOptions & ({
   readonly answerFragments: readonly [string, ...string[]];
   readonly usage: { readonly inputTokens: number; readonly outputTokens: number };
-  readonly inheritedEnvironmentProbe?: Readonly<NodeJS.ProcessEnv>;
-}
+  readonly generationScripts?: never;
+} | {
+  readonly generationScripts: readonly [FakeGenerationInput, ...FakeGenerationInput[]];
+  readonly answerFragments?: never;
+  readonly usage?: never;
+});
 
 export interface FakeHeadlessResult {
   readonly command: {
@@ -83,6 +96,7 @@ export interface FakeHeadlessResult {
   readonly workspaceCwd: string;
   readonly childEnvironmentKeys: readonly string[];
   readonly portReleased: boolean;
+  readonly childClosed: boolean;
   readonly tempRootRemoved: boolean;
 }
 
@@ -120,8 +134,13 @@ export async function runFakeDshHeadless(options: FakeHeadlessOptions): Promise<
     DSH_WEB_PAIRING_TOKEN: pairingToken,
     DSH_WEB_ALLOWED_EXTENSION_ORIGINS: FAKE_EXTENSION_ORIGIN,
     DSH_WEB_FAKE_RELEASE_FILE: releaseFile,
+    DSH_WEB_WORKSPACE_ROOT: workspace,
   });
-  const args = [DSH_BIN, "--profile", PROFILE_NAME, "--patch", BARRIER_PATCH, options.task] as const;
+  const args = [
+    DSH_BIN, "--profile", PROFILE_NAME,
+    ...(options.patches ?? []).flatMap((patch) => ["--patch", patch]),
+    "--patch", BARRIER_PATCH, options.task,
+  ] as const;
   const command = {
     executable: process.execPath,
     args,
@@ -138,6 +157,7 @@ export async function runFakeDshHeadless(options: FakeHeadlessOptions): Promise<
 
   try {
     await mkdir(workspace, { recursive: true });
+    await options.prepareWorkspace?.(workspace);
     await runManagedCommand(
       process.execPath,
       [SEED_SCRIPT, "--home", home],
@@ -174,17 +194,23 @@ export async function runFakeDshHeadless(options: FakeHeadlessOptions): Promise<
       subprotocol: WEB_MODEL_SUBPROTOCOL,
     };
     peer = await connectWhileChildRuns(address, pairingToken, capture);
-    peer.enqueueGeneration({
-      events: [
-        ...options.answerFragments.map((text) => ({ type: "text_delta" as const, text })),
-        {
-          type: "usage" as const,
-          input_tokens: options.usage.inputTokens,
-          output_tokens: options.usage.outputTokens,
-        },
-        { type: "completed" as const, finish_reason: "stop" as const },
-      ],
-    });
+    let generationScripts: readonly FakeGenerationInput[];
+    if (options.generationScripts !== undefined) {
+      generationScripts = options.generationScripts;
+    } else {
+      generationScripts = [{
+        events: [
+          ...options.answerFragments.map((text) => ({ type: "text_delta" as const, text })),
+          {
+            type: "usage" as const,
+            input_tokens: options.usage.inputTokens,
+            output_tokens: options.usage.outputTokens,
+          },
+          { type: "completed" as const, finish_reason: "stop" as const },
+        ],
+      }];
+    }
+    for (const script of generationScripts) peer.enqueueGeneration(script);
     await writeFile(releaseFile, "ready\n", { encoding: "utf8", flag: "wx" });
 
     const childResult = await capture.result;
@@ -209,6 +235,7 @@ export async function runFakeDshHeadless(options: FakeHeadlessOptions): Promise<
       workspaceCwd: workspace,
       childEnvironmentKeys: Object.keys(env).sort(),
       portReleased,
+      childClosed: capture.isClosed(),
     };
   } catch (error) {
     failure = error;
@@ -253,6 +280,13 @@ export async function runFakeDshHeadless(options: FakeHeadlessOptions): Promise<
 
 function validateOptions(options: FakeHeadlessOptions): void {
   if (options.task.trim() === "") throw new Error("FAKE_HEADLESS_TASK_REQUIRED");
+  if (options.patches?.some((patch) => !isAbsolute(patch) || !existsSync(patch))) {
+    throw new Error("FAKE_HEADLESS_PATCH_INVALID");
+  }
+  if (options.generationScripts !== undefined) {
+    if (options.generationScripts.length === 0) throw new Error("FAKE_HEADLESS_SCRIPT_REQUIRED");
+    return;
+  }
   if (options.answerFragments.length === 0 || options.answerFragments.some((text) => text.length === 0)) {
     throw new Error("FAKE_HEADLESS_ANSWER_REQUIRED");
   }
@@ -381,14 +415,27 @@ async function readOnlySessionLog(root: string): Promise<{
   if (logs.length !== 1) throw new Error(`EXPECTED_ONE_DURABLE_SESSION_LOG:${logs.length}`);
   const content = await readFile(join(root, logs[0] as string), "utf8");
   if (!content.endsWith("\n")) throw new Error("DURABLE_SESSION_LOG_NOT_FLUSHED");
-  const records = content.split("\n").filter((line) => line.length > 0).map((line) => {
+  const stored = content.split("\n").filter((line) => line.length > 0).map((line) => {
     const parsed: unknown = JSON.parse(line);
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
       throw new Error("INVALID_DURABLE_SESSION_RECORD");
     }
     return parsed as Record<string, unknown>;
   });
-  if (records.length === 0 || records[0]?.type !== "session") throw new Error("DURABLE_SESSION_HEADER_MISSING");
+  if (stored.length === 0 || stored[0]?.type !== "session") throw new Error("DURABLE_SESSION_HEADER_MISSING");
+  const records: Record<string, unknown>[] = [stored[0]];
+  for (const row of stored.slice(1)) {
+    // Physical JSONL rows can contain text-chunks; only upstream decoding owns
+    // the one-row-to-many-events expansion and source-sequence range encoding.
+    const decodedRow = row.sourceEventSeqs === undefined ? row : {
+      ...row,
+      sourceEventSeqs: decodeSeqRanges(row.sourceEventSeqs, row.seq as number),
+    };
+    records.push(...decodeStorageRecord(decodedRow as Parameters<typeof decodeStorageRecord>[0]) as unknown as Record<string, unknown>[]);
+  }
+  if (records.slice(1).some((record, index) => record.seq !== index)) {
+    throw new Error("INVALID_DURABLE_SESSION_SEQUENCE");
+  }
   return { raw: content, records, logCount: logs.length };
 }
 

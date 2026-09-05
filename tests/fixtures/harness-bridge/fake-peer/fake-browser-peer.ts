@@ -36,6 +36,10 @@ export interface FakeGenerationScript {
   readonly disconnectAfterAccepted?: boolean;
 }
 
+/** A model script may inspect only the model request received over the broker. */
+export type FakeGenerationResponder = (request: ModelGenerateRequest["params"]) => FakeGenerationScript;
+export type FakeGenerationInput = FakeGenerationScript | FakeGenerationResponder;
+
 interface FakeRequestRecord {
   readonly requestDigest: string;
   readonly script: FakeGenerationScript;
@@ -48,7 +52,7 @@ export class FakeBrowserPeer {
   private readonly socket: WebSocket;
   private readonly validator = new WebModelSequenceValidator();
   private readonly timeoutMs: number;
-  private readonly generationScripts: FakeGenerationScript[] = [];
+  private readonly generationScripts: FakeGenerationInput[] = [];
   private readonly records = new Map<string, FakeRequestRecord>();
   private readonly activityWaiters = new Set<() => void>();
   private readonly ready: Deferred<void> = deferred<void>();
@@ -115,7 +119,11 @@ export class FakeBrowserPeer {
     return this.queryRequestCountValue;
   }
 
-  enqueueGeneration(script: FakeGenerationScript): void {
+  enqueueGeneration(script: FakeGenerationInput): void {
+    if (typeof script === "function") {
+      this.generationScripts.push(script);
+      return;
+    }
     validateScript(script);
     this.generationScripts.push({
       ...script,
@@ -186,8 +194,10 @@ export class FakeBrowserPeer {
   }
 
   private handleGenerate(frame: Extract<WebModelFrame, { method: "model.generate" }>): void {
-    const script = this.generationScripts.shift();
-    if (!script) throw new Error("FAKE_PEER_SCRIPT_MISSING");
+    const input = this.generationScripts.shift();
+    if (!input) throw new Error("FAKE_PEER_SCRIPT_MISSING");
+    const script = typeof input === "function" ? input(structuredClone(frame.params)) : input;
+    validateScript(script);
     const record: FakeRequestRecord = {
       requestDigest: frame.params.request_digest,
       script,
