@@ -35,7 +35,7 @@ flowchart TD
     T42 --> T43
     T31 --> T44["T4.4 First Real Product Acceptance"]
     T43 --> T44
-    T44 --> T45["T4.5 Compose Official Write/Edit/Pwsh"]
+    T44 --> T45["T4.5 Compose Official Write/Edit/Linux Bash"]
     T45 --> T46["T4.6 Harness Features"]
     T44 -. "文件增量完成后，可并行开发无 shell 部分" .-> T46
     T46 --> GB
@@ -88,7 +88,7 @@ flowchart TD
 | Browser | T1.1 与 T1.2 可并行，之后 T1.3 | `core/harness-bridge/**`、`entrypoints/background.ts` | T1.3 是唯一 Background 组合 owner；T1.1/T1.2 不改 entrypoint |
 | DSH | T2.1 与 Browser lane 并行，随后 T2.2/T2.3 | `packages/dsh-llm-deepseek-web/**`、`packages/dsh-web-agent-bundle/**` | Harness version/lock 由 T2.2 统一裁决 |
 | Tool Wire | T4.1 | 跨 protocol/browser/adapter 的 tool 专用文件 | 只允许 `tool-*` 文件；不得顺手改各包核心 transport/client |
-| Official Tool Composition | T4.2，T4.5 在 T4.4 后 | `packages/dsh-web-agent-bundle/cordis.patch.yml`、composition fixtures | 直接装配锁版官方 FS/search/editor/PowerShell/sandbox/approval；不得自造工具或 policy |
+| Official Tool Composition | T4.2，T4.5 在 T4.4 后 | `packages/dsh-web-agent-bundle/cordis.patch.yml`、增量 patches、composition fixtures | 装配锁版官方 FS/editor/Linux Bash/sandbox/approval；仅允许计划已批准的窄准入组合，不自造工具/执行器 |
 | Recovery | T5.1、T5.2 可在各自热点并行；T5.3 汇合 | journal、browser cache、cancel 专用文件 | T5.3 只接线取消，不重写前两者状态机 |
 | PR #568 | I568.1 | PR 原始 diff | 独立 branch/worktree；禁止占用 Broker/Adapter 热点 |
 
@@ -104,7 +104,7 @@ DSH StreamChunk/model   -> T2.1
 Cordis composition      -> T2.2
 Tool wire/parser        -> T4.1
 官方只读工具 composition -> T4.2
-官方写/编辑/PowerShell composition -> T4.5
+官方写/编辑/Linux Bash composition -> T4.5
 Host journal            -> T5.1
 Browser recovery cache  -> T5.2
 取消传播                -> T5.3

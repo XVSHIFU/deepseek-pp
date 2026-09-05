@@ -198,7 +198,7 @@ npm test
 - **前置**：T4.4。
 - **实现技术**：文件编辑使用锁版官方 `@deepseek-ai/dsh-tool-str-replace-editor`、`@deepseek-ai/dsh-fs-sandbox`、`@deepseek-ai/dsh-user-approval` 与 sandbox-policy。命令执行采用下面明确授权的 Linux 官方 Bash/sandbox/subprocess 路线；原生 Windows PowerShell 仅保留失败边界的诊断 fixture，不接生产，不使用 raw local executor。使用官方 effect boundary、workspace-write sandbox 与 ask approval；以 composition/golden 固定工具目录、权限和平台条件，精确锁版 `0.1.2-rc.1`。
 - **2026-09-05 实装边界**：先交付文件编辑增量，官方 `str_replace_editor` 与 `fs-observation-policy` 负责实际 view/create/str_replace/insert、先读及 CAS。上游实测 workspace-write 另含系统 temp 权限、view 不限根，故复用 T4.2 的官方准入 hooks，把 read/editor 的根检查集中到单一 `file-access-policy`；不复制路径算法。Editor 当前只允许普通文件 view，不开放可能沿 junction 递归的目录列表。固定 root 内为 standing 写权限，`ask` 不等于每次写都确认；现有 headless 无答复 UI，真正触发 ask 时拒绝，不自动允许。
-- **2026-09-05 命令路线确认**：Windows 官方 ACL 后端未通过工作目录外写入拒绝，原生 PowerShell 不接入生产。操作者已明确授权项目专用 Linux 依赖安装、备份后关闭 Ubuntu Windows interop、仅重启 Ubuntu。已完成独立 Linux checkout/锁定依赖安装，原配置保留备份；实际官方 Bash/Bubblewrap 工具链通过工作区写入、同级目录拒绝、Windows 程序执行失败、超时/取消进程退出。该证据不是新的真实网页验收，也不代表整个 T4.5 完成。
+- **2026-09-05 命令路线确认**：Windows 官方 ACL 后端未通过工作目录外写入拒绝，原生 PowerShell 不接入生产。操作者已明确授权项目专用 Linux 依赖安装、备份后关闭 Ubuntu Windows interop、仅重启 Ubuntu。已完成独立 Linux checkout/锁定依赖安装，原配置保留备份；实际官方 Bash/Bubblewrap 工具链通过工作区写入、同级目录拒绝、Windows 程序执行失败、超时/取消进程退出。随后操作者真实网页命令验收已通过，原 session 和文件只读复验一致，详见 MASTER；这不等于 editor 专用真实网页检查或后续恢复/交付已完成。
 - **Linux 增量合同**：新增 `cordis.linux-commands.patch.yml`、`src/linux-command-policy.ts`，按 `base → workspace-files → harness-features → linux-commands` 组合，复用原三工具准入与捕获的官方 Bash 定义，不增加工具执行器。必须非 root Linux；WSL 实际 binfmt 状态不可确认或 interop 启用时拒绝。固定 workspace-write 与工作目录，禁止模型提供 cwd/env/提升/后台选项，子 Agent 同样约束。Linux CLI/fake peer 测试放在 `tests/dsh-web-linux-commands-e2e.test.ts`，真实 opt-in 命令 runner 复用既有准备与生命周期；Windows `-LinuxCommands` 仅启动整个 Linux DSH，不在 Windows 执行模型工具。安装脚本、交互恢复、打包仍归 P6。
 - **WSL 路线限定**：若继续，DSH、FS、subprocess 与官方 Linux sandbox 必须在同一 Linux 运行时，组合锁版 `subprocess-local → sandbox-policy → sandbox-local → bash-sandbox → shell-env → tool-bash`；不让 Windows Node 包装 `wsl.exe` 来伪装 Linux 后端。Broker 仍只监听 `127.0.0.1`，不新增传输或开放 LAN。Linux 官方后端只提供相应文件写入限制，不宣称隔离所有可读文件或网络；实际工具链验证前不把直接 Bubblewrap/TCP 探测当作产品验收。相关独立探测放在 `tests/fixtures/dsh-web-agent/exec/`，不改变已验收的 Windows 只读/文件编辑入口。
 - **明确禁止**：不得实现自有 FS/shell/process/policy；不得暴露 raw 宿主 shell、任意绝对 cwd/env、`danger-full-access`、未隔离 exec、模型可控提权或自动重放写入/命令；不得复制官方路径 guard。只有可复现测试证明官方扩展面缺少产品必要的策略 hook，才可回编排层批准窄 policy adapter，且不得实现工具本身。
@@ -213,7 +213,21 @@ npm test
 - **网页兼容增量**：用单独 opt-in `cordis.harness-features.patch.yml` 保持已验收基础/文件入口不变。Skill 来源只取选定工作区的 `.agents/skills`，不扫描用户全局目录；子 Agent 固定同一网页路由、前台串行、最多一层。主/子 Agent 都保持既有 wire `purpose=agent`，子任务由独立 `session_id` 及官方 session header 的 origin/parentSession/delegationDepth 区分；摘要仍显式 `purpose=compaction`，不扩大协议 purpose 枚举。官方 `BasicCompactionEngine` 总传网页不支持的 maxTokens，故只覆盖其公开 `summarize` hook（`src/web-compaction.ts`）：一次同路由摘要请求、独立短检查点指令、官方 BlockAssembler；不复制区段选择/剪枝/持久化算法，不忽略不支持的参数或记录未生效 token 上限，失败不伪造摘要/自动重试。
 - **明确禁止**：不得启动 Pi AgentSession；不得让 subagent 使用本地/云 fallback 模型；不得声称 P0 并发 subagent；不得在 Browser 离线时静默跳过 compaction 或伪造摘要。
 - **验收**：fake peer fixture 覆盖 session resume、skill load、一次 compaction purpose 和一个串行 child agent；各 child 有独立 DSH session，所有模型调用 route 都是 `deepseek-web`。
+- **2026-09-05 长会话边界**：上述功能 fixture 已通过；新增 `tests/dsh-web-context-budget.test.ts` 固定 128 messages/1 MiB 上限，验证官方 token 压力自动摘要与提前显式 `compactNow` 的持久恢复。大量短回合低于 token 阈值时可先超消息上限；新输入在官方压力检查后加入，也可令帧先越界。两者目前拒绝派发、保留历史、不重放，但不算自动长会话保护完成。只覆盖 `summarize` 的既定扩展面不能解决这两处准入时序；不得伪造 token/context-overflow、提高协议预算或复制压缩核心绕过。若需上游增强，按第 12 节单独提出最小公开 hook 方案，不暗改 Harness core。
 - **定向测试**：`npx vitest run tests/dsh-web-harness-features.test.ts`。
+
+#### T4.6 长会话补齐：待确认的最小上游扩展
+
+当前不是模型不支持压缩，而是锁版 Harness 的自动触发只看 token，且检查点早于当次新输入入会话。现有唯一 `summarize` hook 只能改变摘要调用，不能安全改变请求准入和区段选择；简单降低 token 阈值无法保证消息数/编码字节边界。
+
+建议在 `XVSHIFU/deepseek-harness` 的独立 topic branch 先验证并提出一个通用的 **模型请求预算 hook**，不修改 `master`、不复制核心到 DeepSeek++、不立即替换当前可用运行时：
+
+1. 让模型适配层报告准备发送的完整请求是否触及消息/编码预算；检查必须考虑新输入、工具结果和实际工具描述，不把字节数伪装成 token。
+2. 压缩时机、平衡工具对的区段选择、摘要提交和持久化仍由官方引擎独占；摘要请求本身也须满足预算。先验证能否通过最小公开 hook 表达，再决定具体 API，不在外部插件重写这些算法。
+3. 仅允许有界压缩后重建尚未发送的请求。单条输入/工具描述本身超限时明确拒绝；摘要失败保持原历史；已发送或结果不明的请求绝不自动重放。沿用同网页模型，不提高既有协议限额。
+4. 用现有 context-budget fixture 把“短轮第 65 轮失败”改为“自动真实摘要后继续”；覆盖新输入跨界、摘要也越界、取消、checkpoint resume 和子会话。通过前不将补丁接入产品或声称长会话已完成。
+
+这是对“核心只用现有公开接口”约束的窄调整草案，**待维护者确认后执行**。当前测试/构建通过不代替此功能验收，也不因此提前放行后续阶段。
 
 ### Batch B 完整门禁
 

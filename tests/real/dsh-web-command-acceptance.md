@@ -1,6 +1,6 @@
 # Linux 命令测试
 
-这次验证的是「网页 DeepSeek → 本机 Bash 读文件、写文件并运行短测试 → 网页终答」，不需要重做只读测试或重装扩展。
+**已于 2026-09-05 通过，无需重复测试或重装扩展。** 已验证「网页 DeepSeek → 本机 Bash 读文件、写文件并运行短测试 → 网页终答」。以下步骤仅供以后需要复测时使用。
 
 1. 保持 Chrome 中已登录的 DeepSeek 网页打开，在 Windows PowerShell 运行：
 
@@ -17,4 +17,4 @@
 
 测试只创建并使用新的临时项目，不读取你的项目文件。原始日志和验证文件保留在 Ubuntu 的 `~/deepseek-web-harness/.tmp-deepseek-live/command-runs/`，失败也保留，不自动重放命令。输出文件为本次 `workspace/linux-command-created.txt`。
 
-当前提供的是测试入口和离线验证，不代表真实网页命令验收已经通过。
+本次结果：`command-0469b0dc-bf30-44fb-ac29-ddbc1e8bcf36`，2 次模型回合、1 次本机工具调用；`command_verified`、`file_verified`、`test_verified` 均为 `true`。原始会话与落盘文件已只读复验一致，未再次请求网页。完整证据见 `docs/progress/MASTER.md`。

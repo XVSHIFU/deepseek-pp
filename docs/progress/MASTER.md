@@ -38,8 +38,6 @@
 
 | 名称 | URL / remote | 默认分支 | 基线 SHA | 状态 |
 |:--|:--|:--|:--|:--|
-| 2026-09-05 | T4.5 Windows launcher | 两个 PowerShell 入口测试（每项hard60）；精确lock离线同步；git diff --check | `passed` | 原3模式保留，新Linux模式无opt-in零作用，缺环境在配对前拒绝，配对不进argv，固定WSLENV传递与异常/确认中断后6项变量及cwd恢复，含空格路径。未把mock launcher当真实网页；无升级版本、无浏览器改动 |
-| 2026-09-05 | T4.5 Linux final integration | Linux内 timeout55s：Linux guard + 实际CLI + 真实入口离线三文件联合 Vitest | `passed` | 45/45，4.77s；在独立Linux安装下重新验证最终生产组合/工具执行/原JSONL验收器，不只是Windows单测模拟平台。没有新增网页请求 |
 | DeepSeek++ fork | `origin` → `https://github.com/XVSHIFU/deepseek-pp.git` | `main` | `0a02c72b135bf2936e11aa78fd6136931ed65908` | 与上游一致 |
 | DeepSeek++ upstream | `upstream` → `https://github.com/zhu1090093659/deepseek-pp.git` | `main` | `0a02c72b135bf2936e11aa78fd6136931ed65908` | 当前实现基线 |
 | Harness fork | `https://github.com/XVSHIFU/deepseek-harness.git` | `master` | `76fda729799fe9b3848dbe2c211d4b231032b81e` | 与官方上游一致；仅一个公开分支 |
@@ -98,8 +96,8 @@
 | P2 | P2-T3 | 实际 `dsh` 入口到 fake browser peer 的单轮闭环 | `—` | `—` | `dsh_fake_e2e_implement`; review: `dsh_fake_e2e_audit`, orchestration | `verified` |
 | P3 | P3-T1 | 无 API key 的真实网页单回合 E2E | `—` | `—` | `dsh_real_smoke_implement`; review: `dsh_adapter_implement`, orchestration | `verified` |
 | P4 | P4-T1 | DSH 本地只读工具多回合与最终结果 E2E（T4.1–T4.4） | `—` | `—` | `harness_tool_mapping`, `dsh_readonly_tools`, `dsh_tool_loop_e2e`; integration: orchestration | `verified` |
-| P4 | T4.5 | 官方受控写入、编辑与 Linux 命令 | `—` | `—` | 同三 lane；integration: orchestration | `in_progress` |
-| P4 | T4.6 | 官方 Skills/剪枝/压缩/串行子 Agent/会话恢复增量 | `—` | `—` | `harness_features`, `windows_command_route`, `file_write_acceptance`; integration: orchestration | `in_progress` |
+| P4 | T4.5 | 官方受控写入、编辑与 Linux 命令 | `—` | `—` | `file_write_acceptance`, `windows_command_route`; integration: orchestration | `verified` |
+| P4 | T4.6 | 官方 Skills/剪枝/压缩/串行子 Agent/会话恢复增量 | `—` | `—` | `harness_features`, `windows_command_route`, `file_write_acceptance`; integration: orchestration | `blocked`（长会话 hook 方案待确认） |
 | P5 | P5-T1 | disconnect/cancel/recovery、`waiting_for_browser` 与不重放 | `TBD` | `TBD` | `TBD` | `not_started` |
 | P6 | P6-T1 | 安装、升级、文档和 release readiness | `TBD` | `TBD` | `TBD` | `not_started` |
 | S1 | S1-T1 | PR #568 独立评估；只服务模式 B 兼容，不作为模式 A 前置 | `TBD` | `TBD` | `TBD` | `not_started` |
@@ -144,17 +142,19 @@
 
 ## 当前状态与下一步
 
-**当前状态**：M0–M4 已验证，不再重复单轮或只读测试。真实网页已作为本机 DSH 模型完成工具往返与最终回答。
+**当前状态**：M0–M4、T4.5 已验证，不再重复单轮、只读或 Linux 命令测试。真实网页已作为本机 DSH 模型完成本地读取、写入、执行短测试及最终回答；尚非完整交付版。
 
-M4/T4.1–T4.4 已完整验收：真实网页运行 `readonly-9347d1d1-2330-4a5c-9571-c19f4c5ee36c` 返回 2 model steps、1 read、1 result 和 completed；原始 session 与终答哈希复验一致，没有重复模型调用。T4.5 的文件编辑及 Linux 命令组合均已实现并通过实际 DSH/fake browser 闭环；命令工具使用官方 Linux 沙箱且工作区写入/越界拒绝/取消清理已经实测。新增 `-LinuxCommands` 可从 Windows 启动整个 Linux Agent。T4.6 的 Skills、前台子会话、JSONL 恢复、剪枝及同网页路由压缩已通过本地集成。新的真实网页写入/命令验收、长会话协议边界、完整断线/崩溃恢复和安装交付仍未完成；不把 fake browser 证据当真网页验收，也不标 T4.5/T4.6 整阶段完成。
+M4/T4.1–T4.4 的真实只读运行保持有效。T4.5 的文件编辑及 Linux 命令组合均已通过实际 DSH/fake browser 闭环，工作区写入/越界拒绝/取消清理已实测；本次操作者真实网页运行 `command-0469b0dc-bf30-44fb-ac29-ddbc1e8bcf36` 又完成 2 model steps、1 Bash call/result、文件和短测试验证、同一 session completed。原始 Linux session 与文件哈希只读复验一致，新增网页请求为零。独立 editor 专用真实网页检查未执行，不能以本次 Bash 验收冒充。
+
+T4.6 的 Skills、前台子会话、JSONL 恢复、剪枝及同网页路由压缩已有本地集成证据。长会话保护仍有明确 `current-gap`：很多短回合可在 token 阈值前超过 128 消息；当次新输入也可在压力检查后令帧超过 1 MiB。已验证越界不派发/不重放/不丢历史，以及提前显式压缩可恢复，但越界后再压缩并不保证成功。当前代码的 Batch B 自动测试/编译/构建均已通过；阶段放行仍受 T4.6 功能缺口约束，P5 断线/崩溃恢复和 P6 安装交付未完成。不把安全拒绝或绿色测试当作已解决长会话。
 
 T4.2 的明确调整与边界见计划：官方 read-only 本身不约束读取，故窄组合复用官方 scope/guard/canonicalPath/resolve/contains，只有原生 read 可见；不复制文件工具，不声称是 OS 沙箱。首验只读取生成的临时文件，不接触真实用户项目。原单轮 profile 保持不变。
 
 **立即下一步**：
 
-1. 本轮完成 Linux 环境、官方命令接线、真实 CLI/fake model 回归与编译。新能力按 `base → workspace-files → harness-features → linux-commands` 显式组合，原单轮/只读/文件编辑配置保持兼容；没有浏览器或协议变更，不需重新加载扩展。
-2. 下一项操作者验收为 `scripts/start-dsh-web-smoke.ps1 -ConfirmRealWeb -LinuxCommands`，步骤见 `tests/real/dsh-web-command-acceptance.md`。一次命令在临时 Linux 项目读取、写入并执行短测试，然后网页终答。只在本机剪贴板/扩展配对，失败保留记录不自动重放。独立官方 editor 的 `-FileEdit` 仍可用，但不是要求连续做多个旧测试；其真实网页验收尚未声称通过。
-3. 操作者后续明确允许 Ubuntu 项目依赖安装、备份关闭 Windows interop 和发行版重启；配置已完成，完整官方 Linux 命令工具探测通过。继续交付 Linux 命令组合与 `-LinuxCommands` 的 Windows 启动入口；不重跑旧读取测试，不改扩展。长会话边界与 P5 恢复仍未完成，PR #568、全仓既有失败和 release 工作继续隔离。
+1. 操作者本次测试已完成，当前无需继续操作或重装扩展。原始记录保留在 Ubuntu 项目忽略目录 `command-runs/command-0469b0dc-bf30-44fb-ac29-ddbc1e8bcf36`；不提交原始日志或配对信息。
+2. T4.6 长会话边界已确认现有公开 hook 不足；计划书已写入待确认的最小模型请求预算 hook 草案，仅在 Harness fork 独立 topic branch 验证，不改 master，不先替换当前运行时。需要维护者确认这一窄调整后继续，不制造第二套上下文管理器。
+3. P5 已完成只读接线梳理：复用 Host 现有 request ledger 和 Browser coordinator/session map 增加版本化持久化，不并存另一状态机。Batch B 前不启动其生产实现。恢复仅查同一 request ID，`unknown` 不是 `not_started`，completed 状态索引不能冒充已恢复终答/工具内容。PR #568、无关功能整改和 release 继续隔离。
 
 本机开发版仍为提交 `5f110ba` 的产物：继续加载 `C:\temp\deepseek-pp-build-e4dcc34\dist\chrome-mv3`，扩展 ID 不变。操作者已成功完成加载后的真实工具验收。本次文件编辑/Harness 增量和串行调度只改变本机代码；主/子请求沿用 `purpose=agent` 与独立 session ID，摘要沿用 `purpose=compaction`，没有扩展 purpose 枚举，不需要更新浏览器产物。
 
@@ -168,6 +168,15 @@ Windows 启动器只临时用 `WSLENV` 的 `/u` 标记传递固定配对配置�
 
 | Date | Scope | Command | Result | Notes |
 |:--|:--|:--|:--|:--|
+| 2026-09-05 | Batch B final full test | 冻结代码后原生 Vitest `--shard=1/4` 至 `4/4`，每项 Linux timeout55s/killafter2s，独立完整 JSON | `passed` | 4次 exit0；2183 passed、0 failed、6既有平台skip，共2189 tests。246份报告文件与 `rg --files tests -g '*.test.ts'` 精确对应，遗漏/重复/额外文件均0，不排除失败测试。四批外层25.654/38.419/23.687/28.425s。全仓绿色不等于current-gap功能完成，不替代真实网页证据；Windows全仓历史路径/EPERM问题不在本次Linux通过结论内 |
+| 2026-09-05 | Batch B regression repairs | 四分片完整初跑后回流对应文件；各修复定向测试及最终 compile/prompt/build | `passed targeted` | 初跑 2189 tests：2179 passed、4 failed、6原有平台skip。修复：①本分支新增设置标签的严格导航fixture遗漏，5/5；②本分支 types→coordinator 引入的18节点静态环，迁移唯一纯DTO合同并保留旧exports，no-SCC通过；③旧bundle CLI fixture补与生产一致的offline/workspace-root，Linux6/6；④仅Shell Host测试适配实测npm keyed JSON，保留单包身份/落地验证，Linux7/7。不改Shell Host生产/扫描规则/golden/依赖，无关Windows EPERM/路径基线未声称修复 |
+| 2026-09-05 | Batch B final static/build | 最终冻结代码：Linux compile、prompt:freeze、Chrome/Edge/Firefox build、manifest/UTF-8/chunk | `passed` | compile exit0 18.223s（并行负载）；prompt 7/7；三端build exit0，8.760/7.646/8.151s；manifest、177文件UTF-8、三端chunk通过。initialShell raw384043/gzip117312、Harness子块raw9348/gzip3194；只含既有Pyodide externalization warnings，不更新已安装扩展 |
+| 2026-09-05 | Batch B static/build | Linux `npm run compile`、`prompt:freeze`、三个 `build:all` 子命令、manifest/UTF-8/sidepanel chunk 检查 | `passed` | 最终编译含新增 context-budget 测试，exit0，3.51s；prompt 7/7；Chrome/Edge/Firefox 均 exit0，7.57/7.28/6.77s；manifest、177 个文本文件 UTF-8 和 chunk 预算均通过。新测试首次编译的 9 个类型错误已由官方 SessionId/模块类型声明修复，无 any 绕过。仅有既有 Pyodide node:* externalization warnings，无依赖/预算修改，不更新用户安装扩展 |
+| 2026-09-05 | Batch B monolithic test attempt | Linux `timeout --kill-after=2s 55s vitest run --maxWorkers=8`，第二次加 JSON reporter | `incomplete / exit1` | 两次均未产出最终总结/完整 JSON，不能计通过或按普通 timeout 解释。只读诊断发现 WSL poweroff 记录、无已发现 OOM 证据，但未证实与两次运行的精确关联/发起者；同路径 sleep 窄探针的正常 timeout 返回124。未改系统配置，改用原生 Vitest 四分片，各自硬上限55s并必须生成完整报告，不排除任何测试 |
+| 2026-09-05 | T4.5 real web Linux command | 操作者 `start-dsh-web-smoke.ps1 -ConfirmRealWeb -LinuxCommands`；唯一运行原 JSONL/输出文件只读复验 | `passed` | run `command-0469b0dc-bf30-44fb-ac29-ddbc1e8bcf36`，session `session-40f1d883-9aae-4849-99e8-603baa78936b`；2 model steps、1 tool call/result、completed，command/file/test verified 全 true。final 56 bytes，SHA-256 `75101450fd6ee9c422ea9a0988bf37d7ec87076bf5c56134ffcd2ff4528de69a`；file SHA-256 `87cffb6059a2ee244a2244613a8b963213218e87a056e0f0e4e15a720557d2c9`；原 session SHA-256 `f8885f05e069cc052a8fb1de68d69c575a962e16ceb324769ca28d48afa7fcb3` 复验前后不变。实际 verifier 及 nonce 派生命令一致，未读取历史配对秘密，新增网页请求=0 |
+| 2026-09-05 | T4.6 long-context limits | hard60：`vitest run tests/dsh-web-context-budget.test.ts tests/dsh-web-harness-features.test.ts`（实现 lane） | `passed tests; current-gap remains` | 14/14，5.09s；新增 5 项覆盖精确消息/字节限额、正常 token 自动摘要、64 短轮后拒绝第 65 轮、提前 compactNow/持久恢复、转义新输入超帧。越界后摘要也可能越界且不造 checkpoint；安全失败不等于自动边界修复。没有修改 Harness core、token 定价、协议限额或生产算法 |
+| 2026-09-05 | T4.5 Windows launcher | 两个 PowerShell 入口测试（每项hard60）；精确lock离线同步；git diff --check | `passed` | 原3模式保留，新Linux模式无opt-in零作用，缺环境在配对前拒绝，配对不进argv，固定WSLENV传递与异常/确认中断后6项变量及cwd恢复，含空格路径。未把mock launcher当真实网页；无升级版本、无浏览器改动 |
+| 2026-09-05 | T4.5 Linux final integration | Linux内 timeout55s：Linux guard + 实际CLI + 真实入口离线三文件联合 Vitest | `passed` | 45/45，4.77s；在独立Linux安装下重新验证最终生产组合/工具执行/原JSONL验收器，不只是Windows单测模拟平台。没有新增网页请求 |
 | 2026-09-05 | T4.5 Linux production CLI | 独立 Linux timeout + Windows hard60：`vitest run tests/dsh-web-linux-commands-e2e.test.ts` | `passed` | 5/5，4.54s；官方 Loader 三增量、4工具目录、Bash读未知nonce/建文件/检查、tool result进入第2模型轮、实际diskbytes与原JSONL双重验证、CLI/port/temp清理。原JSONL也通过新的真实验收verifier；fake脚本与真实runner共用固定命令，不宣称真实网页通过。修复profile install显式 --workspace-root，以及Cordis自装服务的第二阶段inject，不绕过guard |
 | 2026-09-05 | T4.5 Windows integration | owned-process hard60：13个policy/profile/新旧CLI/三个真实入口离线测试文件；root和bundle tsc；prompt:freeze | `passed` | 冻结最终代码后132 passed/1 Linux专用skip，15.12s；两处编译exit0，prompt 7/7。早一轮撞到未完成的named-import测试版本6例失败，最终os/fs对象成员mock版全过；无golden修改、无浏览器构建/全仓/发布 |
 | 2026-09-05 | T4.5 authorized Ubuntu setup | 配置 hash/备份/install；仅 terminate Ubuntu；独立 Linux clone + npm ci ignore-scripts；WXT prepare | `passed` | 原配置备份与新 hash 见上；Linux 依赖独立于 Windows；Windows cmd 实际 exit126，bwrap true exit0。没有重装 Ubuntu、删除用户数据、修改网络或浏览器 |

@@ -104,12 +104,19 @@ to make one explicit `purpose=compaction` web request with a short checkpoint
 instruction. The web route cannot set `maxTokens`; no token cap is silently
 ignored or falsely recorded. Failed summaries do not become checkpoints and are
 not automatically retried. Token counts are estimates; protocol limits still
-apply (including 1 MiB per frame and 128 messages). Long-session boundary and
+apply (including 1 MiB per frame and 128 messages). Long-session protection and
 crash/reconnect acceptance are not complete.
 
 The configured compaction threshold is 35% of the adapter's conservative context
 capacity, retaining 8% verbatim. This starts earlier than the upstream default
 but does not guarantee that every message-count or encoded-byte limit is avoided.
+Regression tests confirm two remaining limits: many short turns can exhaust the
+message count below the token threshold, and newly admitted input can exceed the
+encoded frame budget before the next pressure check. Neither case sends the
+oversized request or discards history. Explicit official compaction before the
+limit can checkpoint and resume; waiting until after overflow is not a reliable
+recovery because the summary request is subject to the same limits. A user-facing
+maintenance/resume entry is not yet delivered.
 
 After the checkout installation and pairing setup above, run from the selected
 workspace, with `DSH_WEB_WORKSPACE_ROOT` set to that same absolute directory:
@@ -156,5 +163,8 @@ The Windows development launcher is
 It starts Linux DSH and shares only the pairing setup with WSL; it does not
 execute the model's shell command on Windows or load a local model. No browser
 extension rebuild is needed. See `tests/real/dsh-web-command-acceptance.md` for
-the short test steps. Real-web command acceptance is separate from fake-peer
-integration and is not claimed before an actual paired run.
+the short test steps. The paired real-web Linux command run passed on 2026-09-05:
+two model steps, one official Bash call, verified file bytes and a successful
+short test, followed by the web final answer. The original session and file were
+independently checked without another model call. This is not a claim that the
+editor-specific real-web check, crash recovery or installation delivery is done.
