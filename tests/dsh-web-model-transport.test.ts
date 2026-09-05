@@ -328,9 +328,18 @@ describe("DSH web model loopback host", () => {
     const request = await nextFrame(browser);
     sendAccepted(browser, request);
     sendEvent(browser, 1, { type: "text_delta", text: "first" });
+    // Establish that the first value has left the queue before filling its
+    // single slot; ack/event coalescing must not choose the overflow point.
+    await expect(first).resolves.toEqual({ done: false, value: { type: "text_delta", text: "first" } });
+    const closed = waitForClose(browser);
     sendEvent(browser, 2, { type: "text_delta", text: "buffered" });
     sendEvent(browser, 3, { type: "text_delta", text: "overflow" });
-    await expect(first).resolves.toEqual({ done: false, value: { type: "text_delta", text: "first" } });
+    // Do not resume consumption until the Host has observed the full buffer.
+    await expect(closed).resolves.toMatchObject({ code: 1008, reason: "STREAM_LIMIT" });
+    await expect(iterator.next()).resolves.toEqual({
+      done: false,
+      value: { type: "text_delta", text: "buffered" },
+    });
     await expect(iterator.next()).resolves.toEqual({
       done: false,
       value: { type: "ambiguous", reason: "stream_limit_exceeded" },
