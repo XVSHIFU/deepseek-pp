@@ -49,6 +49,16 @@ try {
     if (-not $refused -or $smokeProbe.prompts -ne 0 -or $smokeProbe.clipboard -ne 0 -or $smokeProbe.runner -ne 0) {
         throw 'Read-only invocation without explicit opt-in must have no effects.'
     }
+    $refused = $false
+    try { & $smokeScript -FileEdit } catch { $refused = $true }
+    if (-not $refused -or $smokeProbe.prompts -ne 0 -or $smokeProbe.clipboard -ne 0 -or $smokeProbe.runner -ne 0) {
+        throw 'File-edit invocation without explicit opt-in must have no effects.'
+    }
+    $refused = $false
+    try { & $smokeScript -ConfirmRealWeb -ReadOnlyTools -FileEdit } catch { $refused = $true }
+    if (-not $refused -or $smokeProbe.prompts -ne 0 -or $smokeProbe.clipboard -ne 0 -or $smokeProbe.runner -ne 0) {
+        throw 'Conflicting modes must refuse before interaction or effects.'
+    }
     $captured = (& $smokeScript -ConfirmRealWeb 6>&1 | Out-String)
     if ($smokeProbe.runner -ne 1 -or $LASTEXITCODE -ne 0) { throw 'Runner was not invoked exactly once.' }
     if ($captured.Contains($smokeProbe.pairing)) { throw 'Pairing value printed to the terminal.' }
@@ -59,7 +69,13 @@ try {
     if ($smokeProbe.runner -ne 1 -or $LASTEXITCODE -ne 0) { throw 'Read-only runner was not invoked exactly once.' }
     if ($captured.Contains($smokeProbe.pairing)) { throw 'Pairing value printed to the terminal.' }
     if ((Get-Location).Path -ne $smokeOriginalLocation) { throw 'Working directory was not restored.' }
-    Write-Output 'PASS: both modes refuse without opt-in and route paired launches without printing the token.'
+    $smokeProbe = @{ prompts = 0; clipboard = 0; runner = 0; pairing = $null }
+    $smokeExpectedRunner = 'dsh-web-file-edit-acceptance.mjs'
+    $captured = (& $smokeScript -ConfirmRealWeb -FileEdit 6>&1 | Out-String)
+    if ($smokeProbe.runner -ne 1 -or $LASTEXITCODE -ne 0) { throw 'File-edit runner was not invoked exactly once.' }
+    if ($captured.Contains($smokeProbe.pairing)) { throw 'Pairing value printed to the terminal.' }
+    if ((Get-Location).Path -ne $smokeOriginalLocation) { throw 'Working directory was not restored.' }
+    Write-Output 'PASS: all three modes refuse without opt-in, reject conflicting modes and route paired launches without printing the token.'
 }
 finally {
     foreach ($name in $smokeSavedEnvironment.Keys) {

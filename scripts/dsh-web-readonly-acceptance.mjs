@@ -94,11 +94,27 @@ export function verifyReadOnlySession(raw, expected) {
 }
 
 export async function runReadOnlyAcceptance(options, injected = {}) {
+  return runToolAcceptance(options, injected, {
+    patch: READONLY_PATCH, prepareFixture, validateProfileDump: validateReadOnlyProfileDump,
+    createTask: (fixture) => ({
+      task: `Use the read tool exactly once to read ${fixture.fileName}. Its text is proof=<value>. After receiving the tool result, reply with exactly DSH_WEB_TOOLS_OK:<value>, replacing <value> with the value read from the file. Do not guess or use another tool.`,
+      finalText: `DSH_WEB_TOOLS_OK:${fixture.nonce}`,
+    }),
+    verifySession: verifyReadOnlySession,
+    verifyFixture: (text, fixture) => {
+      if (text !== `proof=${fixture.nonce}\n`) throw new RealWebSmokeError("REAL_WEB_FIXTURE_CHANGED");
+      return {};
+    },
+  });
+}
+
+/** Shared opt-in lifecycle; scenarios specify evidence, never a second execution path. */
+export async function runToolAcceptance(options, injected, scenario) {
   assertExplicitOptIn(options.args);
   const env = { ...options.env };
   const cwd = resolve(options.cwd);
   const configuration = validateLaunchEnvironment(env, options.nodeVersion ?? process.versions.node);
-  const deps = { runCommand, prepareFixture, readText: (path) => readFile(path, "utf8"), readOptionalText, listSessionLogs, ...injected };
+  const deps = { runCommand, prepareFixture: scenario.prepareFixture, readText: (path) => readFile(path, "utf8"), readOptionalText, listSessionLogs, ...injected };
   await assertNoLayeredModelCredentials(cwd, configuration.home, deps.readOptionalText);
   const command = (args, directory = cwd, timeoutMs = 30_000, commandEnv = env) => ({
     executable: process.execPath, args, cwd: directory, env: commandEnv, timeoutMs, shell: false, windowsHide: true,
@@ -112,14 +128,13 @@ export async function runReadOnlyAcceptance(options, injected = {}) {
   const install = await deps.runCommand(command([DSH, "plugin", "--profile", PROFILE, "add", "--offline", BUNDLE], fixture.workspace, 30_000, runEnv));
   if (install.exitCode !== 0) throw new RealWebSmokeError("REAL_WEB_PROFILE_NOT_INSTALLED");
   validateProfileManifest(await deps.readText(join(fixture.home, "profiles", PROFILE, "package.json")));
-  const baseArgs = [DSH, "--profile", PROFILE, "--patch", READONLY_PATCH];
+  const baseArgs = [DSH, "--profile", PROFILE, "--patch", scenario.patch];
   const dump = await deps.runCommand(command([...baseArgs, "--dump-config"], fixture.workspace, 30_000, runEnv));
   if (dump.exitCode !== 0 || dump.stderr !== "") throw new RealWebSmokeError("REAL_WEB_PROFILE_INVALID");
-  validateReadOnlyProfileDump(dump.stdout);
+  scenario.validateProfileDump(dump.stdout);
   const sessionRoot = join(fixture.home, "sessions");
   const before = await deps.listSessionLogs(sessionRoot);
-  const task = `Use the read tool exactly once to read ${fixture.fileName}. Its text is proof=<value>. After receiving the tool result, reply with exactly DSH_WEB_TOOLS_OK:<value>, replacing <value> with the value read from the file. Do not guess or use another tool.`;
-  const finalText = `DSH_WEB_TOOLS_OK:${fixture.nonce}`;
+  const { task, finalText } = scenario.createTask(fixture);
   options.onReadyToConnect?.();
   const actual = await deps.runCommand(command([...baseArgs, "--patch", READY_PATCH, task], fixture.workspace, 180_000, runEnv));
   if (actual.exitCode !== 0) {
@@ -131,26 +146,29 @@ export async function runReadOnlyAcceptance(options, injected = {}) {
   if (actual.stdout !== `${finalText}\n`) throw new RealWebSmokeError("REAL_WEB_RESPONSE_INVALID");
   const created = [...await deps.listSessionLogs(sessionRoot)].filter((path) => !before.has(path));
   if (created.length !== 1) throw new RealWebSmokeError("REAL_WEB_TOOL_EVIDENCE_INVALID");
-  const evidence = verifyReadOnlySession(await deps.readText(join(sessionRoot, created[0])), {
+  const evidence = scenario.verifySession(await deps.readText(join(sessionRoot, created[0])), {
     cwd: fixture.workspace, task, finalText, fileName: fixture.fileName, nonce: fixture.nonce,
     forbiddenExact: [configuration.pairingToken, ...configuration.allowedOrigins],
   });
-  if (await deps.readText(join(fixture.workspace, fixture.fileName)) !== `proof=${fixture.nonce}\n`) {
-    throw new RealWebSmokeError("REAL_WEB_FIXTURE_CHANGED");
-  }
+  const fileEvidence = scenario.verifyFixture(await deps.readText(join(fixture.workspace, fixture.fileName)), fixture);
   return { schema_version: 1, ok: true, status: "completed", provider: PROVIDER, model: MODEL,
     run_id: fixture.id, session_id: evidence.sessionId, model_steps: evidence.modelSteps,
-    tool_calls: evidence.toolCalls, tool_results: 1, final_text_sha256: sha256(finalText),
-    final_text_bytes: Buffer.byteLength(finalText, "utf8") };
+    tool_calls: evidence.toolCalls, tool_results: evidence.toolCalls, final_text_sha256: sha256(finalText),
+    final_text_bytes: Buffer.byteLength(finalText, "utf8"), ...fileEvidence };
 }
 
 async function prepareFixture(cwd) {
-  const id = `readonly-${randomUUID()}`;
-  const root = join(cwd, ".tmp-deepseek-live", "readonly-runs", id);
+  return prepareToolFixture(cwd, { prefix: "readonly", fileName: "proof.txt", initialText: (nonce) => `proof=${nonce}\n` });
+}
+
+/** Only creates a new owned fixture; existing files and past evidence are preserved. */
+export async function prepareToolFixture(cwd, scenario) {
+  const id = `${scenario.prefix}-${randomUUID()}`;
+  const root = join(cwd, ".tmp-deepseek-live", `${scenario.prefix}-runs`, id);
   const workspace = join(root, "workspace"), home = join(root, "dsh-home");
-  const fileName = "proof.txt", nonce = randomBytes(16).toString("hex");
+  const fileName = scenario.fileName, nonce = randomBytes(16).toString("hex");
   await mkdir(workspace, { recursive: true });
-  await writeFile(join(workspace, fileName), `proof=${nonce}\n`, { encoding: "utf8", flag: "wx" });
+  await writeFile(join(workspace, fileName), scenario.initialText(nonce), { encoding: "utf8", flag: "wx" });
   seedProfile(home);
   return { id, root, workspace, home, fileName, nonce };
 }
@@ -161,11 +179,11 @@ async function readOptionalText(path) {
 function sha256(text) { return createHash("sha256").update(text).digest("hex"); }
 // Evidence compares the fixed generated file, not the model's spelling of it.
 // Production path admission still belongs exclusively to the DSH policy.
-function sameFile(cwd, actual, expected) {
+export function sameFile(cwd, actual, expected) {
   const normalize = (value) => process.platform === "win32" ? value.toLowerCase() : value;
   return normalize(resolve(cwd, actual)) === normalize(resolve(cwd, expected));
 }
-function sameJson(left, right) {
+export function sameJson(left, right) {
   if (left === right) return true;
   if (!left || !right || typeof left !== "object" || typeof right !== "object" || Array.isArray(left) !== Array.isArray(right)) return false;
   const keys = Object.keys(left);
