@@ -8,8 +8,10 @@
     ".": "./src/index.ts",
     "./host": "./src/host.ts",
     "./readonly-policy": "./src/readonly-policy.ts",
+    "./workspace-files-policy": "./src/workspace-files-policy.ts",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./cordis.readonly.patch.yml": "./cordis.readonly.patch.yml",
+    "./cordis.workspace-files.patch.yml": "./cordis.workspace-files.patch.yml",
     "./package.json": "./package.json"
   },
   "types": "./src/index.ts",
@@ -18,6 +20,7 @@
     "scripts/seed-profile.mjs",
     "cordis.patch.yml",
     "cordis.readonly.patch.yml",
+    "cordis.workspace-files.patch.yml",
     "README.md"
   ],
   "engines": {
@@ -38,6 +41,7 @@
     "@deepseek-ai/dsh-agent-loop": "0.1.2-rc.1",
     "@deepseek-ai/dsh-fs": "0.1.2-rc.1",
     "@deepseek-ai/dsh-fs-sandbox": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-fs-observation-policy": "0.1.2-rc.1",
     "@deepseek-ai/dsh-headless": "0.1.2-rc.1",
     "@deepseek-ai/dsh-llm": "0.1.2-rc.1",
     "@deepseek-ai/dsh-sandbox": "0.1.2-rc.1",
@@ -50,7 +54,9 @@
     "@deepseek-ai/dsh-session-projection": "0.1.2-rc.1",
     "@deepseek-ai/dsh-system-prompt": "0.1.2-rc.1",
     "@deepseek-ai/dsh-tool-fs": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-tool-str-replace-editor": "0.1.2-rc.1",
     "@deepseek-ai/dsh-tools": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-user-approval": "0.1.2-rc.1",
     "@deepseek-ai/schemastery": "3.18.2",
     "@deepseek-pp/dsh-llm-deepseek-web": "0.0.0-private",
     "@deepseek-pp/dsh-web-model-transport": "0.0.0-private"

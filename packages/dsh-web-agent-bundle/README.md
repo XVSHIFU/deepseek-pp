@@ -47,3 +47,29 @@ paths, and static junction escapes are denied. This is a model-path permission
 check, not OS isolation against a malicious local process concurrently changing
 paths between that check and the upstream read. No upstream filesystem, tool
 implementation, or path-containment algorithm is copied.
+
+## Controlled file-editing increment
+
+`cordis.workspace-files.patch.yml` is an explicit alternative to the read-only
+patch, over the same web-only base profile. It requires a trusted absolute
+`DSH_WEB_WORKSPACE_ROOT` matching the intended task workspace. Do not combine
+the two increments. The base and the accepted read-only profile are unchanged.
+
+The only model tool is the original official `str_replace_editor`: ordinary-file
+view, create, string replacement and line insertion. Absolute paths are required;
+directory listing is currently unavailable. Shared path admission confines tool
+targets to that workspace, including reads and the upstream temporary-directory
+exception. Official `fs-observation-policy` supplies read-before-edit, freshness
+and no-clobber protection; neither filesystem operations nor path algorithms are
+reimplemented here.
+
+Workspace-write is a standing permission inside the selected root, not a prompt
+before each edit. Approval remains `ask`; an actual ask without an official
+answerer is rejected. No elevation, arbitrary environment, shell or networking
+tool is published. In particular, native Windows command execution is not
+included: the pinned ACL backend did not satisfy the out-of-workspace-write
+acceptance on this host. Stronger command isolation remains a separate decision.
+
+This file-editing increment is not a release or a complete interactive Harness
+UI. Its fake model/real DSH integration evidence does not claim a new real-web
+write test. The successful real-web read-only acceptance remains valid.

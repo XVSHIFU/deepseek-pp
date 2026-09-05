@@ -63,10 +63,12 @@ const HEADLESS_SYSTEM_ENVIRONMENT = [
 ] as const;
 
 interface FakeHeadlessCommonOptions {
-  readonly task: string;
+  readonly task: string | ((workspace: string) => string);
   readonly inheritedEnvironmentProbe?: Readonly<NodeJS.ProcessEnv>;
   readonly patches?: readonly string[];
   readonly prepareWorkspace?: (workspace: string) => Promise<void>;
+  /** Verify owned fixture effects after DSH exits, before the cleanup removes it. */
+  readonly verifyWorkspace?: (workspace: string) => Promise<void>;
 }
 
 export type FakeHeadlessOptions = FakeHeadlessCommonOptions & ({
@@ -136,18 +138,6 @@ export async function runFakeDshHeadless(options: FakeHeadlessOptions): Promise<
     DSH_WEB_FAKE_RELEASE_FILE: releaseFile,
     DSH_WEB_WORKSPACE_ROOT: workspace,
   });
-  const args = [
-    DSH_BIN, "--profile", PROFILE_NAME,
-    ...(options.patches ?? []).flatMap((patch) => ["--patch", patch]),
-    "--patch", BARRIER_PATCH, options.task,
-  ] as const;
-  const command = {
-    executable: process.execPath,
-    args,
-    shell: false as const,
-    windowsHide: true as const,
-  };
-
   let child: HeadlessChild | undefined;
   let capture: ChildCapture | undefined;
   let peer: FakeBrowserPeer | undefined;
@@ -158,6 +148,19 @@ export async function runFakeDshHeadless(options: FakeHeadlessOptions): Promise<
   try {
     await mkdir(workspace, { recursive: true });
     await options.prepareWorkspace?.(workspace);
+    const task = typeof options.task === "function" ? options.task(workspace) : options.task;
+    if (typeof task !== "string" || task.trim() === "") throw new Error("FAKE_HEADLESS_TASK_REQUIRED");
+    const args = [
+      DSH_BIN, "--profile", PROFILE_NAME,
+      ...(options.patches ?? []).flatMap((patch) => ["--patch", patch]),
+      "--patch", BARRIER_PATCH, task,
+    ] as const;
+    const command = {
+      executable: process.execPath,
+      args,
+      shell: false as const,
+      windowsHide: true as const,
+    };
     await runManagedCommand(
       process.execPath,
       [SEED_SCRIPT, "--home", home],
@@ -221,6 +224,7 @@ export async function runFakeDshHeadless(options: FakeHeadlessOptions): Promise<
     const persisted = await readOnlySessionLog(join(home, "sessions"));
     if (persisted.raw.includes(pairingToken)) throw new Error("PAIRING_TOKEN_PERSISTED");
     const observedRequests = structuredClone(peer.observedGenerateRequests);
+    await options.verifyWorkspace?.(workspace);
 
     await peer.close();
     peer = undefined;
@@ -279,7 +283,7 @@ export async function runFakeDshHeadless(options: FakeHeadlessOptions): Promise<
 }
 
 function validateOptions(options: FakeHeadlessOptions): void {
-  if (options.task.trim() === "") throw new Error("FAKE_HEADLESS_TASK_REQUIRED");
+  if (typeof options.task !== "function" && options.task.trim() === "") throw new Error("FAKE_HEADLESS_TASK_REQUIRED");
   if (options.patches?.some((patch) => !isAbsolute(patch) || !existsSync(patch))) {
     throw new Error("FAKE_HEADLESS_PATCH_INVALID");
   }

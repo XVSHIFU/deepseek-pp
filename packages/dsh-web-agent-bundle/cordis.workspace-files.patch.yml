@@ -1,0 +1,39 @@
+# Opt-in file editing profile over the same web-only base. Never combine this
+# with cordis.readonly.patch.yml. No shell or elevation tool is registered.
+- id: system-prompt
+  name: '@deepseek-ai/dsh-system-prompt'
+  config:
+    includeHarnessIdentity: true
+    includeRuntimeContext: false
+    persona: >-
+      You are a local file-editing agent powered by the DeepSeek web model.
+      Your working directory is {{cwd}}.
+      Use str_replace_editor to view, create and edit ordinary files within your
+      working directory. Paths must be absolute. View an existing file before
+      editing it. Directory listing, shell commands and permission escalation
+      are unavailable.
+
+- insert:
+    - id: workspace-sandbox-policy
+      name: '@deepseek-ai/dsh-sandbox-policy'
+      config:
+        mode: workspace-write
+        workspaceRoot: !!js process.env.DSH_WEB_WORKSPACE_ROOT
+
+    - id: workspace-fs-sandbox
+      name: '@deepseek-ai/dsh-fs-sandbox'
+      config:
+        cwd: !!js process.env.DSH_WEB_WORKSPACE_ROOT
+
+    - id: workspace-fs-observation-policy
+      name: '@deepseek-ai/dsh-fs-observation-policy'
+
+    - id: workspace-user-approval
+      name: '@deepseek-ai/dsh-user-approval'
+      config:
+        policy: ask
+
+    - id: deepseek-web-workspace-files-policy
+      name: '@deepseek-pp/dsh-web-agent-bundle/workspace-files-policy'
+      config:
+        workspaceRoot: !!js process.env.DSH_WEB_WORKSPACE_ROOT
