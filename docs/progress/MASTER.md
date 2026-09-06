@@ -75,8 +75,8 @@
 | M2 DSH adapter + profile | out-of-tree `deepseek-web` LLM adapter、profile 与最小安装 bundle | `verified` | DSH 可显式选择 `provider=deepseek-web`；无隐式 provider fallback；不修改 DSH `master` |
 | M3 Real one-turn | 本机 DSH 经已登录浏览器完成一次真实网页模型回合 | `verified` | 无 DeepSeek API key/其他 provider；流正常结束；最终文本进入同一 DSH session |
 | M4 Local-tool multi-turn | 网页模型请求 DSH 本地只读工具，结果进入下一模型回合并返回最终结果 | `verified` | 2026-09-05 操作者真实网页两轮：2 model steps、1 read、1 result、同一 session completed；本地只读复验与终答哈希一致 |
-| M5 Disconnect/cancel/recovery | 浏览器离线、取消、断连、重连查询和不明结果处理 | `in_progress` | 离线=`waiting_for_browser`；取消幂等；`ambiguous` 不自动重放；唯一终态可重复查询 |
-| M6 Install/release readiness | 本机 Broker、DSH adapter/profile 的安装升级、文档、供应链和发布门禁 | `not_started` | 仅在 M0–M5 验证完成且获得明确 release 授权后执行完整门禁 |
+| M5 Disconnect/cancel/recovery | 浏览器离线、取消、断连、重连查询和不明结果处理 | `verified` | 自动恢复/取消/崩溃矩阵和全量回归通过；2026-09-06 新扩展真实只读两轮复验通过，见下方证据 |
+| M6 Install/release readiness | 本机 Broker、DSH adapter/profile 的安装升级、文档、供应链和发布门禁 | `in_progress` | 当前仅开发 T6.1/T6.2 安装与策略检查；候选包、完整发行门禁及发布不得据此提前放行 |
 
 ## Task / Batch 映射
 
@@ -98,8 +98,10 @@
 | P4 | P4-T1 | DSH 本地只读工具多回合与最终结果 E2E（T4.1–T4.4） | `—` | `—` | `harness_tool_mapping`, `dsh_readonly_tools`, `dsh_tool_loop_e2e`; integration: orchestration | `verified` |
 | P4 | T4.5 | 官方受控写入、编辑与 Linux 命令 | `—` | `—` | `file_write_acceptance`, `windows_command_route`; integration: orchestration | `verified` |
 | P4 | T4.6 | 官方 Skills/剪枝/压缩/串行子 Agent/会话恢复增量 | `—` | `—` | `harness_features`, `windows_command_route`, `file_write_acceptance`; integration: orchestration | `verified` |
-| P5 | T5.1–T5.4 | Host journal、Browser 结果索引、取消与原 CLI 崩溃恢复 | `—` | `—` | `harness_features`, `windows_command_route`, `file_write_acceptance`; integration: orchestration | `in_progress` |
-| P6 | P6-T1 | 安装、升级、文档和 release readiness | `TBD` | `TBD` | `TBD` | `not_started` |
+| P5 | T5.1–T5.4 | Host journal、Browser 结果索引、取消与原 CLI 崩溃恢复 | `—` | `—` | `harness_features`, `windows_command_route`, `file_write_acceptance`; integration: orchestration | `verified` |
+| P6 | T6.1 | 固定版本安装、profile/配对、doctor/启动/升级/卸载 | `—` | `—` | `p6_installer`; integration: orchestration | `in_progress` |
+| P6 | T6.2 | 窄范围安装包策略与无 API/provider fallback 断言 | `—` | `—` | `p6_policy`; integration: orchestration | `in_progress` |
+| P6 | T6.3–T6.4 | 候选包验收、最终文档与完整发行门禁 | `TBD` | `TBD` | `TBD` | `not_started` |
 | S1 | S1-T1 | PR #568 独立评估；只服务模式 B 兼容，不作为模式 A 前置 | `TBD` | `TBD` | `TBD` | `not_started` |
 
 ## PR #568 独立分支策略
@@ -142,21 +144,21 @@
 
 ## 当前状态与下一步
 
-**当前状态**：M0–M4、T4.5–T4.6 已验证。P5 断线、取消和崩溃恢复已实现，实际 CLI、真实工具及运行时定向回归通过；全量 252 个测试文件共 2280 项通过、0 失败、6 项既有平台跳过，三端扩展构建通过。真实网页已作为本机 DSH 模型完成读取、写入、执行短测试及最终回答；P5 新扩展尚需真实只读复验，P6 尚未开始，因此仍不是完整交付版。
+**当前状态**：M0–M5、T4.5–T4.6 已验证。P5 全量 252 个测试文件共 2280 项通过、0 失败、6 项既有平台跳过，三端扩展构建通过；2026-09-06 操作者新版扩展真实只读两轮通过，原 session/fixture/终答哈希只读复验一致，Batch C 已关闭。现在进入 P6 安装交付开发，暂不要求操作者再测试；尚未完成独立候选包及最终门禁，仍不是完整交付版。
 
 M4/T4.1–T4.4 的真实只读运行保持有效。T4.5 的文件编辑及 Linux 命令组合均已通过实际 DSH/fake browser 闭环，工作区写入/越界拒绝/取消清理已实测；本次操作者真实网页运行 `command-0469b0dc-bf30-44fb-ac29-ddbc1e8bcf36` 又完成 2 model steps、1 Bash call/result、文件和短测试验证、同一 session completed。原始 Linux session 与文件哈希只读复验一致，新增网页请求为零。独立 editor 专用真实网页检查未执行，不能以本次 Bash 验收冒充。
 
-T4.6 已补齐可压缩历史的消息数／编码字节保护：fork 独立分支的真实发送前预算检查复用原恢复及压缩事务，两项旧 `current-gap` 已从安全拒绝改为自动摘要后继续成功。最终候选在独立 checkout 离线安装，4 份定向测试 61/61 通过；包含实际 65 轮、当次输入跨界、摘要合法前缀、工具对保留、失败不提交、持久化恢复及外部保留码拒绝。它不承诺固定系统／工具包络或不可分单元总能容纳。P5 尚待新扩展真实验收，P6 安装交付尚未开始，不是完整交付版。
+T4.6 已补齐可压缩历史的消息数／编码字节保护：fork 独立分支的真实发送前预算检查复用原恢复及压缩事务，两项旧 `current-gap` 已从安全拒绝改为自动摘要后继续成功。最终候选在独立 checkout 离线安装，4 份定向测试 61/61 通过；包含实际 65 轮、当次输入跨界、摘要合法前缀、工具对保留、失败不提交、持久化恢复及外部保留码拒绝。它不承诺固定系统／工具包络或不可分单元总能容纳。P5 已验收，P6 安装交付正在开发。
 
 T4.2 的明确调整与边界见计划：官方 read-only 本身不约束读取，故窄组合复用官方 scope/guard/canonicalPath/resolve/contains，只有原生 read 可见；不复制文件工具，不声称是 OS 沙箱。首验只读取生成的临时文件，不接触真实用户项目。原单轮 profile 保持不变。
 
 **立即下一步**：
 
-1. P5 新扩展待一次真实只读验收：[三步测试说明](../verification/P5_简短测试.md)。Windows 即可，不需要 Ubuntu，也不需要操作者手动制造失败。未操作已安装扩展或重新调用真实网页。
+1. 开发 T6.1 固定安装与日常启动入口，自动在隔离临时 home 验证安装/doctor/启动/同版本升级/卸载；T6.2 复用已有安全合同，不另造 validator 或做全仓审计。P5 [三步测试](../verification/P5_简短测试.md)已通过，不要求重复。
 2. T4.6 的三份固定摘要归档已接入开发 checkout；[来源与重建](../../vendor/harness-request-budget/README.md)。Harness fork 只修改独立 `codex/web-request-budget` 分支，master 保持 `76fda729...`；本轮 P5 不修改它，也没有推送远端。
-3. P5 恢复仅查询原 request ID：`unknown` 不是 `not_started`，completed 状态索引不等于恢复了终答／工具内容。只有新的真实只读验收通过后才能关闭 M5/Batch C，随后进入 P6 安装交付；PR #568、无关整改和发布保持隔离。已有真实 Linux 命令证据及两份 Ubuntu stash 保留不变。
+3. P5 恢复仍仅查询原 request ID：`unknown` 不是 `not_started`，completed 状态索引不等于恢复了终答／工具内容。T6.3 独立候选包真实验收不由工作树通过代替；PR #568、无关整改和发布保持隔离。已有真实 Linux 命令证据及两份 Ubuntu stash 保留不变。
 
-已安装的旧开发版仍在 `C:\temp\deepseek-pp-build-e4dcc34\dist\chrome-mv3`，本轮未覆盖。P5 新构建为 `C:\temp\deepseek-pp-p5-5e9e641\dist\chrome-mv3`，Chrome/Edge/Firefox 均已验证；需禁用旧版并加载新目录，使用新扩展 ID 配对。构建来源 `5e9e641`，后续 `08e651e` 仅测试/smoke、`4fa7ac7` 仅真实验收校验与 fixture、`6ccffae` 仅测试时序，浏览器生产代码未变。不打 ZIP、不安装到浏览器、不发布。
+旧开发版目录 `C:\temp\deepseek-pp-build-e4dcc34\dist\chrome-mv3` 保留不动。P5 新构建为 `C:\temp\deepseek-pp-p5-5e9e641\dist\chrome-mv3`，Chrome/Edge/Firefox 均已验证，操作者已按新扩展流程完成真实只读验收。构建来源 `5e9e641`，后续 `08e651e` 仅测试/smoke、`4fa7ac7` 仅真实验收校验与 fixture、`6ccffae` 仅测试时序，浏览器生产代码未变。本轮不需要重装浏览器扩展，不发布。
 
 **T4.5 Linux 环境已准备**：Ubuntu 26.04 LTS / WSL2，Linux Node 24.18.0、Bubblewrap 0.11.1。源码从 Windows 当前分支本地 clone 到 `/home/worker/deepseek-web-harness`，Linux `npm ci --ignore-scripts --no-audit --no-fund` 安装锁定的 1024 包，包含可用 Linux Koffi 原生模块，WXT prepare 通过；Windows `node_modules` 未动。官方 Windows ACL current-gap 仍保留，但不再阻断这条显式 Linux 路线。
 
@@ -168,6 +170,7 @@ Windows 启动器只临时用 `WSLENV` 的 `/u` 标记传递固定配对配置�
 
 | Date | Scope | Command | Result | Notes |
 |:--|:--|:--|:--|:--|
+| 2026-09-06 | P5 / Batch C real readonly closure | 操作者 `start-dsh-web-smoke.ps1 -ConfirmRealWeb -ReadOnlyTools`；原 `verifyReadOnlySession` 对对应原始 session/fixture 只读复验 | `passed` | run=`readonly-85c03d45-2224-4fe3-9548-fd8f12d6b031`，session=`session-b597f5d8-70e3-42eb-b324-ffbad5bdde9a`；2 model steps、1 read call/result、同一 session completed。终答 SHA256=`92bab73f716a9196b16380e02e22379206b178b59c1bb4d68e6e276e20ddc1e2`，49 bytes；复验前后 session 哈希不变，新增网页请求 0。没有读取配对秘密，未将原始日志纳入 Git；结合 2026-09-05 自动门禁关闭 M5/Batch C，不等于 P6 候选包通过 |
 | 2026-09-06 | P5 real readonly / auth diagnosis | 操作者两次运行；原 `decodeSessionLog` 只读解析两份 session，读取 journal 的状态字段 | `failed before model dispatch` | `readonly-ee82aebe-2b5e-4f3e-82c1-530590692f22`、`readonly-443003f9-3006-4166-9db7-b677cce0e97a` 均 `DEEPSEEK_AUTH_REQUIRED`，journal=`failed/not_started/sequence0`，无工具调用。源码确认是扩展缓存及页面刷新未获得非空 Authorization，不是已发模型请求后的服务端拒绝。日志不能区分页面未注入、不同浏览器/用户配置或页面 token 不可读；未读取真实凭据或擅自改认证协议。测试说明补充同一 Chrome 配置中新开页面并完成普通网页对话，复用现有 HEADERS_CAPTURED 路径。仅文档修改，`git diff --check`；未重跑自动测试或真实网页，M5 保持待验收 |
 | 2026-09-05 | P5 full automated regression | Ubuntu / Node 24.18.0：原 Vitest `run --shard=N/4 --maxWorkers=4 --reporter=json`，每组 `timeout --kill-after=2s 55s` | `passed` | 全部 252 文件，无遗漏、重复或额外文件；2280 passed / 0 failed / 6 既有平台 skip（共 2286）。报告保留于 Linux `.tmp/p5-full-4fa7ac7/`：2–4 组为 `4fa7ac7`；第 1 组最终为 `6ccffae` 的 `shard-1-after-barrier-fix.json`。首次第 1 组旧 buffer-overflow 测试未等待消费／socket 关闭导致 1 项失败，`6ccffae` 仅补明确观察屏障，无生产变更；原失败报告保留。Windows 该文件 34/34；Windows/Linux compile 通过。不是新的真实网页证据，不据此关闭 M5 |
 | 2026-09-05 | P5 original CLI and side effects | Windows `node scripts/dsh-web-agent-recovery-smoke.mjs`；实际 editor/runtime 原Vitest | `passed` | smoke 9/9，32.45s，55s上限；4个实际CLI阶段kill/restart均在持久状态确认后执行，同profile/原journal/同ID查询、0新generate，远端completed仍本地ambiguous。取消5项：预取消零发送、accepted/streaming重入、丢ack超时、终态后幂等，单终态和进程/端口/临时目录清理。editor前/后与runtime/fake联合17/17：半工具流不执行，已创建文件恢复后bytes/inode/mtimeNs/ctimeNs不变，真实summary不造checkpoint、真实child独立Session可恢复 |
