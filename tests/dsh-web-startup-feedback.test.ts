@@ -93,5 +93,10 @@ describe("product parent cancellation does not preempt the official disposer", (
     expect(result.after).toEqual(result.before);
     if (mode === "graceful") expect(result.flushed).toBe(true);
     else expect(result.flushed).toBe(false);
+    if (mode === "second-interrupt") {
+      expect(result.disposing).toBe(true);
+      // Prove the second signal force-closes before the 5500 ms fallback.
+      expect(result.secondInterruptElapsedMs).toBeLessThan(5000);
+    }
   }, 14000);
 });

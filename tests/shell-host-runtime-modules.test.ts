@@ -1,7 +1,7 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 // @ts-ignore - Shell Host runtime modules are executable .mjs files.
@@ -102,9 +102,17 @@ describe('Shell Host modular runtime ownership', () => {
     tempRoots.push(tempRoot);
     const packDir = tempRoot;
     const installDir = join(tempRoot, 'installed');
-    const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-    const packOutput = execFileSync(npm, [
+    const npmCli = [
+      join(dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js'),
+      resolve(dirname(process.execPath), '../lib/node_modules/npm/bin/npm-cli.js'),
+    ].find(path => existsSync(path));
+    if (npmCli === undefined) throw new Error('This fixture requires npm installed alongside the current Node executable.');
+    // Node 24 cannot execFile an npm.cmd batch shim on Windows without a shell.
+    // Use the installed JavaScript entry directly on both Windows and Unix.
+    const packOutput = execFileSync(process.execPath, [
+      npmCli,
       'pack',
+      '--offline',
       '--json',
       '--pack-destination',
       packDir,
@@ -123,8 +131,10 @@ describe('Shell Host modular runtime ownership', () => {
     });
     const { filename } = entries[0] as { filename: string };
     const tarball = resolve(packDir, filename);
-    execFileSync(npm, [
+    execFileSync(process.execPath, [
+      npmCli,
       'install',
+      '--offline',
       '--ignore-scripts',
       '--no-audit',
       '--no-fund',

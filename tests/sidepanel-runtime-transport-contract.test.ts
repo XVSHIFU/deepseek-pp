@@ -12,7 +12,7 @@ describe('Side Panel runtime transport contract', () => {
   it('keeps chrome.runtime.sendMessage behind the typed runtime client', () => {
     const directTransportFiles = sourceFiles(SIDEPANEL_ROOT)
       .filter((file) => readFileSync(file, 'utf8').includes('chrome.runtime.sendMessage'))
-      .map((file) => relative('.', file));
+      .map((file) => relative('.', file).replace(/\\/g, '/'));
 
     expect(directTransportFiles).toEqual(['entrypoints/sidepanel/runtime-client.ts']);
   });

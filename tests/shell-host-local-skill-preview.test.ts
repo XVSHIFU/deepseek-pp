@@ -148,7 +148,7 @@ describe('shell native host logLine resilience', () => {
 
   it('returns a normal response when DPP_LOG_FILE points to an unwritable path', async () => {
     const response = await callNativeHost('shell_status', {}, {
-      DPP_LOG_FILE: '/nonexistent-dir-dpp-test-xyz/unwritable.log',
+      DPP_LOG_FILE: createUnwritableLogFixture(),
     });
     expect(response.error).toBeUndefined();
     expect(response.result?.structuredContent?.data?.platform).toBeTruthy();
@@ -156,12 +156,22 @@ describe('shell native host logLine resilience', () => {
 
   it('writes a stderr diagnostic when DPP_LOG_FILE cannot be initialized', async () => {
     const { response, stderr } = await callNativeHostWithStderr('shell_status', {}, {
-      DPP_LOG_FILE: '/nonexistent-dir-dpp-test-xyz/unwritable.log',
+      DPP_LOG_FILE: createUnwritableLogFixture(),
     });
     expect(response.error).toBeUndefined();
     expect(stderr).toContain('failed to initialize log file');
   });
 });
+
+function createUnwritableLogFixture(): string {
+  const root = mkdtempSync(join(tmpdir(), 'deepseek-pp-unwritable-log-'));
+  tempRoots.push(root);
+  const fileParent = join(root, 'parent-is-a-file');
+  writeFileSync(fileParent, 'This ordinary file cannot contain a log directory.', { flag: 'wx' });
+  // A nonexistent directory may be writable, especially under a Windows drive
+  // root. Traversing an owned ordinary file fails regardless of permissions.
+  return join(fileParent, 'logs', 'unwritable.log');
+}
 
 function createNestedSkillFixture(): string {
   const root = mkdtempSync(join(tmpdir(), 'deepseek-pp-local-skill-'));

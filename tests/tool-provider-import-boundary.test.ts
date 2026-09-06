@@ -1,5 +1,6 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { dirname, join, normalize, resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { dirname, join, normalize, resolve, sep } from 'node:path';
 import * as t from '@babel/types';
 import { describe, expect, it } from 'vitest';
 import {
@@ -12,6 +13,11 @@ const ROOT = process.cwd();
 const CORE_ROOT = resolve(ROOT, 'core');
 const TARGET_PREFIXES = ['core/tool/', 'core/mcp/'];
 const TARGET_FILES = new Set(['core/constants.ts', 'core/types.ts']);
+// Include new, uncommitted source too, but never walk ignored installation
+// archives or follow their dependency junctions outside the active checkout.
+const SOURCE_FILES = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', '*.ts', '*.tsx'], {
+  cwd: ROOT, encoding: 'utf8',
+}).split('\0').filter(Boolean).map((file) => normalize(resolve(ROOT, file))).sort();
 
 describe('tool provider import boundary', () => {
   it('keeps registry and runtime independent from concrete providers', () => {
@@ -153,17 +159,7 @@ function parseModuleSpecifiers(file: string): string[] {
 }
 
 function listSourceFiles(root: string): string[] {
-  const files: string[] = [];
-  for (const entry of readdirSync(root)) {
-    if (entry === 'node_modules' || entry === '.git' || entry === '.output' || entry === 'dist' || entry === '.workbuddy') continue;
-    const path = join(root, entry);
-    if (statSync(path).isDirectory()) {
-      files.push(...listSourceFiles(path));
-    } else if (path.endsWith('.ts') || path.endsWith('.tsx')) {
-      files.push(normalize(path));
-    }
-  }
-  return files.sort();
+  return SOURCE_FILES.filter((file) => file.startsWith(`${normalize(root)}${sep}`));
 }
 
 function stronglyConnectedComponents(graph: ReadonlyMap<string, ReadonlySet<string>>): string[][] {

@@ -94,17 +94,22 @@ describe('persistence 100-mutation trace', () => {
       usage: {
         writes: burst.local.metric(USAGE_STORAGE_KEY).writes,
         bytes: burst.local.metric(USAGE_STORAGE_KEY).bytes,
-        elapsedMs: round(burst.usageElapsedMs),
+        wallElapsedMs: round(burst.usageElapsedMs),
+        modeledElapsedMs: round(modeledElapsedMs(burst.usageElapsedMs,
+          burst.local.metric(USAGE_STORAGE_KEY).injectedWaitMs, burst.local.metric(USAGE_STORAGE_KEY).writes)),
       },
       toolHistory: {
         writes: burst.local.metric(TOOL_HISTORY_STORAGE_KEY).writes,
         bytes: burst.local.metric(TOOL_HISTORY_STORAGE_KEY).bytes,
-        elapsedMs: round(burst.historyElapsedMs),
+        wallElapsedMs: round(burst.historyElapsedMs),
+        modeledElapsedMs: round(modeledElapsedMs(burst.historyElapsedMs,
+          burst.local.metric(TOOL_HISTORY_STORAGE_KEY).injectedWaitMs, burst.local.metric(TOOL_HISTORY_STORAGE_KEY).writes)),
       },
       syncConfigStatus: {
         writes: syncStorage.writes,
         bytes: syncStorage.bytes,
-        elapsedMs: round(syncElapsedMs),
+        wallElapsedMs: round(syncElapsedMs),
+        modeledElapsedMs: round(modeledElapsedMs(syncElapsedMs, syncStorage.injectedWaitMs, syncStorage.writes)),
       },
     };
 
@@ -123,11 +128,11 @@ describe('persistence 100-mutation trace', () => {
       syncConfigStatus: {
         writes: metrics.syncConfigStatus.writes,
         bytes: metrics.syncConfigStatus.bytes,
-        observedElapsedMs: metrics.syncConfigStatus.elapsedMs,
+        observedElapsedMs: metrics.syncConfigStatus.wallElapsedMs,
       },
     };
     console.info(`Persistence burst baseline: ${JSON.stringify(reproducedBaseline)}`);
-    console.info(`Persistence burst metrics: ${JSON.stringify(metrics)}`);
+    console.info(`Persistence burst metrics (1ms injected-write model): ${JSON.stringify(metrics)}`);
     expect(reproducedBaseline.usage).toMatchObject({
       writes: PERSISTENCE_BURST_BASELINE.usage.writes,
       bytes: PERSISTENCE_BURST_BASELINE.usage.bytes,
@@ -144,7 +149,7 @@ describe('persistence 100-mutation trace', () => {
     assertBudget(metrics.toolHistory, PERSISTENCE_BURST_BUDGET.toolHistory);
     expect(metrics.syncConfigStatus.writes).toBe(PERSISTENCE_BURST_BUDGET.syncConfigStatus.exactWrites);
     expect(metrics.syncConfigStatus.bytes).toBeLessThanOrEqual(PERSISTENCE_BURST_BUDGET.syncConfigStatus.maxBytes);
-    expect(metrics.syncConfigStatus.elapsedMs).toBeLessThanOrEqual(PERSISTENCE_BURST_BUDGET.syncConfigStatus.maxElapsedMs);
+    expect(metrics.syncConfigStatus.modeledElapsedMs).toBeLessThanOrEqual(PERSISTENCE_BURST_BUDGET.syncConfigStatus.maxElapsedMs);
     expect(burst.usageResults.map((record) => record.id)).toEqual(
       Array.from({ length: MUTATION_COUNT }, (_, index) => `usage-${String(index).padStart(3, '0')}`),
     );
@@ -182,6 +187,30 @@ describe('persistence 100-mutation trace', () => {
     expect(burst.local.metric(USAGE_STORAGE_KEY).writes).toBe(writesBeforeRestart.usage);
     expect(burst.local.metric(TOOL_HISTORY_STORAGE_KEY).writes).toBe(writesBeforeRestart.toolHistory);
     expect(syncStorage.writes).toBe(writesBeforeRestart.syncConfigStatus);
+  }, 10000);
+
+  it('keeps CPU work and non-fixture waits in the modeled latency budget', async () => {
+    const storage = new InstrumentedSyncConfigStorage();
+    const started = performance.now();
+    const cpuStarted = performance.now();
+    while (performance.now() - cpuStarted < 5) { /* Deliberate work outside the injected I/O timer. */ }
+    const cpuElapsedMs = performance.now() - cpuStarted;
+    const extraWaitStarted = performance.now();
+    await delay(20);
+    const extraWaitElapsedMs = performance.now() - extraWaitStarted;
+    await storage.write({ ...webdav('budget-proof', null), schemaVersion: 1, revision: 1 });
+    const modeled = modeledElapsedMs(performance.now() - started, storage.injectedWaitMs, storage.writes);
+    expect(modeled).toBeGreaterThanOrEqual(cpuElapsedMs + extraWaitElapsedMs + MODELED_WRITE_LATENCY_MS);
+    expect(() => assertBudget({ writes: 1, bytes: 1, modeledElapsedMs: modeled }, {
+      maxWrites: 1, maxBytes: 1, maxElapsedMs: 5,
+    })).toThrow();
+  });
+
+  it('rejects overlapping or invalid injected-wait measurements instead of zeroing work', () => {
+    expect(modeledElapsedMs(80, 60, 2)).toBe(22);
+    expect(() => modeledElapsedMs(10, 20, 2)).toThrow('Invalid injected write timing');
+    expect(() => modeledElapsedMs(Number.NaN, 1, 1)).toThrow('Invalid injected write timing');
+    expect(() => modeledElapsedMs(10, -1, 1)).toThrow('Invalid injected write timing');
   });
 
   it('keeps clear as a FIFO barrier between adjacent mutation bursts', async () => {
@@ -245,7 +274,8 @@ describe('persistence 100-mutation trace', () => {
 
 class InstrumentedLocalStorage {
   private readonly values = new Map<string, unknown>();
-  private readonly metrics = new Map<string, { writes: number; bytes: number }>();
+  private readonly metrics = new Map<string, { writes: number; bytes: number; injectedWaitMs: number }>();
+  private readonly pendingKeys = new Set<string>();
   private nextWriteFailure: unknown;
 
   readonly chromeStub = {
@@ -254,7 +284,18 @@ class InstrumentedLocalStorage {
         QUOTA_BYTES: 10_485_760,
         get: vi.fn(async (key: string) => ({ [key]: clone(this.values.get(key)) })),
         set: vi.fn(async (values: Record<string, unknown>) => {
-          await delay(MODELED_WRITE_LATENCY_MS);
+          const keys = Object.keys(values);
+          if (keys.some((key) => this.pendingKeys.has(key))) throw new Error('Overlapping fixture writes');
+          for (const key of keys) this.pendingKeys.add(key);
+          const started = performance.now();
+          try { await delay(MODELED_WRITE_LATENCY_MS); }
+          finally {
+            const waited = performance.now() - started;
+            for (const key of keys) {
+              this.metric(key).injectedWaitMs += waited;
+              this.pendingKeys.delete(key);
+            }
+          }
           if (this.nextWriteFailure !== undefined) {
             const failure = this.nextWriteFailure;
             this.nextWriteFailure = undefined;
@@ -274,10 +315,10 @@ class InstrumentedLocalStorage {
     },
   };
 
-  metric(key: string): { writes: number; bytes: number } {
+  metric(key: string): { writes: number; bytes: number; injectedWaitMs: number } {
     const existing = this.metrics.get(key);
     if (existing) return existing;
-    const created = { writes: 0, bytes: 0 };
+    const created = { writes: 0, bytes: 0, injectedWaitMs: 0 };
     this.metrics.set(key, created);
     return created;
   }
@@ -292,13 +333,19 @@ class InstrumentedSyncConfigStorage implements SyncConfigStoragePort {
   value: unknown;
   writes = 0;
   bytes = 0;
+  injectedWaitMs = 0;
+  private writing = false;
 
   async read() {
     return { present: this.present, value: clone(this.value) };
   }
 
   async write(value: VersionedSyncConfig) {
-    await delay(MODELED_WRITE_LATENCY_MS);
+    if (this.writing) throw new Error('Overlapping fixture writes');
+    this.writing = true;
+    const started = performance.now();
+    try { await delay(MODELED_WRITE_LATENCY_MS); }
+    finally { this.injectedWaitMs += performance.now() - started; this.writing = false; }
     this.writes += 1;
     this.bytes += utf8Bytes(JSON.stringify({ [SYNC_CONFIG_STORAGE_KEY]: value }));
     this.present = true;
@@ -420,12 +467,22 @@ function installDeterministicEnvironment(): void {
 }
 
 function assertBudget(
-  metric: { writes: number; bytes: number; elapsedMs: number },
+  metric: { writes: number; bytes: number; modeledElapsedMs: number },
   budget: { maxWrites: number; maxBytes: number; maxElapsedMs: number },
 ): void {
   expect(metric.writes).toBeLessThanOrEqual(budget.maxWrites);
   expect(metric.bytes).toBeLessThanOrEqual(budget.maxBytes);
-  expect(metric.elapsedMs).toBeLessThanOrEqual(budget.maxElapsedMs);
+  expect(metric.modeledElapsedMs).toBeLessThanOrEqual(budget.maxElapsedMs);
+}
+
+function modeledElapsedMs(wallElapsedMs: number, injectedWaitMs: number, writes: number): number {
+  // Only remove the fixture's own serial timer inflation (Windows may turn
+  // delay(1) into ~15 ms). All product CPU work and other waits remain counted.
+  if (![wallElapsedMs, injectedWaitMs].every((value) => Number.isFinite(value) && value >= 0) ||
+      injectedWaitMs > wallElapsedMs || !Number.isSafeInteger(writes) || writes < 0) {
+    throw new Error('Invalid injected write timing');
+  }
+  return wallElapsedMs - injectedWaitMs + writes * MODELED_WRITE_LATENCY_MS;
 }
 
 function delay(milliseconds: number): Promise<void> {
