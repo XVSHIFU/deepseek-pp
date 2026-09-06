@@ -150,7 +150,8 @@ export async function readDistribution(directory, { expectedSha256, installed = 
   }
   for (const [path, entry] of Object.entries(lock.packages)) {
     if (!path.startsWith("node_modules/") || entry.link === true) continue;
-    if (path.includes("/@deepseek-ai/dsh") && typeof entry.version === "string" && entry.version !== HARNESS_VERSION) fail("DISTRIBUTION_HARNESS_VERSION_MISMATCH");
+    const packageName = path.slice(path.lastIndexOf("node_modules/") + "node_modules/".length);
+    if (packageName.startsWith("@deepseek-ai/dsh") && typeof entry.version === "string" && entry.version !== HARNESS_VERSION) fail("DISTRIBUTION_HARNESS_VERSION_MISMATCH");
     if (typeof entry.resolved !== "string" || typeof entry.integrity !== "string" || !/^(?:sha512|sha256)-[A-Za-z0-9+/=]+$/u.test(entry.integrity) ||
         !entry.resolved.startsWith("https://registry.npmjs.org/") && !Object.keys(VENDOR_HASHES).some((name) => entry.resolved === `file:vendor/harness-request-budget/${name}`)) fail("DISTRIBUTION_DEPENDENCY_LOCK_INVALID");
   }
@@ -416,9 +417,15 @@ export async function prepareStart({ home, workspace, task, mode = "files", brow
 
 export async function start(options) {
   const command = await prepareStart(options);
-  process.stderr.write("正在等待已配对的 DeepSeek++ 浏览器；请保持登录，并在本机 Harness 中保存连接设置。\n");
-  // No loop here: the unchanged official headless CLI owns the full task and its lifetime.
-  return runProcess(command.executable, command.args, { cwd: command.cwd, env: command.env, inherit: true, timeoutMs: null });
+  const root = await ownedHome(options.home);
+  return withLock(root, async () => {
+    const active = await loadActive(root);
+    if (command.args[0] !== join(active.runtime, "node_modules/@deepseek-ai/dsh/lib/bin.js")) fail("START_INSTALLATION_CHANGED");
+    process.stderr.write("正在等待已配对的 DeepSeek++ 浏览器；请保持登录，并在本机 Harness 中保存连接设置。\n");
+    // One product lease spans the original CLI, including browser wait. Upgrade/uninstall cannot replace its links.
+    // No loop here: the unchanged official headless CLI owns the full task and its lifetime.
+    return runProcess(command.executable, command.args, { cwd: command.cwd, env: command.env, inherit: true, timeoutMs: null });
+  });
 }
 
 export async function pair({ home, origins, port, copyToken = false }) {

@@ -4,6 +4,38 @@ This private workspace package supplies the standalone `deepseek-web-agent` prof
 
 The profile deliberately excludes `dsh-base`, the official DeepSeek API and Pi adapters, settings and credential providers, telemetry, search, Skills, subagents, and local tools. Those capabilities may be added only by their planned allowlist tasks.
 
+## Fixed local installation (P6 development)
+
+The local development distribution contains an independent locked runtime, not
+a link back to the checkout. Use Node.js 24. Prepare it from a clean checkout with
+`node scripts/prepare-dsh-web-agent-distribution.mjs --output <new-absolute-directory>`.
+Use the returned manifest SHA with
+`node scripts/install-dsh-web-agent.mjs --distribution <directory> --sha256 <sha> --home <dedicated-product-home> --origin chrome-extension://<extension-id>`.
+`--offline` uses only an already populated npm cache; `--dry-run` checks inputs
+without installing. No global DSH, provider or browser settings are changed.
+
+After installation, use `node <product-home>/dsh-web-agent.mjs` with:
+
+- `doctor` to check the installed identity and profile (not a web-model call).
+- `pair --copy-token` on Windows to copy the local pairing token. Paste it in the
+  extension's Local Harness settings. Keep a signed-in DeepSeek tab in that same
+  browser profile; after first loading the extension, send a normal web message.
+- `start --workspace <absolute-workspace> --mode readonly --task <task>` for a
+  single task. `files` explicitly permits the existing editor/Skills/child-Agent
+  composition; `linux-commands` additionally requires the Linux setup below.
+- `install --distribution <new-directory> --sha256 <new-sha> --origin <origin>`
+  to install a new build while retaining sessions, recovery records and pairing.
+- `uninstall` to deactivate the owned profile link. User data and old versions
+  are retained; repeating it is safe. Reinstalling that same build restores it.
+
+The installed entry does not require the original checkout. It waits up to one
+minute for the paired browser; save the extension's connection settings if it
+is offline. It uses the original one-task/headless DSH entry, not a new Agent
+loop or a finished interactive/resume interface. Close a running task before
+upgrading or uninstalling. Damaged ownership/lock state requires inspection;
+do not remove recovery records to bypass it. This is a local development
+delivery, not a published release or completed candidate-package acceptance.
+
 ## Install from this checkout
 
 Use Node.js 24 and DeepSeek Harness `0.1.2-rc.1`. Seed the empty standalone profile before using `dsh plugin`; an unknown profile would otherwise inherit the upstream `dsh-base` default.

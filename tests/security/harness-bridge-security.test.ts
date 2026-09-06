@@ -155,4 +155,9 @@ describe("explicit distribution payload policy", () => {
     const source = Buffer.from("pairingToken: process.env.DSH_WEB_PAIRING_TOKEN\nconst names = ['DEEPSEEK_API_KEY'];");
     expect(assertPayloadPolicy("packages/example/src/index.ts", source)).toBe(source.length);
   });
+
+  it("does not mistake a locked cookie dependency version for a Cookie header", () => {
+    const lock = Buffer.from(JSON.stringify({ dependencies: { cookie: "0.7.2" } }));
+    expect(assertPayloadPolicy("package-lock.json", lock)).toBe(lock.length);
+  });
 });

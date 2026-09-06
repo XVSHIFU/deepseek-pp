@@ -11,7 +11,7 @@ const MAX_PAYLOAD_BYTES = 32 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 128 * 1024 * 1024;
 const PRIVATE_ENTRY = /(?:^|\/)(?:\.git|\.dsh|\.release|\.tmp(?:-[^/]*)?|\.env(?:\.[^/]*)?|node_modules|sessions|web-model-journal|logs|test-results|credentials\.json|pairing\.json|owner\.lock)(?:\/|$)|\.(?:jsonl|sqlite(?:3)?|db|log|har)$/iu;
 const PRIVATE_HOME = /(?:[A-Z]:[\\/]+Users[\\/]+[^\\/\s"'<>]+|\/(?:home|Users)\/[^/\s"'<>]+)/u;
-const PRIVATE_LITERAL = /-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----|Bearer\s+[A-Za-z0-9._~-]{12,}|["']?(?:cookie|set-cookie)["']?\s*[:=]\s*["'][^"'\r\n]{4,}["']|["']?(?:pairing_token|pairingToken|DSH_WEB_PAIRING_TOKEN|api_key|apiKey|DEEPSEEK_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY)["']?\s*[:=]\s*["'][A-Za-z0-9_./+=:-]{12,}["']/iu;
+const PRIVATE_LITERAL = /-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----|Bearer\s+[A-Za-z0-9._~-]{12,}|["']?(?:cookie|set-cookie)["']?\s*[:=]\s*["'][^"'\r\n=]+=[^"'\r\n]+["']|["']?(?:pairing_token|pairingToken|DSH_WEB_PAIRING_TOKEN|api_key|apiKey|DEEPSEEK_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY)["']?\s*[:=]\s*["'][A-Za-z0-9_./+=:-]{12,}["']/iu;
 
 export class HarnessReleasePolicyError extends Error {
   constructor(code) { super(code); this.name = "HarnessReleasePolicyError"; this.code = code; }
