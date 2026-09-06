@@ -1,10 +1,14 @@
 // @vitest-environment node
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, readdir, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { FakeBrowserPeer, FAKE_EXTENSION_ORIGIN } from "./fixtures/harness-bridge/fake-peer/index.ts";
+import { captureChild, createHeadlessEnvironment, reserveLoopbackPort, terminateChildTree, readOnlySessionLog } from "./fixtures/dsh-web-agent/run-fake-headless.ts";
+import { WEB_MODEL_PATH, WEB_MODEL_SUBPROTOCOL } from "@deepseek-pp/dsh-web-model-transport";
 
 const installer = await import(new URL("../packages/dsh-web-agent-bundle/bin/install-runtime.mjs", import.meta.url).href);
 const browserReady = await import(new URL("../packages/dsh-web-agent-bundle/bin/browser-ready.mjs", import.meta.url).href);
@@ -101,3 +105,111 @@ describe("production original-CLI browser startup wait", () => {
     finally { if (previous === undefined) delete process.env.DSH_WEB_BROWSER_WAIT_MS; else process.env.DSH_WEB_BROWSER_WAIT_MS = previous; }
   });
 });
+
+/** A copied source fixture has a synthetic Git identity; npm, package loading and the original CLI remain real. */
+async function immutableDistribution(root: string) {
+  const source = join(root, "source-fixture"), output = join(root, "distribution");
+  await mkdir(source);
+  for (const path of ["package.json", "package-lock.json", "LICENSE", "vendor/harness-request-budget", ...installer.WORKSPACE_NAMES.map((name: string) => `packages/${name}`)]) {
+    await cp(resolve(path), join(source, path), { recursive: true, filter: (path) => !path.split(/[\\/]/u).some((part) => ["node_modules", "dist", ".git"].includes(part)) });
+  }
+  const entries = (await readdir(source, { recursive: true, withFileTypes: true })).filter((entry) => entry.isFile());
+  const { relative } = await import("node:path");
+  const tracked = entries.map((entry) => relative(source, join(entry.parentPath, entry.name)).replaceAll("\\", "/"));
+  const { prepareDistribution } = await import(new URL("../scripts/prepare-dsh-web-agent-distribution.mjs", import.meta.url).href);
+  const prepared = await prepareDistribution({ source, output }, { run: async (executable: string, args: string[], cwd: string) => {
+    if (executable === "git") return { stdout: args[0] === "rev-parse" ? "1".repeat(40) : args[0] === "status" ? "" : tracked.join("\0") };
+    const result = await installer.runProcess(executable, args, { cwd, env: installer.createRuntimeEnvironment(process.env), timeoutMs: 15000 });
+    if (result.code !== 0) throw new Error("FIXTURE_LOCK_PREPARATION_FAILED");
+    return result;
+  } });
+  return { output, sha256: prepared.manifest_sha256 };
+}
+
+it("installs an immutable runtime, runs the original CLI, upgrades without losing state, and uninstalls/reinstalls idempotently", async () => {
+  const root = await temporary();
+  const distribution = await immutableDistribution(root);
+  const home = join(root, "product-home"), workspace = join(root, "workspace");
+  await mkdir(workspace);
+  const port = await reserveLoopbackPort();
+  const installOptions = { distribution: distribution.output, home, manifestSha256: distribution.sha256, offline: true, origins: [FAKE_EXTENSION_ORIGIN], port };
+  expect((await installer.install({ ...installOptions, dryRun: true })).status).toBe("dry_run");
+  expect(existsSync(home)).toBe(false);
+  expect((await installer.install(installOptions)).status).toBe("installed");
+  expect((await installer.doctor({ home })).status).toBe("ready_for_browser");
+  expect((await installer.install(installOptions)).status).toBe("already_installed");
+  const secretPath = join(home, "secrets/pairing.json");
+  const secretBytes = await readFile(secretPath, "utf8");
+  const secret = JSON.parse(secretBytes);
+  expect(Buffer.from(secret.token, "base64url").byteLength).toBe(32);
+  // Input source and distribution are unavailable during the installed entry's actual task.
+  await rename(join(root, "source-fixture"), join(root, "source-unavailable"));
+  await rename(distribution.output, `${distribution.output}-unavailable`);
+  const launcher = join(home, "dsh-web-agent.mjs");
+  const env = createHeadlessEnvironment(process.env, {});
+  const child = spawn(process.execPath, [launcher, "start", "--workspace", workspace, "--mode", "readonly", "--task", "Reply only with the deterministic installed fixture acknowledgement."], {
+    cwd: workspace, env, shell: false, windowsHide: true, detached: process.platform !== "win32", stdio: ["ignore", "pipe", "pipe"],
+  });
+  const capture = captureChild(child, 12000, "INSTALLED_FIXTURE_TIMEOUT");
+  void capture.result.catch(() => undefined);
+  let peer: FakeBrowserPeer | undefined;
+  try {
+    const deadline = Date.now() + 7000;
+    while (Date.now() < deadline && peer === undefined) {
+      if (capture.isClosed()) throw new Error(`INSTALLED_CLI_EARLY_EXIT:${(await capture.result).stderr}`);
+      try {
+        peer = await FakeBrowserPeer.connect({ address: { host: "127.0.0.1", port, path: WEB_MODEL_PATH, url: `ws://127.0.0.1:${port}${WEB_MODEL_PATH}`, subprotocol: WEB_MODEL_SUBPROTOCOL }, pairingToken: secret.token, origin: FAKE_EXTENSION_ORIGIN, timeoutMs: 100 });
+      } catch { await new Promise((done) => setTimeout(done, 25)); }
+    }
+    if (peer === undefined) throw new Error("INSTALLED_BROWSER_LISTENER_MISSING");
+    peer.enqueueGeneration({ events: [{ type: "text_delta", text: "Installed original Harness task completed." }, { type: "completed", finish_reason: "stop" }] });
+    const result = await capture.result;
+    expect(result.exitCode, result.stderr).toBe(0);
+    expect(result.stdout).toBe("Installed original Harness task completed.\n");
+    expect(result.stderr).not.toContain(secret.token);
+    expect(peer.observedGenerateRequests).toHaveLength(1);
+  } finally {
+    await peer?.close();
+    if (!capture.isClosed()) await terminateChildTree(child, workspace, env);
+    await capture.closed;
+  }
+  const logs = await readOnlySessionLog(join(home, "state/sessions"));
+  expect(logs.records.at(-1)).toMatchObject({ type: "turn/end", data: { reason: { kind: "completed" } } });
+  const journalPath = join(home, "state/profiles/deepseek-web-agent/web-model-journal/journal.json");
+  const journal = await readFile(journalPath, "utf8");
+  await rename(`${distribution.output}-unavailable`, distribution.output);
+  const manifestPath = join(distribution.output, "distribution.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  const runtimePackagePath = join(distribution.output, "package.json");
+  const runtimePackageBytes = await readFile(runtimePackagePath, "utf8");
+  const invalidPackage = JSON.parse(runtimePackageBytes);
+  invalidPackage.dependencies["fixture-install-unavailable-dependency"] = "0.0.0";
+  const invalidPackageBytes = `${JSON.stringify(invalidPackage, null, 2)}\n`;
+  await writeFile(runtimePackagePath, invalidPackageBytes);
+  const failedBuild = structuredClone(manifest);
+  failedBuild.source_commit = "3".repeat(40);
+  failedBuild.files.find((entry: { path: string }) => entry.path === "package.json").sha256 = hash(invalidPackageBytes);
+  const failedBytes = `${JSON.stringify(failedBuild, null, 2)}\n`;
+  await writeFile(manifestPath, failedBytes);
+  const activeBeforeFailure = await readFile(join(home, "active.json"), "utf8");
+  await expect(installer.install({ ...installOptions, manifestSha256: hash(failedBytes) })).rejects.toThrow("INSTALL_NPM_FAILED");
+  expect(await readFile(join(home, "active.json"), "utf8")).toBe(activeBeforeFailure);
+  expect(await readFile(journalPath, "utf8")).toBe(journal);
+  expect((await installer.doctor({ home })).status).toBe("ready_for_browser");
+  await writeFile(runtimePackagePath, runtimePackageBytes);
+  manifest.source_commit = "2".repeat(40);
+  const upgradeBytes = `${JSON.stringify(manifest, null, 2)}\n`;
+  await writeFile(manifestPath, upgradeBytes);
+  expect((await installer.install({ ...installOptions, manifestSha256: hash(upgradeBytes) })).status).toBe("upgraded");
+  expect(await readFile(journalPath, "utf8")).toBe(journal);
+  expect(await readFile(secretPath, "utf8")).toBe(secretBytes);
+  expect((await readOnlySessionLog(join(home, "state/sessions"))).raw).toBe(logs.raw);
+  expect((await installer.doctor({ home })).source_commit).toBe("2".repeat(40));
+  await writeFile(join(home, "state", "unrelated.txt"), "user state");
+  expect((await installer.uninstall({ home })).status).toBe("uninstalled");
+  expect((await installer.uninstall({ home })).status).toBe("already_uninstalled");
+  expect(await readFile(join(home, "state", "unrelated.txt"), "utf8")).toBe("user state");
+  expect((await installer.install({ ...installOptions, manifestSha256: hash(upgradeBytes) })).status).toBe("reinstalled");
+  expect(await readFile(journalPath, "utf8")).toBe(journal);
+  expect((await installer.doctor({ home })).status).toBe("ready_for_browser");
+}, 50000);

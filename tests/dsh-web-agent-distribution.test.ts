@@ -43,6 +43,11 @@ const VENDORS = {
   '@deepseek-ai/dsh-compaction-basic': 'file:vendor/harness-request-budget/deepseek-ai-dsh-compaction-basic-0.1.2-rc.1-44f8a92cd699.tgz',
   '@deepseek-ai/dsh-llm-retry': 'file:vendor/harness-request-budget/deepseek-ai-dsh-llm-retry-0.1.2-rc.1-aa44c61be81b.tgz',
 };
+const COMPATIBILITY_OVERRIDES = {
+  '@earendil-works/pi-ai': '0.83.0',
+  tmp: '^0.2.7',
+  uuid: '^11.1.1',
+};
 const roots: string[] = [];
 
 afterEach(async () => {
@@ -53,7 +58,7 @@ afterEach(async () => {
 function sourceManifest(): SourceManifest {
   return {
     devDependencies: { '@deepseek-ai/dsh': VERSION, ...VENDORS, vitest: '^4.1.8' },
-    overrides: { ...Object.fromEntries(Object.keys(VENDORS).map(name => [name, `$${name}`])), unrelated: '^9.0.0' },
+    overrides: { ...Object.fromEntries(Object.keys(VENDORS).map(name => [name, `$${name}`])), ...COMPATIBILITY_OVERRIDES },
   };
 }
 
@@ -65,6 +70,7 @@ function pinnedLock(manifest = runtimeManifest(sourceManifest())): Lock {
   const packages: Record<string, PackageRecord> = {
     '': { dependencies: { ...manifest.dependencies }, workspaces: [...manifest.workspaces] },
     'node_modules/@deepseek-ai/dsh': identity('@deepseek-ai/dsh', VERSION),
+    'node_modules/@earendil-works/pi-ai': identity('@earendil-works/pi-ai', '0.83.0'),
     'node_modules/ws': identity('ws', '8.18.3'),
   };
   for (const [name, spec] of Object.entries(VENDORS)) packages[`node_modules/${name}`] = identity(name, VERSION, spec);
@@ -170,14 +176,25 @@ function options(state: Fixture) {
 }
 
 describe('local-development runtime manifest', () => {
-  it('fixes the four workspace roots and preserves only the three vendored overrides plus the pinned Harness', () => {
+  it('fixes the four workspace roots and preserves the vendored Harness dependencies and source compatibility overrides', () => {
     expect(runtimeManifest(sourceManifest())).toEqual({
       name: 'deepseek-web-agent-local-runtime', version: '0.0.0-private', private: true,
       type: 'module', license: 'Apache-2.0', engines: { node: '>=24 <25' },
       workspaces: PACKAGES.map(name => `packages/${name}`),
       dependencies: { '@deepseek-ai/dsh': VERSION, ...VENDORS },
-      overrides: Object.fromEntries(Object.keys(VENDORS).map(name => [name, `$${name}`])),
+      overrides: { ...Object.fromEntries(Object.keys(VENDORS).map(name => [name, `$${name}`])), ...COMPATIBILITY_OVERRIDES },
     });
+  });
+
+  it('copies all source overrides without changing them or turning transitive compatibility pins into root dependencies', () => {
+    const source = sourceManifest();
+    const before = structuredClone(source);
+    const manifest = runtimeManifest(source);
+    expect(manifest.overrides).toEqual(source.overrides);
+    expect(manifest.overrides).not.toBe(source.overrides);
+    expect(manifest.overrides).toMatchObject({ '@earendil-works/pi-ai': '0.83.0', tmp: '^0.2.7', uuid: '^11.1.1' });
+    expect(Object.keys(manifest.dependencies).sort()).toEqual(['@deepseek-ai/dsh', ...Object.keys(VENDORS)].sort());
+    expect(source).toEqual(before);
   });
 
   it.each(['^0.1.2-rc.1', '0.1.2', '', 'latest'])('rejects non-pinned Harness spec %j', spec => {
@@ -225,6 +242,14 @@ describe('pruned lock identity guard', () => {
     const source = pinnedLock(manifest);
     const candidate = structuredClone(source);
     candidate.packages['node_modules/unapproved'] = identity('unapproved', '1.0.0');
+    expect(() => assertPinnedLock(source, candidate, manifest)).toThrow('DISTRIBUTION_LOCK_IDENTITY_CHANGED');
+  });
+
+  it('still rejects a transitive pi-ai upgrade instead of compensating for a missing source override', () => {
+    const manifest = runtimeManifest(sourceManifest());
+    const source = pinnedLock(manifest);
+    const candidate = structuredClone(source);
+    candidate.packages['node_modules/@earendil-works/pi-ai'] = identity('@earendil-works/pi-ai', '0.84.4');
     expect(() => assertPinnedLock(source, candidate, manifest)).toThrow('DISTRIBUTION_LOCK_IDENTITY_CHANGED');
   });
 

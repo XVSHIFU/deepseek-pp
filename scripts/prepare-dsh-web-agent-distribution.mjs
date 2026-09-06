@@ -18,7 +18,9 @@ function json(value) { return `${JSON.stringify(value, null, 2)}\n`; }
 export function runtimeManifest(sourceManifest) {
   if (sourceManifest.devDependencies?.['@deepseek-ai/dsh'] !== VERSION) fail('DISTRIBUTION_HARNESS_VERSION_INVALID');
   const dependencies = { '@deepseek-ai/dsh': VERSION };
-  const overrides = {};
+  // Keep the checkout's compatibility overrides while npm prunes unrelated
+  // roots. Dropping one can silently resolve a new transitive version.
+  const overrides = { ...sourceManifest.overrides };
   for (const name of VENDOR_PACKAGES) {
     const spec = sourceManifest.devDependencies?.[name];
     if (typeof spec !== 'string' || !/^file:vendor\/harness-request-budget\/[a-z0-9.-]+\.tgz$/.test(spec) ||
