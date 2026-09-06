@@ -1,0 +1,3 @@
+- insert:
+    - id: deepseek-web-browser-ready
+      name: ./browser-ready.mjs

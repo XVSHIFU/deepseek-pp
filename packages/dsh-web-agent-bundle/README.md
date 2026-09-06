@@ -44,7 +44,9 @@ or future-version data is preserved and blocks the bridge. At capacity, new
 requests stop rather than silently forgetting old identities. Only one process
 may own a profile journal; an uncertain lock owner requires inspection.
 
-This P2 package is installable as a local link from the current checkout. It is not a release artifact: the private adapter, transport, and protocol workspaces do not yet form a self-contained tarball dependency closure.
+The original checkout-link workflow is a development setup, not a release
+artifact. P6 adds a separately installed, hash-checked local development runtime;
+candidate packaging and its real-web acceptance remain a separate gate.
 
 ## Controlled read-only acceptance profile
 
@@ -144,7 +146,7 @@ After the checkout installation and pairing setup above, run from the selected
 workspace, with `DSH_WEB_WORKSPACE_ROOT` set to that same absolute directory:
 
 ```powershell
-$harnessRepo = 'C:\Users\worker\Documents\deepseek+++++'
+$harnessRepo = 'C:\path\to\deepseek-pp'
 dsh --profile deepseek-web-agent --patch "$harnessRepo\packages\dsh-web-agent-bundle\cordis.workspace-files.patch.yml" --patch "$harnessRepo\packages\dsh-web-agent-bundle\cordis.harness-features.patch.yml" 'Your task'
 ```
 
@@ -189,4 +191,6 @@ the short test steps. The paired real-web Linux command run passed on 2026-09-05
 two model steps, one official Bash call, verified file bytes and a successful
 short test, followed by the web final answer. The original session and file were
 independently checked without another model call. This is not a claim that the
-editor-specific real-web check, crash recovery or installation delivery is done.
+editor-specific real-web check or installation delivery is done. P5 crash and
+cancellation recovery passed automated tests, followed by a real-web read-only
+recheck on 2026-09-06; it does not recover lost answer text from status metadata.

@@ -22,6 +22,7 @@
   "types": "./src/index.ts",
   "files": [
     "src/**/*.ts",
+    "bin/**",
     "scripts/seed-profile.mjs",
     "cordis.patch.yml",
     "cordis.readonly.patch.yml",
@@ -43,6 +44,7 @@
     }
   },
   "dependencies": {
+    "js-yaml": "4.3.2",
     "@deepseek-ai/dsh-agent": "0.1.2-rc.1",
     "@deepseek-ai/dsh-agent-default-model": "0.1.2-rc.1",
     "@deepseek-ai/dsh-agent-loop": "0.1.2-rc.1",

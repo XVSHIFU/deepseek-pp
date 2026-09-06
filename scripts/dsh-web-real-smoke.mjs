@@ -4,15 +4,15 @@ import { existsSync } from "node:fs";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { parseEnv } from "node:util";
+import { findModelCredentialEnvironment, assertNoLayeredModelCredentials as assertSharedNoLayeredModelCredentials } from "../packages/dsh-web-agent-bundle/bin/model-credentials.mjs";
+export { MODEL_CREDENTIAL_ENV_NAMES, findModelCredentialEnvironment } from "../packages/dsh-web-agent-bundle/bin/model-credentials.mjs";
 import { decodeSeqRanges, decodeStorageRecord } from "@deepseek-ai/dsh-session";
-import { JSON_SCHEMA, Type, load as loadYaml } from "js-yaml";
+import { createProfileValidators } from "../packages/dsh-web-agent-bundle/bin/profile-validation.mjs";
 
 const EXPECTED_DSH_VERSION = "0.1.2-rc.1";
 const PROFILE_NAME = "deepseek-web-agent";
 const PROVIDER = "deepseek-web";
 const MODEL = "current-web-session";
-const BUNDLE = "@deepseek-pp/dsh-web-agent-bundle";
 const BROWSER_ATTESTATION = "logged-in-and-broker-enabled";
 const DEFAULT_BROKER_PORT = 43_123;
 const COMMAND_TIMEOUT_MS = 180_000;
@@ -45,88 +45,6 @@ const BROWSER_READY_PATCH = join(
   "browser-ready-barrier.patch.yml",
 );
 
-/** Known environment routes capable of selecting a non-web model or supplying model credentials. */
-export const MODEL_CREDENTIAL_ENV_NAMES = Object.freeze([
-  "ACME_GATEWAY_API_KEY",
-  "AI_API_KEY",
-  "ANTHROPIC_API_KEY",
-  "ANTHROPIC_AUTH_TOKEN",
-  "AWS_ACCESS_KEY_ID",
-  "AWS_BEARER_TOKEN_BEDROCK",
-  "AWS_BEDROCK_ENDPOINT",
-  "AWS_BEDROCK_MODEL",
-  "AWS_BEDROCK_REGION",
-  "AWS_CONTAINER_AUTHORIZATION_TOKEN",
-  "AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE",
-  "AWS_CONTAINER_CREDENTIALS_FULL_URI",
-  "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
-  "AWS_CONFIG_FILE",
-  "AWS_PROFILE",
-  "AWS_ROLE_ARN",
-  "AWS_SECRET_ACCESS_KEY",
-  "AWS_SESSION_TOKEN",
-  "AWS_SHARED_CREDENTIALS_FILE",
-  "AWS_WEB_IDENTITY_TOKEN_FILE",
-  "AZURE_OPENAI_API_KEY",
-  "AZURE_OPENAI_ENDPOINT",
-  "COHERE_API_KEY",
-  "DASHSCOPE_API_KEY",
-  "DEEPSEEK_API_KEY",
-  "DEEPSEEK_BASE_URL",
-  "GEMINI_API_KEY",
-  "GOOGLE_API_KEY",
-  "GOOGLE_APPLICATION_CREDENTIALS",
-  "GROQ_API_KEY",
-  "FIREWORKS_API_KEY",
-  "LLM_API_KEY",
-  "LLM_BASE_URL",
-  "LLM_MODEL",
-  "LLM_PROVIDER",
-  "MISTRAL_API_KEY",
-  "MINIMAX_API_KEY",
-  "MODEL_API_KEY",
-  "MODEL_BASE_URL",
-  "MODEL_PROVIDER",
-  "MOONSHOT_API_KEY",
-  "OLLAMA_HOST",
-  "OPENAI_API_BASE",
-  "OPENAI_API_KEY",
-  "OPENAI_BASE_URL",
-  "OPENROUTER_API_KEY",
-  "TOGETHER_API_KEY",
-  "XAI_API_KEY",
-]);
-
-const MODEL_ENV_PREFIX = /^(?:ANTHROPIC|AWS_BEDROCK|AZURE_OPENAI|COHERE|DASHSCOPE|DEEPSEEK|DSH_WEB|FIREWORKS|GEMINI|GOOGLE|GROQ|LLM|MINIMAX|MISTRAL|MODEL|MOONSHOT|OLLAMA|OPENAI|OPENROUTER|TOGETHER|XAI)_/u;
-const MODEL_ENV_SUFFIX = /(?:API(?:_|-)?KEY|AUTH(?:_|-)?TOKEN|TOKEN|BASE(?:_|-)?URL|ENDPOINT|HOST|MODEL|PROVIDER)$/u;
-const GENERIC_MODEL_CREDENTIAL_SUFFIX = /(?:^|_)(?:API_KEY|AUTH_TOKEN)$/u;
-const ALLOWED_BROKER_ENV_NAMES = new Set([
-  "DSH_WEB_ALLOWED_EXTENSION_ORIGINS",
-  "DSH_WEB_BROKER_PORT",
-  "DSH_WEB_PAIRING_TOKEN",
-  "DSH_WEB_REAL_BROWSER_ATTESTATION",
-]);
-const DSH_CONFIG_SCHEMA = JSON_SCHEMA.extend(new Type("tag:yaml.org,2002:js", {
-  kind: "scalar",
-  resolve: (value) => typeof value === "string",
-  construct: (value) => Object.freeze({ __jsExpr: value }),
-}));
-const EXPECTED_PROFILE_ROWS = new Map([
-  ["headless-startup", "@deepseek-ai/dsh-headless/startup"],
-  ["headless-runner", "@deepseek-ai/dsh-headless"],
-  ["deepseek-web-model-host", "@deepseek-pp/dsh-web-agent-bundle/host"],
-  ["llm", "@deepseek-ai/dsh-llm"],
-  ["session", "@deepseek-ai/dsh-session"],
-  ["session-projection", "@deepseek-ai/dsh-session-projection"],
-  ["system-prompt", "@deepseek-ai/dsh-system-prompt"],
-  ["tools", "@deepseek-ai/dsh-tools"],
-  ["agent", "@deepseek-ai/dsh-agent"],
-  ["agent-default-model", "@deepseek-ai/dsh-agent-default-model"],
-  ["session-persistence-jsonl", "@deepseek-ai/dsh-session-persistence-jsonl"],
-  ["session-checkpoint-policy", "@deepseek-ai/dsh-session-checkpoint-policy"],
-  ["agent-loop", "@deepseek-ai/dsh-agent-loop"],
-  ["llm-deepseek-web", "@deepseek-pp/dsh-llm-deepseek-web"],
-]);
 
 export class RealWebSmokeError extends Error {
   constructor(code, options) {
@@ -300,139 +218,13 @@ function validateBrokerEnvironment(env) {
   }
 }
 
-export function findModelCredentialEnvironment(env) {
-  const exact = new Set(MODEL_CREDENTIAL_ENV_NAMES);
-  return Object.keys(env).filter((name) => {
-    const value = env[name];
-    if (typeof value !== "string" || value === "") return false;
-    const upper = name.toUpperCase();
-    if (ALLOWED_BROKER_ENV_NAMES.has(upper)) return false;
-    return exact.has(upper) || GENERIC_MODEL_CREDENTIAL_SUFFIX.test(upper) ||
-      (MODEL_ENV_PREFIX.test(upper) && MODEL_ENV_SUFFIX.test(upper));
-  }).sort();
-}
-
 export async function assertNoLayeredModelCredentials(cwd, home, readOptionalText) {
-  for (const path of new Set([join(cwd, ".env"), join(home, ".env")])) {
-    const text = await readOptionalText(path);
-    if (text === undefined) continue;
-    let values;
-    try {
-      values = parseEnv(text);
-    } catch (cause) {
-      throw new RealWebSmokeError("REAL_WEB_ENV_FILE_INVALID", { cause });
-    }
-    if (findModelCredentialEnvironment(values).length > 0) {
-      throw new RealWebSmokeError("REAL_WEB_MODEL_CREDENTIAL_PRESENT");
-    }
-  }
+  return assertSharedNoLayeredModelCredentials(cwd, home, readOptionalText, {
+    createError: (code, options) => new RealWebSmokeError(code, options),
+  });
 }
 
-export function validateProfileManifest(text) {
-  let value;
-  try {
-    value = JSON.parse(text);
-  } catch (cause) {
-    throw new RealWebSmokeError("REAL_WEB_PROFILE_INVALID", { cause });
-  }
-  if (!isRecord(value) || value.private !== true || !isRecord(value.dependencies) ||
-      Object.keys(value.dependencies).length !== 1 || typeof value.dependencies[BUNDLE] !== "string" ||
-      !isRecord(value.dsh) || !isRecord(value.dsh.profile) ||
-      value.dsh.profile.patchReload !== "startup" ||
-      !Array.isArray(value.dsh.profile.bundles) ||
-      value.dsh.profile.bundles.length !== 1 || value.dsh.profile.bundles[0] !== BUNDLE) {
-    throw new RealWebSmokeError("REAL_WEB_PROFILE_INVALID");
-  }
-}
-
-export function parseProfileDump(text) {
-  let parsed;
-  try {
-    parsed = loadYaml(text, { schema: DSH_CONFIG_SCHEMA });
-  } catch (cause) {
-    throw new RealWebSmokeError("REAL_WEB_PROFILE_INVALID", { cause });
-  }
-  return parsed;
-}
-
-export function validateProfileDump(text) {
-  validateProfileRows(parseProfileDump(text));
-}
-
-export function validateProfileRows(parsed) {
-  if (!Array.isArray(parsed) || parsed.length !== EXPECTED_PROFILE_ROWS.size) {
-    throw new RealWebSmokeError("REAL_WEB_PROVIDER_INVALID");
-  }
-  const rows = new Map();
-  for (const value of parsed) {
-    if (!isRecord(value) || typeof value.id !== "string" || typeof value.name !== "string" ||
-        rows.has(value.id) || EXPECTED_PROFILE_ROWS.get(value.id) !== value.name ||
-        Object.keys(value).some((key) => !["id", "name", "inject", "config"].includes(key))) {
-      throw new RealWebSmokeError("REAL_WEB_PROVIDER_INVALID");
-    }
-    rows.set(value.id, value);
-  }
-  if ([...EXPECTED_PROFILE_ROWS.keys()].some((id) => !rows.has(id))) {
-    throw new RealWebSmokeError("REAL_WEB_PROVIDER_INVALID");
-  }
-  const selection = rows.get("agent-default-model")?.config;
-  if (!isRecord(selection) || !hasExactKeys(selection, ["provider", "model"]) ||
-      selection.provider !== PROVIDER || selection.model !== MODEL) {
-    throw new RealWebSmokeError("REAL_WEB_PROVIDER_INVALID");
-  }
-  const host = rows.get("deepseek-web-model-host")?.config;
-  if (!isRecord(host) || !hasExactKeys(host, ["port", "journalPath", "pairingToken", "allowedExtensionOrigins"]) ||
-      !isExactJsExpression(host.port, "Number(process.env.DSH_WEB_BROKER_PORT ?? 43123)") ||
-      !isExactJsExpression(host.journalPath, "dshHomePath('profiles', 'deepseek-web-agent', 'web-model-journal')") ||
-      !isExactJsExpression(host.pairingToken, "process.env.DSH_WEB_PAIRING_TOKEN") ||
-      !isExactJsExpression(
-        host.allowedExtensionOrigins,
-        "(process.env.DSH_WEB_ALLOWED_EXTENSION_ORIGINS ?? '').split(',').filter(Boolean)",
-      )) {
-    throw new RealWebSmokeError("REAL_WEB_PROVIDER_INVALID");
-  }
-  const tools = rows.get("tools")?.config;
-  if (!isRecord(tools) || !hasExactKeys(tools, ["mode"]) || tools.mode !== "native") {
-    throw new RealWebSmokeError("REAL_WEB_PROVIDER_INVALID");
-  }
-  for (const [id, row] of rows) assertNoAlternateModelConfiguration(row, id, []);
-}
-
-function assertNoAlternateModelConfiguration(value, rowId, path) {
-  if (Array.isArray(value)) {
-    value.forEach((entry, index) => assertNoAlternateModelConfiguration(entry, rowId, [...path, String(index)]));
-    return;
-  }
-  if (!isRecord(value)) return;
-  for (const [key, child] of Object.entries(value)) {
-    const childPath = [...path, key];
-    const lower = key.toLowerCase().replaceAll("_", "").replaceAll("-", "");
-    if (["apikey", "apikeyenv", "authorization", "baseurl", "credential", "credentials", "endpoint", "headers"].includes(lower)) {
-      throw new RealWebSmokeError("REAL_WEB_PROVIDER_INVALID");
-    }
-    if (key === "provider" && (rowId !== "agent-default-model" || childPath.join(".") !== "config.provider" || child !== PROVIDER)) {
-      throw new RealWebSmokeError("REAL_WEB_PROVIDER_INVALID");
-    }
-    if (key === "model" && (rowId !== "agent-default-model" || childPath.join(".") !== "config.model" || child !== MODEL)) {
-      throw new RealWebSmokeError("REAL_WEB_PROVIDER_INVALID");
-    }
-    assertNoAlternateModelConfiguration(child, rowId, childPath);
-  }
-}
-
-function isExactJsExpression(value, expected) {
-  return isRecord(value) && hasExactKeys(value, ["__jsExpr"]) &&
-    typeof value.__jsExpr === "string" && normalizeJsExpression(value.__jsExpr) === normalizeJsExpression(expected);
-}
-
-function normalizeJsExpression(value) {
-  return value.replaceAll(/\s+/gu, "");
-}
-
-function hasExactKeys(value, keys) {
-  const actual = Object.keys(value).sort();
-  return actual.length === keys.length && actual.every((key, index) => key === [...keys].sort()[index]);
-}
+export const { validateProfileManifest, parseProfileDump, validateProfileDump, validateProfileRows } = createProfileValidators((code, options) => new RealWebSmokeError(code, options));
 
 // JSONL rows are storage records, not necessarily individual events: DSH can
 // pack many deltas into one row even when file compression is disabled.

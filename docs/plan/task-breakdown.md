@@ -305,12 +305,14 @@ T5.1 至 T5.4 合并后执行一次 `npm run compile && npm test`，并重跑 T4
 
 ### T6.1 一键安装、Profile 初始化与安全配对
 
-- **文件范围**：`scripts/install-dsh-web-agent.mjs`、`scripts/uninstall-dsh-web-agent.mjs`、`packages/dsh-web-agent-bundle/bin/**`、`packages/dsh-web-agent-bundle/README.md`、`tests/dsh-web-agent-installer.test.ts`；仅为登记命令允许修改根 `package.json`。
+- **文件范围**：`scripts/install-dsh-web-agent.mjs`、`scripts/uninstall-dsh-web-agent.mjs`、`scripts/prepare-dsh-web-agent-distribution.mjs`、`packages/dsh-web-agent-bundle/bin/**`、`packages/dsh-web-agent-bundle/README.md`、`tests/dsh-web-agent-installer.test.ts`、`tests/dsh-web-agent-distribution.test.ts`；仅为登记命令、复用既有校验器和声明已有精确依赖允许最小修改根／bundle manifest、lock 和原 smoke 的 import/re-export。
 - **前置**：T5.4。
 - **实现技术**：安装固定 Harness 版本与本仓库 out-of-tree packages，创建独立 profile 和高熵配对令牌，以显式用户步骤把令牌录入扩展；安装前后校验 package SHA/version/Node 版本。卸载只移除本产品拥有的 profile/package 链接，不碰用户其他 DSH profile 或浏览器数据。
 - **明确禁止**：不得安装浮动 master/latest；不得自动读取浏览器 Cookie/Token；不得修改全局 provider/model/API 配置；不得递归删除宽泛目录。
 - **验收**：全新临时 home 中可安装、doctor、启动、升级同版本和幂等卸载；错误 Node/Harness/package hash 立即停止且不留半安装 profile。
 - **定向测试**：`npx vitest run tests/dsh-web-agent-installer.test.ts`；在临时 home 执行 installer dry-run/smoke。
+
+**2026-09-06 开发交付合同**：T6.1 先生成标为 `local-development` 的固定源码分发：`distribution.json` 固定 Node 24、DSH `0.1.2-rc.1`、干净源码 commit 与相对文件 SHA256，含四 workspace、三份已固定的请求预算归档及从现有 lock 裁剪的独立 lock。不打扩展 ZIP、不称 release candidate。安装器校验 raw manifest SHA 和全部文件后，在产品独立 home 的版本目录中执行锁定安装，不依赖可变原 checkout 或全局 pnpm；复用官方 profile manifest/CLI。单一 active 指针启用版本，持久 session/journal 留在 state；失败保持旧安装可用。同版本新 build 升级保留会话与配对，卸载移除活动链接并保留可恢复的用户数据。日常启动只薄调用官方入口，限定工作区及显式 readonly/files/Linux 模式；浏览器等待有界，绝不自动改用其他模型。原 smoke 的无模型凭据和 profile 严格校验抽为共享生产模块，禁止各复制一份。这不是 T6.3 候选包／真实安装验收的替代。
 
 ### T6.2 安全与“无模型/API”发布断言
 
