@@ -26,6 +26,7 @@
 <p align="center">
   <a href="README_EN.md">English README</a> ·
   <a href="#产品定位">产品定位</a> ·
+  <a href="#本机-harness">本机 Harness</a> ·
   <a href="#功能速览">功能速览</a> ·
   <a href="#适合场景">适合场景</a> ·
   <a href="#安装">安装</a> ·
@@ -43,12 +44,23 @@ DeepSeek++ 是面向 [DeepSeek](https://chat.deepseek.com) 网页版的开源浏
 ## 目录
 
 - [产品定位](#产品定位)
+- [本机 Harness](#本机-harness)
 - [功能速览](#功能速览)
 - [适合场景](#适合场景)
 - [核心功能](#核心功能)
 - [1.14.0 变更回顾](#1140-变更回顾)
 - [安装](#安装)
 - [友情链接](#友情链接)
+
+## 本机 Harness
+
+本 fork 的 `feature/web-harness` 分支还提供本机 DeepSeek Harness 入口（Mode A）：首次配对后，通过命令行打开官方 Harness 网页，在里面聊天、读取或编辑所选项目文件、查看工具过程和继续已完成的历史会话；也可以使用终端对话入口。
+
+模型来自同一浏览器中已登录、保持打开的 DeepSeek 官网，**不需要模型 API key，也不需要在 Pi 中配置模型**。会话、工具执行和多步任务由本机 Harness 负责，DeepSeek++ 负责连接网页模型。读取和编辑文件可直接在 Windows 上运行；Bash 命令仍使用单独配置的 WSL/Linux 环境。
+
+使用 Node.js 24.x，Harness 固定为 `0.1.2-rc.1`。这是本分支的本地交付功能，不代表上游商店版本已包含它。新用户见 [首次安装与配对](docs/verification/P6_首次安装.md)；已经配对后直接看 [日常使用](docs/verification/P6_本机使用.md)，无需重复安装。当前网页入口固定使用启动时选择的项目和网页模型，不开放任意模型设置、图片输入或会话分叉。
+
+原有在 DeepSeek 页面或扩展侧边栏内工作的方式（Mode B）继续保留；下方的记忆、MCP、多模态和自动化说明仍适用于这些浏览器内功能，不表示它们自动接入本机 Harness。
 
 ## 功能速览
 
@@ -1088,6 +1100,8 @@ npm run shell:install -- --browser chrome --extension-id <扩展ID>
 </details>
 
 ## 安装
+
+本机 Harness 使用本 fork 的扩展构建与配套本机程序，见 [本机 Harness](#本机-harness)。下面保留原 DeepSeek++ 浏览器内功能的安装方式。
 
 ### 从 Chrome Web Store 安装
 

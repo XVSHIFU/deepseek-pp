@@ -26,6 +26,7 @@
 <p align="center">
   <a href="README.md">Chinese README</a> ·
   <a href="#product-positioning">Product Positioning</a> ·
+  <a href="#local-harness">Local Harness</a> ·
   <a href="#feature-overview">Feature Overview</a> ·
   <a href="#use-cases">Use Cases</a> ·
   <a href="#installation">Installation</a> ·
@@ -43,12 +44,23 @@ Language can follow the browser or be set to English or Simplified Chinese. Deep
 ## Table of Contents
 
 - [Product Positioning](#product-positioning)
+- [Local Harness](#local-harness)
 - [Feature Overview](#feature-overview)
 - [Use Cases](#use-cases)
 - [Core Features](#core-features)
 - [1.14.0 Release Highlights](#1140-release-highlights)
 - [Installation](#installation)
 - [Friendly Links](#friendly-links)
+
+## Local Harness
+
+This fork's `feature/web-harness` branch also provides a local DeepSeek Harness entry point (Mode A). Pair it once, then launch the official Harness web interface from the command line to chat, read or edit files in your selected project, inspect tool activity, and continue completed sessions. An interactive terminal entry remains available too.
+
+The model is the signed-in DeepSeek website, kept open in the same browser profile. **No model API key or model configured in Pi is required.** The local Harness owns sessions, tools, and multi-step execution; DeepSeek++ connects it to the web model. Reading and editing files runs directly on Windows. Bash commands still require the separately configured WSL/Linux environment.
+
+Use Node.js 24.x; Harness is pinned to `0.1.2-rc.1`. This is a local delivery from this branch, not a claim that the upstream store extension includes it. New users can follow [first-time installation and pairing](docs/verification/P6_首次安装.md). If already paired, go straight to [daily use](docs/verification/P6_本机使用.md), without reinstalling (both guides are in Chinese). The current web entry uses the project selected at launch and the web model only; arbitrary model settings, image input, and session forking are not exposed.
+
+The existing DeepSeek-page and extension-side-panel workflows (Mode B) remain available. The memory, MCP, multimodal, and automation features described below belong to those browser-side workflows; they are not automatically added to the local Harness.
 
 ## Feature Overview
 
@@ -1088,6 +1100,8 @@ Thanks to this release's contributors: [@todayzhou](https://github.com/todayzhou
 </details>
 
 ## Installation
+
+For the local Harness, use this fork's extension build and companion local runtime; see [Local Harness](#local-harness). The instructions below retain the original browser-side DeepSeek++ installation options.
 
 ### Install from Chrome Web Store
 
