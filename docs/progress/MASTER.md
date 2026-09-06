@@ -4,7 +4,7 @@
 >
 > **Tracking mode**: `LOCAL_ONLY`（尚未创建 GitHub Issue、Milestone 或 PR）
 >
-> **Started / last updated**: 2026-09-04 / 2026-09-05
+> **Started / last updated**: 2026-09-04 / 2026-09-06
 >
 > **Active repository**: `XVSHIFU/deepseek-pp`
 >
@@ -168,6 +168,7 @@ Windows 启动器只临时用 `WSLENV` 的 `/u` 标记传递固定配对配置�
 
 | Date | Scope | Command | Result | Notes |
 |:--|:--|:--|:--|:--|
+| 2026-09-06 | P5 real readonly / auth diagnosis | 操作者两次运行；原 `decodeSessionLog` 只读解析两份 session，读取 journal 的状态字段 | `failed before model dispatch` | `readonly-ee82aebe-2b5e-4f3e-82c1-530590692f22`、`readonly-443003f9-3006-4166-9db7-b677cce0e97a` 均 `DEEPSEEK_AUTH_REQUIRED`，journal=`failed/not_started/sequence0`，无工具调用。源码确认是扩展缓存及页面刷新未获得非空 Authorization，不是已发模型请求后的服务端拒绝。日志不能区分页面未注入、不同浏览器/用户配置或页面 token 不可读；未读取真实凭据或擅自改认证协议。测试说明补充同一 Chrome 配置中新开页面并完成普通网页对话，复用现有 HEADERS_CAPTURED 路径。仅文档修改，`git diff --check`；未重跑自动测试或真实网页，M5 保持待验收 |
 | 2026-09-05 | P5 full automated regression | Ubuntu / Node 24.18.0：原 Vitest `run --shard=N/4 --maxWorkers=4 --reporter=json`，每组 `timeout --kill-after=2s 55s` | `passed` | 全部 252 文件，无遗漏、重复或额外文件；2280 passed / 0 failed / 6 既有平台 skip（共 2286）。报告保留于 Linux `.tmp/p5-full-4fa7ac7/`：2–4 组为 `4fa7ac7`；第 1 组最终为 `6ccffae` 的 `shard-1-after-barrier-fix.json`。首次第 1 组旧 buffer-overflow 测试未等待消费／socket 关闭导致 1 项失败，`6ccffae` 仅补明确观察屏障，无生产变更；原失败报告保留。Windows 该文件 34/34；Windows/Linux compile 通过。不是新的真实网页证据，不据此关闭 M5 |
 | 2026-09-05 | P5 original CLI and side effects | Windows `node scripts/dsh-web-agent-recovery-smoke.mjs`；实际 editor/runtime 原Vitest | `passed` | smoke 9/9，32.45s，55s上限；4个实际CLI阶段kill/restart均在持久状态确认后执行，同profile/原journal/同ID查询、0新generate，远端completed仍本地ambiguous。取消5项：预取消零发送、accepted/streaming重入、丢ack超时、终态后幂等，单终态和进程/端口/临时目录清理。editor前/后与runtime/fake联合17/17：半工具流不执行，已创建文件恢复后bytes/inode/mtimeNs/ctimeNs不变，真实summary不造checkpoint、真实child独立Session可恢复 |
 | 2026-09-05 | P5 independent browser build | owned clone `5e9e641`：离线ci、prepare、compile、prompt、3端build和静态检查 | `passed` | Node24.18；1019包26.653s；prepare6.649s、compile2.934s；prompt7/7；Chrome/Edge/Firefox8.732/8.952/8.360s；manifest、177文件UTF8、3端chunks全过。lock SHA4440b0e2b669ddfef9416ed25d74827ada9277ea5071b39e036f377cf6526e90不变，clone干净，background SHA8639ea10cd99098c4c4e822eb46b6bc43ca5edf66e5d57dd674a2371bd469c6c；仅既有Pyodide externalization及依赖弃用警告，无ZIP/浏览器安装 |
