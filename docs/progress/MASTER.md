@@ -146,6 +146,8 @@
 
 **当前状态**：M0–M5、T4.5–T4.6 已验证，Batch C 已关闭。P6 的 T6.1/T6.2 已完成固定本地开发分发、独立安装入口、同版本换 build、幂等卸载/重装及无 API 路由检查。最新 8 个定向文件 176/176，编译通过；安装后的原 CLI 已经真实读取临时文件并两轮完成（fake 网页模型）。日常单任务使用见 [本机使用说明](../verification/P6_本机使用.md)。交互式对话／继续旧会话的用户入口、T6.3 候选包及 T6.4 最终门禁尚未交付；不是完整发行版，不要求重复 P5 测试。
 
+**2026-09-06 操作者实用验证补充**：固定 c 开发分发已在实际产品 home 安装、幂等安装、配对，并通过网页模型完成用户自己指定项目的 README 概括；保留 session 只读复验为 2 steps、1 tool call/result、completed。doctor 与卸载均成功，当前实际产品 home 已停用但保留数据。另一个附件记录了 `WAITING_FOR_BROWSER` 启动失败：现有等待插件一分钟内未见 authenticated peer，不能凭此确定是扩展离线还是配对配置不一致；长原始堆栈属于待改善的启动提示。成功与失败分别保留，不把开发分发实用验证冒充 T6.3 正式候选验收。使用说明已拆开检查与可选卸载，避免继续使用者误把卸载当必做步骤；无需重复已成功的读取任务。
+
 M4/T4.1–T4.4 的真实只读运行保持有效。T4.5 的文件编辑及 Linux 命令组合均已通过实际 DSH/fake browser 闭环，工作区写入/越界拒绝/取消清理已实测；本次操作者真实网页运行 `command-0469b0dc-bf30-44fb-ac29-ddbc1e8bcf36` 又完成 2 model steps、1 Bash call/result、文件和短测试验证、同一 session completed。原始 Linux session 与文件哈希只读复验一致，新增网页请求为零。独立 editor 专用真实网页检查未执行，不能以本次 Bash 验收冒充。
 
 T4.6 已补齐可压缩历史的消息数／编码字节保护：fork 独立分支的真实发送前预算检查复用原恢复及压缩事务，两项旧 `current-gap` 已从安全拒绝改为自动摘要后继续成功。最终候选在独立 checkout 离线安装，4 份定向测试 61/61 通过；包含实际 65 轮、当次输入跨界、摘要合法前缀、工具对保留、失败不提交、持久化恢复及外部保留码拒绝。它不承诺固定系统／工具包络或不可分单元总能容纳。P5 已验收，P6 安装交付正在开发。
@@ -174,6 +176,7 @@ Windows 启动器只临时用 `WSLENV` 的 `/u` 标记传递固定配对配置�
 
 | Date | Scope | Command | Result | Notes |
 |:--|:--|:--|:--|:--|
+| 2026-09-06 | T6.1 operator installed real-web task | 操作者固定 c 分发安装/重复安装/pair；安装后 start readonly、doctor、uninstall；编排只读解析保留 session | `passed; separate startup timeout recorded` | 实际网页任务终答已返回；session `session-1db9e6ac-1ccc-456d-9e9a-053a40af7c46`，2 steps、1 tool call/result、turn/end completed；原日志 SHA256=`85d217ce14e369c9f249c37e93db52168a50c626e0c2db462b7010cba280e049`。active.json 不存在、inactive.json 存在，与卸载输出一致。附件另有 `WAITING_FOR_BROWSER` 原始堆栈，只能证明启动等待未接入认证 peer；未伪称失败已修复。本轮仅文档改动与只读复验，`git diff --check`，不重跑运行时测试，不重装、不调用网页、不读取配对秘密、不提交原任务文本/日志或项目内容 |
 | 2026-09-06 | T6.1/T6.2 final targeted | Windows Node24.18：8份 installer/distribution/security/旧真实入口原 Vitest；`tsc --noEmit`、`git diff --check` | `passed` | 176/176，9.08s，外层55s；编译通过。含原模型凭据/profile单一校验抽取后旧入口兼容、Node/版本/hash/路径拒绝、真实子进程超时关闭、peer等待、兼容overrides保留、无API读取、官方editor与越界拒绝；不重跑已通过且未改的浏览器构建，不称完整发行门禁 |
 | 2026-09-06 | T6.1 fixed distribution and policy | `prepare-dsh-web-agent-distribution.mjs --output C:\temp\deepseek-web-agent-dev-p6-20260906-c`；`harness-release-policy-check.mjs --distribution ... --sha256 ...` | `passed` | 来源 `db772cf2629d3a445f51696a07634301530e4fc0`，manifest SHA `a5d8113ac7fdf9afe008f18ef296be2078d953536f37e64ba4a49425396a84a1`；54文件，扫描解压后1,160,746 bytes，`kind=local-development`、`release_candidate_verified=false`。所有npm依赖身份来自原lock，无浮动升级；没有浏览器凭据/真实session/home被打入 |
 | 2026-09-06 | T6.1 Windows real installation lifecycle | `tests/fixtures/harness-bridge/installation/acceptance.mjs` 分phase运行，单phase外部55s；隔离 home `C:\temp\dsh-p6-installer-acceptance-20260906-c` | `passed` | 首装含错误SHA/dry-run零home写入、真实npm ci、同build幂等、输入分发目录不可用后独立launcher doctor。run 4.56s：原CLI→官方read→fake终答，2模型步/1call/result，durable/child close/port release；运行中卸载被同lease拒绝。失败安装5.10s确实收到 `INSTALL_NPM_FAILED`，旧active/session/journal/token不变；独立synthetic新版README+manifest fixture换版成功（不称真实发布build）。卸载/再次卸载/同build重装3.10s，保留无关用户文件与全部durable字节。不是新真实网页调用 |
