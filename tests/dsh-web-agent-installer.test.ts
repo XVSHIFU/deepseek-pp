@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -23,6 +23,22 @@ async function manifestFixture(overrides: Record<string, unknown> = {}) {
 }
 
 describe("fixed local Harness installer boundary", () => {
+  it("boots the shipped installer without checkout or installed package dependencies", async () => {
+    const root = await temporary();
+    const bare = join(root, "bare-bin");
+    await mkdir(bare);
+    for (const name of ["dsh-web-agent.mjs", "install-runtime.mjs", "model-credentials.mjs", "profile-validation.mjs", "web-options.mjs", "terminal-options.mjs"]) {
+      await copyFile(resolve("packages/dsh-web-agent-bundle/bin", name), join(bare, name));
+    }
+    const fixture = await manifestFixture();
+    const home = join(root, "not-created");
+    const result = await installer.runProcess(process.execPath, [join(bare, "dsh-web-agent.mjs"), "install", "--distribution", fixture.directory,
+      "--sha256", "f".repeat(64), "--home", home], { cwd: root, env: installer.createRuntimeEnvironment(process.env), timeoutMs: 3000 });
+    expect(result.code).toBe(1);
+    expect(JSON.parse(result.stderr)).toEqual({ ok: false, error: "DISTRIBUTION_HASH_MISMATCH" });
+    expect(existsSync(home)).toBe(false);
+    expect(existsSync(join(root, "node_modules"))).toBe(false);
+  });
   it.each(["20.19.0", "22.10.0", "25.0.0", "24", "latest"])("refuses unsupported Node %s", (version) => {
     expect(() => installer.assertNodeVersion(version)).toThrow("INSTALL_NODE_24_REQUIRED");
   });

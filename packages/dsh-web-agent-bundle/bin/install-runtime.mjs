@@ -7,7 +7,6 @@ import { createRequire } from "node:module";
 import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { assertNoLayeredModelCredentials } from "./model-credentials.mjs";
-import { validateProfileDump } from "./profile-validation.mjs";
 import { presentationArguments } from "./web-options.mjs";
 
 export const PROFILE_NAME = "deepseek-web-agent";
@@ -377,6 +376,9 @@ export async function install({ distribution, home, manifestSha256, offline = fa
       const versionOutput = await mustRun(process.execPath, [dsh, "--version"], { cwd: runtime, env }, "INSTALL_DSH_LOAD_FAILED");
       if (versionOutput.stdout.trim() !== HARNESS_VERSION) fail("INSTALL_PACKAGE_VERSION_MISMATCH");
       const dumped = await mustRun(process.execPath, [dsh, "--profile", PROFILE_NAME, "--dump-config"], { cwd: runtime, env }, "INSTALL_PROFILE_LOAD_FAILED");
+      // First install starts from a bare distribution. Resolve the unchanged
+      // YAML validator only after this verified staged runtime has its deps.
+      const { validateProfileDump } = await import(pathToFileURL(join(bundle, "bin/profile-validation.mjs")).href);
       validateProfileDump(dumped.stdout);
       if (previous === undefined) {
         await privateDirectory(ownedPath(root, "secrets"));
