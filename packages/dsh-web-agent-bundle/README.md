@@ -23,6 +23,12 @@ After installation, use `node <product-home>/dsh-web-agent.mjs` with:
 - `start --workspace <absolute-workspace> --mode readonly --task <task>` for a
   single task. `files` explicitly permits the existing editor/Skills/child-Agent
   composition; `linux-commands` additionally requires the Linux setup below.
+- `start --workspace <absolute-workspace> --mode readonly` for a terminal session.
+  Enter one task per line. `/exit` keeps the session and exits; Ctrl+C cancels
+  and exits. The terminal prints the session ID for later use.
+- `start --workspace <same-workspace> --mode readonly --resume <session-id>`
+  to continue an explicitly selected completed root session. It does not select
+  a recent session, accept another workspace, or replay unfinished work.
 - `install --distribution <new-directory> --sha256 <new-sha> --origin <origin>`
   to install a new build while retaining sessions, recovery records and pairing.
 - `uninstall` to deactivate the owned profile link. User data and old versions
@@ -30,8 +36,10 @@ After installation, use `node <product-home>/dsh-web-agent.mjs` with:
 
 The installed entry does not require the original checkout. It waits up to one
 minute for the paired browser; save the extension's connection settings if it
-is offline. It uses the original one-task/headless DSH entry, not a new Agent
-loop or a finished interactive/resume interface. Close a running task before
+is offline. With `--task` it uses the original one-task/headless DSH entry;
+without it a thin terminal plugin passes input to the official Agent inbox and
+renders its events. The same Harness owns the loop, tools and session storage.
+There is no second conversation engine or terminal UI framework. Close a running task before
 upgrading or uninstalling. Damaged ownership/lock state requires inspection;
 do not remove recovery records to bypass it. This is a local development
 delivery, not a published release or completed candidate-package acceptance.
@@ -158,8 +166,8 @@ to make one explicit `purpose=compaction` web request with a short checkpoint
 instruction. The web route cannot set `maxTokens`; no token cap is silently
 ignored or falsely recorded. Failed summaries do not become checkpoints and are
 not automatically retried. Token counts are estimates; protocol limits still
-apply (including 1 MiB per frame and 128 messages). Crash/reconnect acceptance
-is not complete.
+apply (including 1 MiB per frame and 128 messages). Interrupted-request recovery
+queries original identities without automatic replay, as described above.
 
 The configured compaction threshold is 35% of the adapter's conservative context
 capacity, retaining 8% verbatim. This starts earlier than the upstream default
@@ -172,7 +180,9 @@ fits; failed or cancelled summaries keep the original history. Tests cover many
 short turns, newly admitted escaped input, the newest tool pair and checkpoint
 resume. An oversized fixed envelope or indivisible unit still fails visibly.
 See [the pinned dependency record](../../vendor/harness-request-budget/README.md).
-A user-facing maintenance/resume entry is not yet delivered.
+The installed terminal entry supports explicit resume of completed root sessions
+in the same workspace. It does not add a manual compaction command or automatic
+recovery of an unfinished turn.
 
 After the checkout installation and pairing setup above, run from the selected
 workspace, with `DSH_WEB_WORKSPACE_ROOT` set to that same absolute directory:
@@ -182,11 +192,11 @@ $harnessRepo = 'C:\path\to\deepseek-pp'
 dsh --profile deepseek-web-agent --patch "$harnessRepo\packages\dsh-web-agent-bundle\cordis.workspace-files.patch.yml" --patch "$harnessRepo\packages\dsh-web-agent-bundle\cordis.harness-features.patch.yml" 'Your task'
 ```
 
-This remains a development, one-task/headless entry, not the planned interactive
-installation experience. It grants file editing within the chosen root; no
+This direct checkout command remains a development, one-task/headless entry;
+use the installed entry above for terminal interaction. It grants file editing within the chosen root; no
 PowerShell/Bash command execution is available. Official session resume and
-checkpoint behavior are exercised in the feature integration tests, not claimed
-as a finished user-facing resume command. The combined features' integration
+checkpoint behavior are exercised in the feature integration tests; the terminal
+resume command intentionally accepts only completed root sessions. The combined features' integration
 uses a scripted browser peer; it is not new real-web acceptance evidence.
 
 For the next real-web **file-edit-only** check, use

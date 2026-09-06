@@ -46,6 +46,28 @@ describe("release web-only profile policy", () => {
     expect(() => validateProfileRows(rows())).not.toThrow();
   });
 
+  it("the terminal overlay changes only the application surface, preserving the validated web-only kernel", () => {
+    const base = rows();
+    const terminal = composeEntries([
+      loadOverlayPatches("security-profile", resolve("packages/dsh-web-agent-bundle/cordis.patch.yml")),
+      loadOverlayPatches("security-terminal", resolve("packages/dsh-web-agent-bundle/bin/terminal-app.patch.yml")),
+    ]);
+    expect(() => validateProfileRows(base)).not.toThrow();
+    const applicationIds = new Set(["headless-startup", "headless-runner"]);
+    for (const original of base) {
+      const actual = terminal.find((entry) => entry.id === original.id);
+      expect(actual).toEqual(applicationIds.has(original.id) ? { ...original, disabled: true } : original);
+    }
+    const added = terminal.filter((entry) => !base.some((original) => original.id === entry.id));
+    expect(added).toHaveLength(1);
+    expect(added[0].id).toBe("deepseek-web-terminal-app");
+    expect(added[0].name).toMatch(/(?:^|\/)terminal-app\.mjs$/u);
+    expect(added[0].config).toBeUndefined();
+    expect(terminal.filter((entry) => entry.id === "agent-loop")).toHaveLength(1);
+    expect(terminal.filter((entry) => entry.id === "agent-default-model").map((entry) => entry.config))
+      .toEqual([{ provider: "deepseek-web", model: "current-web-session" }]);
+  });
+
   it.each(["provider", "apiKey", "telemetry"])("rejects an added %s fallback row using the existing allowlist", (kind) => {
     const changed = [...rows(), { id: `foreign-${kind}`, name: `untrusted-${kind}`, config: { [kind]: "synthetic" } }];
     expect(() => validateProfileRows(changed)).toThrow("REAL_WEB_PROVIDER_INVALID");

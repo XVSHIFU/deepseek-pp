@@ -101,7 +101,8 @@
 | P5 | T5.1–T5.4 | Host journal、Browser 结果索引、取消与原 CLI 崩溃恢复 | `—` | `—` | `harness_features`, `windows_command_route`, `file_write_acceptance`; integration: orchestration | `verified` |
 | P6 | T6.1 | 固定版本安装、profile/配对、doctor/启动/升级/卸载 | `—` | `—` | `p6_installer`, `p6_distribution_tests`; integration: orchestration | `verified` |
 | P6 | T6.2 | 窄范围安装包策略与无 API/provider fallback 断言 | `—` | `—` | `p6_policy`; integration: orchestration | `verified` |
-| P6 | T6.3–T6.4 | 候选包验收、最终文档与完整发行门禁 | `TBD` | `TBD` | `TBD` | `not_started` |
+| P6 | T6.3 | 候选包生成与真实安装验收 | `—` | `—` | `p6_candidate_packaging`; integration: orchestration | `in_progress` |
+| P6 | T6.4 | 最终文档与完整发行门禁 | `TBD` | `TBD` | `TBD` | `not_started` |
 | S1 | S1-T1 | PR #568 独立评估；只服务模式 B 兼容，不作为模式 A 前置 | `TBD` | `TBD` | `TBD` | `not_started` |
 
 ## PR #568 独立分支策略
@@ -144,6 +145,8 @@
 
 ## 当前状态与下一步
 
+**当前正在执行（2026-09-06）**：T6.1 交互入口增量与等待超时提示修复，独立子任务并行准备 T6.3 本地候选生成脚本。分工：`p6_interactive` 负责薄终端展示及官方恢复；`p6_startup_feedback` 负责公开 appExit 的等待提示；`p6_candidate_packaging` 负责候选 manifest/SBOM/hash 脚本；编排负责合同、依赖与分发集成。现有已验证 c 分发及用户卸载状态保持不变，新入口未通过前不更新为已交付、不要求用户重复测试。
+
 **当前状态**：M0–M5、T4.5–T4.6 已验证，Batch C 已关闭。P6 的 T6.1/T6.2 已完成固定本地开发分发、独立安装入口、同版本换 build、幂等卸载/重装及无 API 路由检查。最新 8 个定向文件 176/176，编译通过；安装后的原 CLI 已经真实读取临时文件并两轮完成（fake 网页模型）。日常单任务使用见 [本机使用说明](../verification/P6_本机使用.md)。交互式对话／继续旧会话的用户入口、T6.3 候选包及 T6.4 最终门禁尚未交付；不是完整发行版，不要求重复 P5 测试。
 
 **2026-09-06 操作者实用验证补充**：固定 c 开发分发已在实际产品 home 安装、幂等安装、配对，并通过网页模型完成用户自己指定项目的 README 概括；保留 session 只读复验为 2 steps、1 tool call/result、completed。doctor 与卸载均成功，当前实际产品 home 已停用但保留数据。另一个附件记录了 `WAITING_FOR_BROWSER` 启动失败：现有等待插件一分钟内未见 authenticated peer，不能凭此确定是扩展离线还是配对配置不一致；长原始堆栈属于待改善的启动提示。成功与失败分别保留，不把开发分发实用验证冒充 T6.3 正式候选验收。使用说明已拆开检查与可选卸载，避免继续使用者误把卸载当必做步骤；无需重复已成功的读取任务。
@@ -176,6 +179,7 @@ Windows 启动器只临时用 `WSLENV` 的 `/u` 标记传递固定配对配置�
 
 | Date | Scope | Command | Result | Notes |
 |:--|:--|:--|:--|:--|
+| 2026-09-06 | T6.1 terminal and startup / T6.3 packaging implementation | 两组原 Vitest（每组55s上限）；compile、prompt:freeze、diff检查 | `passed targeted` | 原入口/分发/安全7文件149项13.30s；交互/启动/安装器/候选4文件62项19.48s，合计211项；compile exit0、prompt7/7。实际官方CLI/fake peer覆盖两轮输入真实read、EOF排队保留、同ID恢复与连续空闲恢复、空会话、错误后明确新输入；跨workspace/未停稳session拒绝零generate且log不变。启动超时通过appExit返回1短提示，取消返回130并关闭端口/进程；未知异常不吞。候选20项包括同源码zip/锁/hash/SBOM身份；尚未实际生成本轮候选或安装后PTY验收，不是新增真实网页证据 |
 | 2026-09-06 | T6.1 operator installed real-web task | 操作者固定 c 分发安装/重复安装/pair；安装后 start readonly、doctor、uninstall；编排只读解析保留 session | `passed; separate startup timeout recorded` | 实际网页任务终答已返回；session `session-1db9e6ac-1ccc-456d-9e9a-053a40af7c46`，2 steps、1 tool call/result、turn/end completed；原日志 SHA256=`85d217ce14e369c9f249c37e93db52168a50c626e0c2db462b7010cba280e049`。active.json 不存在、inactive.json 存在，与卸载输出一致。附件另有 `WAITING_FOR_BROWSER` 原始堆栈，只能证明启动等待未接入认证 peer；未伪称失败已修复。本轮仅文档改动与只读复验，`git diff --check`，不重跑运行时测试，不重装、不调用网页、不读取配对秘密、不提交原任务文本/日志或项目内容 |
 | 2026-09-06 | T6.1/T6.2 final targeted | Windows Node24.18：8份 installer/distribution/security/旧真实入口原 Vitest；`tsc --noEmit`、`git diff --check` | `passed` | 176/176，9.08s，外层55s；编译通过。含原模型凭据/profile单一校验抽取后旧入口兼容、Node/版本/hash/路径拒绝、真实子进程超时关闭、peer等待、兼容overrides保留、无API读取、官方editor与越界拒绝；不重跑已通过且未改的浏览器构建，不称完整发行门禁 |
 | 2026-09-06 | T6.1 fixed distribution and policy | `prepare-dsh-web-agent-distribution.mjs --output C:\temp\deepseek-web-agent-dev-p6-20260906-c`；`harness-release-policy-check.mjs --distribution ... --sha256 ...` | `passed` | 来源 `db772cf2629d3a445f51696a07634301530e4fc0`，manifest SHA `a5d8113ac7fdf9afe008f18ef296be2078d953536f37e64ba4a49425396a84a1`；54文件，扫描解压后1,160,746 bytes，`kind=local-development`、`release_candidate_verified=false`。所有npm依赖身份来自原lock，无浮动升级；没有浏览器凭据/真实session/home被打入 |

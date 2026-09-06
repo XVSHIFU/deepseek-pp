@@ -314,6 +314,8 @@ T5.1 至 T5.4 合并后执行一次 `npm run compile && npm test`，并重跑 T4
 
 **2026-09-06 开发交付合同**：T6.1 先生成标为 `local-development` 的固定源码分发：`distribution.json` 固定 Node 24、DSH `0.1.2-rc.1`、干净源码 commit 与相对文件 SHA256，含四 workspace、三份已固定的请求预算归档及从现有 lock 裁剪的独立 lock。不打扩展 ZIP、不称 release candidate。安装器校验 raw manifest SHA 和全部文件后，在产品独立 home 的版本目录中执行锁定安装，不依赖可变原 checkout 或全局 pnpm；复用官方 profile manifest/CLI。单一 active 指针启用版本，持久 session/journal 留在 state；失败保持旧安装可用。同版本新 build 升级保留会话与配对，卸载移除活动链接并保留可恢复的用户数据。日常启动只薄调用官方入口，限定工作区及显式 readonly/files/Linux 模式；浏览器等待有界，绝不自动改用其他模型。原 smoke 的无模型凭据和 profile 严格校验抽为共享生产模块，禁止各复制一份。这不是 T6.3 候选包／真实安装验收的替代。
 
+**T6.1 交互入口补齐（2026-09-06，用户继续授权）**：锁版 `dsh` README 的 `tui` 是假设已安装 profile 的语法示例，不是随包交付的终端 UI；`dsh-sdk-jsonrpc-server` 的公开 wire 只有 initialize/session-prompt/shutdown，不能恢复旧会话。使用本仓库 bundle 内的薄 Cordis terminal-app 展示插件与一个显式 overlay，替换 headless 的两个应用行，不改变其余 Harness/工具/模型组合。`start` 不带 `--task` 时进入交互输入，带 `--task` 时保持既有一次性行为；`--resume <session-id>` 只恢复明确指定的同工作区根会话，不自行选择最近会话。终端 `readline` 只负责接收用户文字和显示官方事件，创建/恢复/入队/取消/flush 全部调用锁版公开 AgentRegistry、SessionPersistence 和 appExit 生命周期；不得复制 agent loop、工具链、上下文或数据库。输入串行处理，EOF/退出/取消须清理进程、端口和锁；工作区不匹配、子会话或不明状态不可绕过恢复边界。支持多轮同 session、跨进程恢复、旧单任务兼容的实际官方 CLI/fake 模型验收，再生成新分发。启动等待超时通过公开 appExit 非零退出并显示明确提示，不用 stderr 正则吞堆栈，不回退 API、不自动重试模型。上述接口代码、overlay、测试/fixture 属于 T6.1 文件范围；如需直依赖，仅声明已存在锁中的同版本包，不升级。
+
 ### T6.2 安全与“无模型/API”发布断言
 
 - **文件范围**：`tests/security/harness-bridge-security.test.ts`、`tests/security/harness-profile-no-provider.test.ts`、`tests/fixtures/harness-bridge/security/**`、`scripts/harness-release-policy-check.mjs`。

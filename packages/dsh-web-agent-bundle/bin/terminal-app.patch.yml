@@ -1,0 +1,11 @@
+# Presentation only: the existing Harness agent, tools and persistence retain
+# ownership. Never mount the API-backed upstream base or a second agent loop.
+- id: headless-startup
+  disabled: true
+
+- id: headless-runner
+  disabled: true
+
+- insert:
+    - id: deepseek-web-terminal-app
+      name: ./terminal-app.mjs

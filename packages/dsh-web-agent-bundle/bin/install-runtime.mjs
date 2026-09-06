@@ -8,6 +8,7 @@ import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:p
 import { pathToFileURL } from "node:url";
 import { assertNoLayeredModelCredentials } from "./model-credentials.mjs";
 import { validateProfileDump } from "./profile-validation.mjs";
+import { validateStartInput } from "./terminal-options.mjs";
 
 export const PROFILE_NAME = "deepseek-web-agent";
 export const HARNESS_VERSION = "0.1.2-rc.1";
@@ -159,10 +160,10 @@ export async function readDistribution(directory, { expectedSha256, installed = 
 }
 
 /** Bounded children, no shell strings; npm diagnostics are intentionally not replayed into product logs. */
-export async function runProcess(executable, args, { cwd, env, timeoutMs = 45000, inherit = false } = {}) {
+export async function runProcess(executable, args, { cwd, env, timeoutMs = 45000, inherit = false, gracefulInterrupt = false, onAbort } = {}) {
   return new Promise((resolveProcess, reject) => {
     const child = spawn(executable, args, { cwd, env, shell: false, windowsHide: true, detached: process.platform !== "win32", stdio: inherit ? "inherit" : ["ignore", "pipe", "pipe"] });
-    let stdout = "", stderr = "", timeout = false, overflow = false;
+    let stdout = "", stderr = "", timeout = false, overflow = false, interrupted = false, interruptTimer, interruptError;
     function kill() {
       if (!child.pid) return;
       if (process.platform === "win32") spawnSync(join(process.env.SystemRoot ?? "C:\\Windows", "System32", "taskkill.exe"), ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true, stdio: "ignore", timeout: 5000 });
@@ -173,14 +174,30 @@ export async function runProcess(executable, args, { cwd, env, timeoutMs = 45000
       if (key === "stdout") stdout += data.toString(); else stderr += data.toString();
       if (stdout.length + stderr.length > 1024 * 1024) { overflow = true; kill(); }
     });
-    const abort = () => { kill(); };
-    process.once("SIGINT", abort); process.once("SIGTERM", abort);
-    function cleanup() { clearTimeout(timer); process.off("SIGINT", abort); process.off("SIGTERM", abort); }
+    const abort = () => {
+      if (!gracefulInterrupt) { kill(); return; }
+      if (interrupted) { kill(); return; }
+      interrupted = true;
+      onAbort?.();
+      // Windows console Ctrl+C reaches the inherited child console too. A
+      // synthetic child.kill("SIGINT") on Windows would terminate it immediately.
+      // Unix children have their own process group and need explicit forwarding.
+      if (process.platform !== "win32" && child.pid) {
+        try { process.kill(-child.pid, "SIGINT"); }
+        catch (error) { if (error.code !== "ESRCH") { interruptError = error; kill(); } }
+      }
+      // Leave DSH's own bounded appExit disposer time to flush session/journal
+      // state. The product lease is released only after the actual child closes.
+      interruptTimer = setTimeout(kill, 5500);
+    };
+    process[gracefulInterrupt ? "on" : "once"]("SIGINT", abort); process[gracefulInterrupt ? "on" : "once"]("SIGTERM", abort);
+    function cleanup() { clearTimeout(timer); clearTimeout(interruptTimer); process.off("SIGINT", abort); process.off("SIGTERM", abort); }
     child.once("error", () => { cleanup(); reject(Object.assign(new Error("INSTALL_CHILD_START_FAILED"), { code: "INSTALL_CHILD_START_FAILED" })); });
     child.once("close", (code) => {
       cleanup();
       if (timeout || overflow) reject(Object.assign(new Error(timeout ? "INSTALL_CHILD_TIMEOUT" : "INSTALL_CHILD_OUTPUT_LIMIT"), { code: timeout ? "INSTALL_CHILD_TIMEOUT" : "INSTALL_CHILD_OUTPUT_LIMIT" }));
-      else resolveProcess({ code: code ?? 1, stdout, stderr });
+      else if (interruptError) reject(interruptError);
+      else resolveProcess({ code: interrupted ? 130 : code ?? 1, stdout, stderr });
     });
   });
 }
@@ -396,12 +413,12 @@ export async function doctor({ home }) {
   return { ok: true, status: "ready_for_browser", distribution_sha256: active.value.distribution_sha256, source_commit: distribution.manifest.source_commit, harness_version: HARNESS_VERSION, provider: "deepseek-web", model: "current-web-session" };
 }
 
-export async function prepareStart({ home, workspace, task, mode = "files", browserWaitMs = 60000 }) {
+export async function prepareStart({ home, workspace, task, resume, mode = "files", browserWaitMs = 60000 }) {
+  const { interactive } = validateStartInput({ task, resume });
   await doctor({ home });
   const root = await ownedHome(home);
   if (typeof workspace !== "string" || !isAbsolute(workspace) || !(await lstat(workspace)).isDirectory()) fail("START_ABSOLUTE_WORKSPACE_REQUIRED");
   workspace = await realpath(workspace);
-  if (typeof task !== "string" || !task.trim() || task.length > 262144) fail("START_TASK_REQUIRED");
   if (!["readonly", "files", "linux-commands"].includes(mode) || mode === "linux-commands" && process.platform !== "linux") fail("START_MODE_UNSUPPORTED");
   if (!Number.isInteger(browserWaitMs) || browserWaitMs < 100 || browserWaitMs > 60000) fail("START_BROWSER_WAIT_INVALID");
   const active = await loadActive(root);
@@ -412,7 +429,7 @@ export async function prepareStart({ home, workspace, task, mode = "files", brow
   const patches = mode === "readonly" ? ["cordis.readonly.patch.yml"] : ["cordis.workspace-files.patch.yml", "cordis.harness-features.patch.yml", ...(mode === "linux-commands" ? ["cordis.linux-commands.patch.yml"] : [])];
   const env = createRuntimeEnvironment(process.env, { DSH_HOME: stateHome, DSH_WEB_WORKSPACE_ROOT: workspace,
     DSH_WEB_PAIRING_TOKEN: pairing.token, DSH_WEB_ALLOWED_EXTENSION_ORIGINS: pairing.origins.join(","), DSH_WEB_BROKER_PORT: String(pairing.port), DSH_WEB_BROWSER_WAIT_MS: String(browserWaitMs) });
-  return { executable: process.execPath, args: [join(active.runtime, "node_modules/@deepseek-ai/dsh/lib/bin.js"), "--profile", PROFILE_NAME, ...patches.flatMap((patch) => ["--patch", join(bundle, patch)]), "--patch", join(bundle, "bin/browser-ready.patch.yml"), task], cwd: workspace, env, shell: false, windowsHide: true };
+  return { executable: process.execPath, args: [join(active.runtime, "node_modules/@deepseek-ai/dsh/lib/bin.js"), "--profile", PROFILE_NAME, ...patches.flatMap((patch) => ["--patch", join(bundle, patch)]), "--patch", join(bundle, "bin/browser-ready.patch.yml"), ...(interactive ? ["--patch", join(bundle, "bin/terminal-app.patch.yml"), ...(resume === undefined ? [] : ["--resume", resume])] : [task])], cwd: workspace, env, shell: false, windowsHide: true };
 }
 
 export async function start(options) {
@@ -424,7 +441,8 @@ export async function start(options) {
     process.stderr.write("正在等待已配对的 DeepSeek++ 浏览器；请保持登录，并在本机 Harness 中保存连接设置。\n");
     // One product lease spans the original CLI, including browser wait. Upgrade/uninstall cannot replace its links.
     // No loop here: the unchanged official headless CLI owns the full task and its lifetime.
-    return runProcess(command.executable, command.args, { cwd: command.cwd, env: command.env, inherit: true, timeoutMs: null });
+    return runProcess(command.executable, command.args, { cwd: command.cwd, env: command.env, inherit: true, timeoutMs: null, gracefulInterrupt: true,
+      onAbort: () => process.stderr.write("START_CANCELLED: 已请求取消，正在等待本地会话保存并退出。\n") });
   });
 }
 
@@ -475,7 +493,7 @@ export async function uninstall({ home }) {
 export async function cli(args = process.argv.slice(2), defaultAction = "install") {
   const action = args[0] && !args[0].startsWith("--") ? args.shift() : defaultAction;
   const options = {};
-  const values = { "--home": "home", "--distribution": "distribution", "--sha256": "manifestSha256", "--origin": "origins", "--port": "port", "--workspace": "workspace", "--task": "task", "--mode": "mode" };
+  const values = { "--home": "home", "--distribution": "distribution", "--sha256": "manifestSha256", "--origin": "origins", "--port": "port", "--workspace": "workspace", "--task": "task", "--resume": "resume", "--mode": "mode" };
   while (args.length) {
     const key = args.shift();
     if (["--dry-run", "--offline", "--copy-token"].includes(key)) { options[{ "--dry-run": "dryRun", "--offline": "offline", "--copy-token": "copyToken" }[key]] = true; continue; }
