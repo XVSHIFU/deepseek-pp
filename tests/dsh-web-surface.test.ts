@@ -2,37 +2,55 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, isAbsolute, join, resolve } from "node:path";
+import { spawn as spawnPty } from "node-pty";
 import { afterEach, it } from "vitest";
 import WebSocket from "ws";
 import { FakeBrowserPeer, FAKE_EXTENSION_ORIGIN } from "./fixtures/harness-bridge/fake-peer/index.ts";
 import { WEB_MODEL_PATH, WEB_MODEL_SUBPROTOCOL, createPairingToken } from "@deepseek-pp/dsh-web-model-transport";
-import { captureChild, createHeadlessEnvironment, reserveLoopbackPort, terminateChildTree } from "./fixtures/dsh-web-agent/run-fake-headless.ts";
+import { canBindLoopback, captureChild, createHeadlessEnvironment, reserveLoopbackPort, terminateChildTree } from "./fixtures/dsh-web-agent/run-fake-headless.ts";
 import { createReadLoopScripts, NONCE_FILE } from "./fixtures/dsh-web-agent/tool-loop/request-script.ts";
 import { createFileEditLoopScripts, EDIT_NONCE_FILE, OLD_STATE } from "./fixtures/dsh-web-agent/mutation/file-edit-loop.ts";
 
 const { seedProfile } = await import(new URL("../packages/dsh-web-agent-bundle/scripts/seed-profile.mjs", import.meta.url).href);
 const repo = resolve(import.meta.dirname, "..");
+const installedHome = process.env.DSH_WEB_SURFACE_INSTALL_HOME;
 const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 
 it.each(process.env.DSH_WEB_SURFACE_INSPECT === "1" ? ["readonly"] : ["readonly", "files"])("serves the official authenticated UI and admits a real %s loop through the official Remote controller", async (mode) => {
-  const root = await mkdtemp(join(tmpdir(), "dsh-web-surface-")); roots.push(root);
+  const root = await mkdtemp(join(tmpdir(), "dsh-web-surface-"));
+  // Explicit installed acceptance retains its owned fixtures as disk evidence.
+  if (installedHome === undefined) roots.push(root);
   const home = join(root, "home"), workspace = join(root, "workspace");
   await mkdir(workspace);
   await writeFile(join(workspace, NONCE_FILE), `fixture-nonce=${randomBytes(16).toString("hex")}`);
   const editNonce = randomBytes(16).toString("hex"), editTarget = join(workspace, EDIT_NONCE_FILE);
   await writeFile(editTarget, `file-edit-nonce=${editNonce}\n${OLD_STATE}\n`);
-  const profile = seedProfile(home);
-  const manifestPath = join(profile, "package.json");
-  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-  manifest.dependencies = { "@deepseek-pp/dsh-web-agent-bundle": "0.0.0-private" };
-  manifest.dsh.profile.bundles = ["@deepseek-pp/dsh-web-agent-bundle"];
-  await writeFile(manifestPath, JSON.stringify(manifest));
-  await symlink(join(repo, "node_modules"), join(profile, "node_modules"), process.platform === "win32" ? "junction" : "dir");
-  const port = await reserveLoopbackPort(), webPort = await reserveLoopbackPort(), token = createPairingToken();
+  let port: number, token: string;
+  if (installedHome === undefined) {
+    const profile = seedProfile(home);
+    const manifestPath = join(profile, "package.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.dependencies = { "@deepseek-pp/dsh-web-agent-bundle": "0.0.0-private" };
+    manifest.dsh.profile.bundles = ["@deepseek-pp/dsh-web-agent-bundle"];
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await symlink(join(repo, "node_modules"), join(profile, "node_modules"), process.platform === "win32" ? "junction" : "dir");
+    port = await reserveLoopbackPort(); token = createPairingToken();
+  } else {
+    assert.ok(isAbsolute(installedHome) && basename(installedHome).startsWith("dsh-web-installed-"));
+    const receipt = JSON.parse(await readFile(`${installedHome}.acceptance.json`, "utf8"));
+    assert.equal(receipt.stage, "installed");
+    assert.equal(existsSync(`${installedHome}.input`), false);
+    assert.equal(existsSync(`${installedHome}.input.unavailable/distribution.json`), true);
+    const pairing = JSON.parse(await readFile(join(installedHome, "secrets/pairing.json"), "utf8"));
+    assert.deepEqual(pairing.origins, [FAKE_EXTENSION_ORIGIN], "Never use a real browser installation");
+    port = pairing.port; token = pairing.token;
+  }
+  const webPort = await reserveLoopbackPort();
   const env = createHeadlessEnvironment(process.env, { DSH_HOME: home, DSH_TELEMETRY_DISABLED: "1", DSH_WEB_WORKSPACE_ROOT: workspace, DSH_WEB_TOOL_MODE: mode,
     DSH_WEB_BROKER_PORT: String(port), DSH_WEB_PAIRING_TOKEN: token, DSH_WEB_ALLOWED_EXTENSION_ORIGINS: FAKE_EXTENSION_ORIGIN });
   const bundle = join(repo, "packages/dsh-web-agent-bundle");
@@ -40,13 +58,40 @@ it.each(process.env.DSH_WEB_SURFACE_INSPECT === "1" ? ["readonly"] : ["readonly"
   let stdout = "", stderr = "", peer: FakeBrowserPeer | undefined;
   const launch = () => {
     stdout = ""; stderr = "";
+    if (installedHome !== undefined) {
+      const pty = spawnPty(process.execPath, [join(installedHome, "dsh-web-agent.mjs"), "web", "--workspace", workspace, "--mode", mode, "--no-open", "--port", String(webPort)], {
+        name: "xterm-color", cols: 1000, rows: 50, cwd: workspace, env: createHeadlessEnvironment(process.env, {}),
+      });
+      let closed = false;
+      pty.onData(data => { stdout += data.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, ""); });
+      const watchdog = setTimeout(() => pty.kill(), 18000);
+      const result = new Promise<{ exitCode: number; stdout: string; stderr: string }>(done => pty.onExit(event => {
+        closed = true; clearTimeout(watchdog); done({ exitCode: event.exitCode, stdout, stderr });
+      }));
+      const capture = { result, closed: result.then(() => undefined), isClosed: () => closed };
+      const stop = async () => {
+        if (!closed) pty.write("\x03"); // Real terminal Ctrl+C reaches launcher and official DSH.
+        const end = Date.now() + 7000;
+        while (!closed && Date.now() < end) await new Promise(done => setTimeout(done, 20));
+        if (!closed) { pty.kill(); await capture.closed; assert.fail("INSTALLED_WEB_GRACEFUL_EXIT_TIMEOUT"); }
+        pty.kill(); // Also release the ConPTY owner after normal process exit.
+        const outcome = await result;
+        assert.equal(outcome.exitCode, 130, outcome.stdout);
+        assert.doesNotMatch(outcome.stdout, /fatal load failure|cannot get property|START_TERMINAL_FAILED/);
+      };
+      return { capture, stop };
+    }
     const child = spawn(process.execPath, [join(repo, "node_modules/@deepseek-ai/dsh/lib/bin.js"), "--profile", "deepseek-web-agent", ...modePatches.flatMap(patch => ["--patch", join(bundle, patch)]), "--patch", join(bundle, "bin/web-app.patch.yml"), "--no-open", "--port", String(webPort)], { cwd: workspace, env, shell: false, windowsHide: true, detached: process.platform !== "win32", stdio: ["pipe", "pipe", "pipe"] });
     const capture = captureChild(child as unknown as Parameters<typeof captureChild>[0], process.env.DSH_WEB_SURFACE_INSPECT === "1" ? 48000 : 18000, "WEB_SURFACE_TIMEOUT");
     void capture.result.catch(() => undefined);
     child.stdout.on("data", b => { stdout += b.toString(); }); child.stderr.on("data", b => { stderr += b.toString(); });
-    return { child, capture };
+    const stop = async () => {
+      if (!capture.isClosed()) await terminateChildTree(child as unknown as Parameters<typeof terminateChildTree>[0], root, env);
+      await capture.closed;
+    };
+    return { capture, stop };
   };
-  let { child, capture } = launch();
+  let { capture, stop } = launch();
   try {
     const deadline = Date.now() + 12000;
     while (!stdout.includes("?token=") && Date.now() < deadline && !capture.isClosed()) await new Promise(done => setTimeout(done, 20));
@@ -134,9 +179,8 @@ it.each(process.env.DSH_WEB_SURFACE_INSPECT === "1" ? ["readonly"] : ["readonly"
       assert.equal((await rpc("session/cancel", { sessionId: abortedId })).result.ok, true);
       await follow(abortedId, text => text.includes("turn/end"));
       await peer.close(); peer = undefined;
-      await terminateChildTree(child as unknown as Parameters<typeof terminateChildTree>[0], root, env);
-      await capture.closed;
-      ({ child, capture } = launch());
+      await stop();
+      ({ capture, stop } = launch());
       const restartedBy = Date.now() + 7000;
       while (!stdout.includes("?token=") && Date.now() < restartedBy && !capture.isClosed()) await new Promise(done => setTimeout(done, 20));
       assert.match(stdout, /\?token=/, stderr);
@@ -166,10 +210,17 @@ it.each(process.env.DSH_WEB_SURFACE_INSPECT === "1" ? ["readonly"] : ["readonly"
       await follow(sessionId, text => text.includes("History restored."));
       assert.equal(peer.observedGenerateRequests.length, 1);
       peer.throwIfFailed();
+      if (installedHome !== undefined) console.log(JSON.stringify({ ok: true, acceptance: "installed-official-web", installed_home: installedHome, mode, workspace, session_id: sessionId,
+        launcher: "web", input_unavailable: true, real_web: false, tool_calls: mode === "readonly" ? 1 : 3, file_verified: mode === "files", subagent_verified: mode === "files", cold_resume_verified: true, cancelled_resume_blocked: true }));
     }
   } finally {
     await peer?.close();
-    if (!capture.isClosed()) await terminateChildTree(child as unknown as Parameters<typeof terminateChildTree>[0], root, env);
-    await capture.closed;
+    await stop();
+    assert.equal(await canBindLoopback(port), true);
+    assert.equal(await canBindLoopback(webPort), true);
+    if (installedHome !== undefined) {
+      assert.equal(existsSync(join(installedHome, ".installation.lock")), false);
+      assert.equal(existsSync(join(installedHome, "state/profiles/deepseek-web-agent/web-model-journal/owner.lock")), false);
+    }
   }
 }, process.env.DSH_WEB_SURFACE_INSPECT === "1" ? 50000 : 22000);
