@@ -38,7 +38,12 @@ export async function apply(ctx: Context, config: Config) {
   const { workspaceRoot: _workspaceRoot, ...readConfig } = config;
   await privateScope.ctx.plugin(FileTools, readConfig);
   const read = ctx.tools.get("read", privateKey);
-  if (!read || ctx.tools.schemas(privateKey).map((tool) => tool.name).join(",") !== "read,write,edit") {
+  const privateCatalog = ctx.tools.schemas(privateKey).map((tool) => tool.name).join(",");
+  // Official Web needs its attachment store for SessionController. The pinned
+  // filesystem plugin then adds read_image inside this private scope; it is
+  // never published to the text-only web model's public tool registry.
+  if (!read || privateCatalog !== "read,write,edit" &&
+      !(ctx.get("attachments") !== undefined && privateCatalog === "read,write,edit,read_image")) {
     throw new Error("READONLY_OFFICIAL_TOOL_COMPOSITION_CHANGED");
   }
   ctx.tools.register(read);

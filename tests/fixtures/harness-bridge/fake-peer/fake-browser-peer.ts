@@ -142,6 +142,14 @@ export class FakeBrowserPeer {
     if (this.failure) throw this.failure;
   }
 
+  /** Explicit fixture heartbeat; ordinary short tests need no background timer. */
+  heartbeat(): void {
+    if (this.connectionId === undefined) throw new Error("FAKE_PEER_NOT_READY");
+    this.sendFrame({ jsonrpc: "2.0", method: "bridge.heartbeat", params: {
+      schema_version: 1, connection_id: this.connectionId, nonce: randomUUID(), sent_at_ms: Date.now(),
+    } });
+  }
+
   async disconnect(): Promise<void> {
     this.expectedClose = true;
     if (this.socket.readyState === WebSocket.CLOSED) return;

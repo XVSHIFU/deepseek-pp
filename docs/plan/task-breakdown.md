@@ -316,6 +316,18 @@ T5.1 至 T5.4 合并后执行一次 `npm run compile && npm test`，并重跑 T4
 
 **T6.1 交互入口补齐（2026-09-06，用户继续授权）**：锁版 `dsh` README 的 `tui` 是假设已安装 profile 的语法示例，不是随包交付的终端 UI；`dsh-sdk-jsonrpc-server` 的公开 wire 只有 initialize/session-prompt/shutdown，不能恢复旧会话。使用本仓库 bundle 内的薄 Cordis terminal-app 展示插件与一个显式 overlay，替换 headless 的两个应用行，不改变其余 Harness/工具/模型组合。`start` 不带 `--task` 时进入交互输入，带 `--task` 时保持既有一次性行为；`--resume <session-id>` 只恢复明确指定的同工作区根会话，不自行选择最近会话。终端 `readline` 只负责接收用户文字和显示官方事件，创建/恢复/入队/取消/flush 全部调用锁版公开 AgentRegistry、SessionPersistence 和 appExit 生命周期；不得复制 agent loop、工具链、上下文或数据库。输入串行处理，EOF/退出/取消须清理进程、端口和锁；工作区不匹配、子会话或不明状态不可绕过恢复边界。支持多轮同 session、跨进程恢复、旧单任务兼容的实际官方 CLI/fake 模型验收，再生成新分发。启动等待超时通过公开 appExit 非零退出并显示明确提示，不用 stderr 正则吞堆栈，不回退 API、不自动重试模型。上述接口代码、overlay、测试/fixture 属于 T6.1 文件范围；如需直依赖，仅声明已存在锁中的同版本包，不升级。
 
+### T6.1-W 官方 Harness 网页入口（2026-09-06，用户授权）
+
+- **目标**：首次配置一次 → 命令行启动 Harness → 在官方 Harness 网页连续工作。保留原命令行启动方式，不做双击启动器、安装向导或自制聊天前端。
+- **顺序与分工**：先修复 terminal-app 的退出/取消生命周期；并行完善扩展已有配对的自动重连；复用锁版 `dsh-web-app` 的前端、HTTP/Remote 与 SessionController，编排层负责安装入口和实际纵切片验证。
+- **组合方式**：继续使用本仓库 standalone profile 和 readonly/files/Linux 增量，在其上增加显式 Web overlay，关闭 headless/terminal 展示行。只组合必要的官方 Web 服务与 UI；不加载默认 `dsh-base`、API provider 或会启用另一套工具的默认 agent preset。不修改官方 Harness master，不复制 loop/session/tool 实现。
+- **日常入口**：现有安装入口增加 `web --workspace <目录> --mode <模式>`，委托精确锁版官方 `dsh --profile`，透传官方 `--port` / `--no-open` 启动参数。配对继续从安装 home 读取；日常不用重复输入 ID/令牌。网页可以在模型离线时打开，但请求必须明确报告等待浏览器，无模型/API 回退。
+- **权限与历史**：网页端创建/恢复会话仍受所选工作目录、固定网页模型和既有工具模式约束；界面隐藏不是授权手段，服务端同样验证。已完成会话可恢复，结果不明的任务不自动重放；取消/退出沿用官方生命周期。
+- **已验证接入点**：官方 Controller 和 Typert Gateway 不替换；通过 Cordis 公开的 `ctx.accessor('服务.方法', ...)` 在调用前做部署准入，覆盖 Controller 以及所有冷激活都会经过的 `agents.create/resume`。仅 `internal/get` 无法覆盖 Gateway 的 `Context.get()`，已被实际 RPC 反例淘汰，不得恢复该无效方案。官方 Web 认证使用独立本地 credentials store，不注册模型配置/API adapter；只读私有工具集合可含上游附件服务附带的 `read_image`，对模型仍只发布 `read`。
+- **重连**：保留连接客户端每轮有界退避，利用现有扩展 alarms 生命周期低频唤醒离线重试；只恢复连接，不重新派发模型请求。禁用或认证/协议错误时不无限重试，不新增凭证存储。
+- **验收**：实际官方 Web HTTP/认证/会话入口 → fake 网页模型 → 真正本地 read/editor → 终答，并验证连续对话、退出/恢复、离线和取消；浏览器 UI 实际打开检查。完成本地验证后只安排一次真实网页使用验收，不要求用户重复已通过的单轮 smoke。
+- **文件范围**：bundle 的 Web overlay/薄插件及安装入口、必需且已有锁定版本的依赖、扩展 Harness 重连及定向测试、`docs/verification/P6_本机使用.md` 与活动进度。新功能为 `planned/in_progress`，通过前不写成已交付。
+
 ### T6.2 安全与“无模型/API”发布断言
 
 - **文件范围**：`tests/security/harness-bridge-security.test.ts`、`tests/security/harness-profile-no-provider.test.ts`、`tests/fixtures/harness-bridge/security/**`、`scripts/harness-release-policy-check.mjs`。

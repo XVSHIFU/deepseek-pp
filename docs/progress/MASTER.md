@@ -66,6 +66,8 @@
 
 ## 里程碑状态
 
+**2026-09-06 当前推进**：按用户确认的“首次配置 → 命令行打开 Harness → 官方网页使用”开展 T6.1-W。用户已回传安装版连续对话、真实 read 与同一会话恢复成功，但首次退出出现 `START_TERMINAL_FAILED / appExit without inject`，退出可靠性重新打开修复。官方 Web 入口尚未交付；不把先前终端通过等同于网页界面已完成。日常配对持久化已存在，本轮补齐自动连接和官方网页。
+
 状态只允许 `not_started`、`in_progress`、`blocked`、`verified`。只有对应验证证据存在时才能写 `verified`。
 
 | Milestone | 结果 | 状态 | 退出条件 |
@@ -101,6 +103,7 @@
 | P5 | T5.1–T5.4 | Host journal、Browser 结果索引、取消与原 CLI 崩溃恢复 | `—` | `—` | `harness_features`, `windows_command_route`, `file_write_acceptance`; integration: orchestration | `verified` |
 | P6 | T6.1 | 固定版本安装、profile/配对、doctor/启动/升级/卸载 | `—` | `—` | `p6_installer`, `p6_distribution_tests`; integration: orchestration | `verified` |
 | P6 | T6.2 | 窄范围安装包策略与无 API/provider fallback 断言 | `—` | `—` | `p6_policy`; integration: orchestration | `verified` |
+| P6 | T6.1-W | 官方 Harness 网页、终端退出修复与日常自动重连 | `—` | `—` | `web_stage_surface`, `web_stage_terminal_fix`, `web_stage_reconnect`; integration: orchestration | `in_progress` |
 | P6 | T6.3 | 候选包生成与真实安装验收 | `—` | `—` | `p6_candidate_packaging`; integration: orchestration | `in_progress` |
 | P6 | T6.4 | 最终文档与完整发行门禁 | `TBD` | `TBD` | `TBD` | `not_started` |
 | S1 | S1-T1 | PR #568 独立评估；只服务模式 B 兼容，不作为模式 A 前置 | `TBD` | `TBD` | `TBD` | `not_started` |
@@ -145,11 +148,11 @@
 
 ## 当前状态与下一步
 
-**本轮交付（2026-09-06）**：T6.1 交互续聊及简短启动提示已验证并打入 `dd6979d` 本地候选。分工：`p6_interactive` 负责薄终端展示及官方恢复；`p6_startup_feedback` 负责公开 appExit 与旧版卸载后恢复升级验证；`p6_candidate_packaging` 负责三端实际构建与候选；编排负责合同、整合回归和安装后真实 PTY 验收。旧 c 分发及用户卸载状态不变；本轮未调用真实网页，未修改用户产品 home 或 Ubuntu。
+**本轮工作（2026-09-06）**：T6.1-W 官方网页入口。`web_stage_terminal_fix` 负责退出修复，`web_stage_reconnect` 负责已有配对自动重连，`web_stage_surface` 负责官方网页组合与实际 Remote 测试；编排负责安装、依赖、集成验证及交付。原 `dd6979d` 候选保留，不能当作本轮新功能产物。本轮不修改用户产品 home 或 Ubuntu。
 
-**当前状态**：M0–M5、T4.5–T4.6、T6.1/T6.2 已验证。新增连续终端对话、指定已完成根会话恢复、短超时提示及优雅取消；原单任务命令继续兼容。最终定向 11 文件 211 项、compile、prompt7项通过。已产出含固定运行时、三端扩展 ZIP 和两份 SBOM 的同源码候选；从候选目录的全新安装后原 CLI/fake peer 完成了真实 read 工具闭环。安装后的真实 Windows PTY 已验证连续输入和同ID恢复。使用见 [本机使用说明](../verification/P6_本机使用.md)。T6.3 候选真实网页验收及 T6.4 完整发行门禁未完成，不是完整发行版，不要求重复 P5 随机文件测试。
+**当前状态**：原 M0–M5、T4.5–T4.6、T6.1/T6.2 证据保持；终端退出缺陷已修复，官方网页聊天/read/editor/子 Agent/冷恢复及自动重连已通过实际本地验证。根代理在浏览器中成功发送消息并看到终答，模型使用 fake peer；真实 DeepSeek 网页验收尚未执行。本轮进入开发分发、独立安装及使用说明交付。T6.3/T6.4 完整发行验收仍未完成，不推送/发布，不重复 P5 单轮 smoke。
 
-**2026-09-06 操作者实用验证补充**：固定 c 开发分发已在实际产品 home 安装、幂等安装、配对，并通过网页模型完成用户自己指定项目的 README 概括；保留 session 只读复验为 2 steps、1 tool call/result、completed。doctor 与卸载均成功，当前实际产品 home 已停用但保留数据。另一个附件记录了 `WAITING_FOR_BROWSER` 启动失败：现有等待插件一分钟内未见 authenticated peer，不能凭此确定是扩展离线还是配对配置不一致；长原始堆栈属于待改善的启动提示。成功与失败分别保留，不把开发分发实用验证冒充 T6.3 正式候选验收。使用说明已拆开检查与可选卸载，避免继续使用者误把卸载当必做步骤；无需重复已成功的读取任务。
+**2026-09-06 操作者实用验证补充**：旧 c 安装/单任务读取/doctor/卸载记录保留。用户后来已安装 d 运行时，并在 `session-f4cd3595-e533-4ba6-8cfe-8f5057c28be2` 连续对话、实际 read 读取项目 README；第一次退出报 `START_TERMINAL_FAILED` / `appExit without inject`，随后同 ID 恢复能回忆历史且 `/exit` 成功。本条据用户终端记录，不冒充根代理新调用真实网页；当前不能再写作“用户安装已停用”。
 
 M4/T4.1–T4.4 的真实只读运行保持有效。T4.5 的文件编辑及 Linux 命令组合均已通过实际 DSH/fake browser 闭环，工作区写入/越界拒绝/取消清理已实测；本次操作者真实网页运行 `command-0469b0dc-bf30-44fb-ac29-ddbc1e8bcf36` 又完成 2 model steps、1 Bash call/result、文件和短测试验证、同一 session completed。原始 Linux session 与文件哈希只读复验一致，新增网页请求为零。独立 editor 专用真实网页检查未执行，不能以本次 Bash 验收冒充。
 
@@ -159,7 +162,7 @@ T4.2 的明确调整与边界见计划：官方 read-only 本身不约束读取�
 
 **立即下一步**：
 
-1. 新使用入口为 `C:\temp\deepseek-web-agent-candidate-p6-dd6979d\runtime`，runtime raw manifest SHA256=`90cb613e8661189e5625b2327467e44553e0537799236416343ae35c49a3f2e1`，来源 `dd6979dd8e9d650471b1def901f6e95875238ef8`，57文件；同字节开发分发 d 保留。先使用新终端入口做日常两轮对话及 `/exit`/`--resume`，不重复已通过的P5测试。旧 c 已卸载者须先同c恢复再升级，已在自有测试home验证数据逐字节保留，说明中的步骤已处理该状态。
+1. 完成官方网页创建/读取/编辑/连续对话/恢复的实际验证，生成新开发分发及含自动重连的扩展，再更新两段式使用说明。旧候选与 SHA 留在验证记录中，不要求用户再次做终端两轮或旧 c 恢复流程。
 2. T4.6 的三份固定摘要归档已接入开发 checkout；[来源与重建](../../vendor/harness-request-budget/README.md)。Harness fork 只修改独立 `codex/web-request-budget` 分支，master 保持 `76fda729...`；本轮 P5 不修改它，也没有推送远端。
 3. P5 恢复仍仅查询原 request ID：`unknown` 不是 `not_started`，completed 状态索引不等于恢复了终答／工具内容。T6.3 独立候选包真实验收不由工作树通过代替；PR #568、无关整改和发布保持隔离。已有真实 Linux 命令证据及两份 Ubuntu stash 保留不变。
 
@@ -167,7 +170,7 @@ T4.2 的明确调整与边界见计划：官方 read-only 本身不约束读取�
 
 T6.1 验证收口：Windows 六阶段均通过，最后已恢复精确 c 分发（上述 SHA），doctor 可用且会话/journal/配对字节不变；本任务遗留 Node 进程为 0。Linux 验证安装已卸载，重复卸载返回 `already_uninstalled`，数据与版本归档保留。日常使用另建说明中的产品 home，不复用 fake Origin 的测试安装。
 
-旧开发版目录 `C:\temp\deepseek-pp-build-e4dcc34\dist\chrome-mv3` 保留不动。P5 新构建为 `C:\temp\deepseek-pp-p5-5e9e641\dist\chrome-mv3`，Chrome/Edge/Firefox 均已验证，操作者已按新扩展流程完成真实只读验收。构建来源 `5e9e641`，后续 `08e651e` 仅测试/smoke、`4fa7ac7` 仅真实验收校验与 fixture、`6ccffae` 仅测试时序，浏览器生产代码未变。本轮不需要重装浏览器扩展，不发布。
+旧开发版及 P5 `C:\temp\deepseek-pp-p5-5e9e641\dist\chrome-mv3` 保留不动。本轮自动重连修改了浏览器代码，需要更新扩展构建；优先保持原加载路径、扩展 ID 和配对，具体方式随新产物说明交付。不发布。
 
 **T4.5 Linux 环境已准备**：Ubuntu 26.04 LTS / WSL2，Linux Node 24.18.0、Bubblewrap 0.11.1。源码从 Windows 当前分支本地 clone 到 `/home/worker/deepseek-web-harness`，Linux `npm ci --ignore-scripts --no-audit --no-fund` 安装锁定的 1024 包，包含可用 Linux Koffi 原生模块，WXT prepare 通过；Windows `node_modules` 未动。官方 Windows ACL current-gap 仍保留，但不再阻断这条显式 Linux 路线。
 
@@ -179,6 +182,10 @@ Windows 启动器只临时用 `WSLENV` 的 `/u` 标记传递固定配对配置�
 
 | Date | Scope | Command | Result | Notes |
 |:--|:--|:--|:--|:--|
+| 2026-09-06 | T6.1-W integration | 14 个定向 Vitest 文件（outer55s） | `passed` | 201/201，33.60s；覆盖原安装/分发/启动反馈/终端、Web readonly/files、原 Harness features、Browser client/重连和网页唯一模型断言。实际官方 Web HTTP/WS 经 fake peer 调用了 read/editor 及串行子 Agent，冷进程恢复和重命名通过；结果不明/取消冷历史不自动激活，typed commands lookup 同样受准入约束 |
+| 2026-09-06 | T6.1-W terminal shutdown | 官方 CLI + 真实 Windows ConPTY，定向 10 项 | `passed; external-signal gap retained` | 修复前闲置和推理中 process SIGINT 均复现 appExit 二次致命错误。修复后真实键盘 Ctrl+C 的 3 model steps/1 read/1 cancel、退出130及 completed/aborted 持久记录通过。外部进程信号由上游整树关闭，进行中的最后一轮仍可能留下不完整记录；恢复边界拒绝，不改日志或重放 |
+| 2026-09-06 | T6.1-W official UI visual | CUA 打开自有临时官方网页，实际输入和点击发送、展开会话列表 | `passed fake model` | 中文官方 Harness UI、工作区、会话列表可见，用户消息后显示 `Official Harness web fixture is connected.`；没有触及用户 DeepSeek 页面、项目或安装。初次35s观察因 fake peer 不发 heartbeat 出现 WAITING_FOR_BROWSER，补仅 fixture 心跳后通过；生产重连本身另有真实 WebSocket 服务重启回归 |
+| 2026-09-06 | T6.1-W pairing and static | 在自有旧候选测试 home 不传 origin 幂等安装；npm offline lock；compile；prompt:freeze | `passed` | already_installed、pairing 字节不变；35个Web直接依赖全部复用现有锁版0.1.2-rc.1，1172个lock条目身份变化0。根编译、prompt7/7通过。配对与浏览器登录秘密未打印，用户 home 未改变 |
 | 2026-09-06 | T6.3 actual local candidate | 同commit clean无加号clone三端 WXT zip；package、verify | `built and verified; acceptance incomplete` | 候选 `C:\temp\deepseek-web-agent-candidate-p6-dd6979d`，manifest SHA256=`74790a17ae189568514eb6ceaaff12a7988179b2ff2cf27c13014cf20d9cf572`，66文件；runtime 57文件，两SBOM含568 runtime/1122 source-build components。Chrome/Edge/Firefox build+zip分别约10.6/10.1/10.4s；package7.01s、verify1.98s。原+路径WXT正则错误两次失败保留无收据，改同commit clone，不修改上游或依赖。runtime/SBOM复用私密分发扫描；完整扩展第三方字节不适用该源码scanner，继续归既有扩展发行门禁。SBOM只把精确lock+归档hash允许的3vendor绝对URI还原为原相对URI，其他拒绝；不宣称全扩展秘密扫描或全量门禁通过 |
 | 2026-09-06 | T6.1 independent installed terminal PTY | 固定 d 全新独立安装；`terminal-pty.mjs new/resume`，Windows stdin/stdout isTTY=true；实际Ctrl+C | `passed` | 自有 `C:\temp\dsh-p6-terminal-acceptance-dd6979d`；移走安装输入后独立doctor通过。真实键盘输入两任务，原read工具1次、3模型步；退出后同 `session-b7813a63-1cf7-493b-8c16-596709a23fb4` 恢复，新任务能看到历史；fake模型，无新真实网页。两个PTY phase exit0、端口可重绑。等待时真实Ctrl+C显示START_CANCELLED/BROWSER_WAIT_CANCELLED，PowerShell包装exit1（不冒称其为130）；随后doctor通过、安装/journal锁均不存在。自动原CLI cancel exit130已单独验证 |
 | 2026-09-06 | T6.3 clean candidate install and real tool | 原安装acceptance分install/run两phase（分别外55s），输入为候选runtime目录而非源码 | `passed fake model / actual tool` | 自有 `C:\temp\dsh-p6-candidate-acceptance-dd6979d`，实际npm固定安装、错误SHA/dry-run无写、输入移走后独立doctor。run约4.17s，原CLI读临时文件→第二fake模型终答，2steps/1call/result，durable、child close、port release。不是候选真实网页验收或恢复完整矩阵 |

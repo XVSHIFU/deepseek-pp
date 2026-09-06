@@ -8,7 +8,7 @@ import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:p
 import { pathToFileURL } from "node:url";
 import { assertNoLayeredModelCredentials } from "./model-credentials.mjs";
 import { validateProfileDump } from "./profile-validation.mjs";
-import { validateStartInput } from "./terminal-options.mjs";
+import { presentationArguments } from "./web-options.mjs";
 
 export const PROFILE_NAME = "deepseek-web-agent";
 export const HARNESS_VERSION = "0.1.2-rc.1";
@@ -298,10 +298,19 @@ async function verifyProfile(home, runtime, archived = false) {
   return profile;
 }
 
-export async function install({ distribution, home, manifestSha256, offline = false, dryRun = false, origins, port = 43123 }) {
+export async function install({ distribution, home, manifestSha256, offline = false, dryRun = false, origins, port }) {
   const source = await readDistribution(distribution, { expectedSha256: manifestSha256 });
   const root = await checkedHome(home);
-  const pairing = validatePairing({ schema_version: 1, token: randomBytes(32).toString("base64url"), origins, port });
+  // Upgrading an owned installation reuses its pairing. Only a fresh install
+  // needs an extension ID; never prompt for or rotate a secret during upgrade.
+  let existingPairing;
+  if (existsSync(join(root, ".deepseek-web-agent-owner.json")) && existsSync(join(root, "secrets/pairing.json"))) {
+    await ownedHome(root);
+    existingPairing = validatePairing(await readJson(join(root, "secrets/pairing.json")));
+    if (origins !== undefined && JSON.stringify(origins) !== JSON.stringify(existingPairing.origins) ||
+        port !== undefined && port !== existingPairing.port) fail("INSTALL_PAIRING_CHANGE_REQUIRES_PAIR");
+  }
+  const pairing = validatePairing(existingPairing ?? { schema_version: 1, token: randomBytes(32).toString("base64url"), origins, port: port ?? 43123 });
   if (dryRun) return { ok: true, status: "dry_run", kind: source.manifest.kind, distribution_sha256: source.sha256, source_commit: source.manifest.source_commit };
   await claimHome(root);
   return withLock(root, async () => {
@@ -413,8 +422,9 @@ export async function doctor({ home }) {
   return { ok: true, status: "ready_for_browser", distribution_sha256: active.value.distribution_sha256, source_commit: distribution.manifest.source_commit, harness_version: HARNESS_VERSION, provider: "deepseek-web", model: "current-web-session" };
 }
 
-export async function prepareStart({ home, workspace, task, resume, mode = "files", browserWaitMs = 60000 }) {
-  const { interactive } = validateStartInput({ task, resume });
+export async function prepareStart({ home, workspace, task, resume, mode = "files", browserWaitMs = 60000, surface = "terminal", port, noOpen }) {
+  // Validate invocation before reading the installed home or pairing secrets.
+  presentationArguments({ bundle: ".", surface, task, resume, port, noOpen });
   await doctor({ home });
   const root = await ownedHome(home);
   if (typeof workspace !== "string" || !isAbsolute(workspace) || !(await lstat(workspace)).isDirectory()) fail("START_ABSOLUTE_WORKSPACE_REQUIRED");
@@ -423,13 +433,15 @@ export async function prepareStart({ home, workspace, task, resume, mode = "file
   if (!Number.isInteger(browserWaitMs) || browserWaitMs < 100 || browserWaitMs > 60000) fail("START_BROWSER_WAIT_INVALID");
   const active = await loadActive(root);
   const pairing = validatePairing(await readJson(join(root, "secrets/pairing.json")));
+  if (surface === "web" && (port ?? 3080) === pairing.port) fail("START_WEB_BROKER_PORT_CONFLICT");
   const stateHome = ownedPath(root, "state");
   await assertNoLayeredModelCredentials(workspace, stateHome, async (path) => { try { return await readFile(path, "utf8"); } catch (error) { if (error.code === "ENOENT") return undefined; throw error; } });
   const bundle = join(active.runtime, "packages/dsh-web-agent-bundle");
   const patches = mode === "readonly" ? ["cordis.readonly.patch.yml"] : ["cordis.workspace-files.patch.yml", "cordis.harness-features.patch.yml", ...(mode === "linux-commands" ? ["cordis.linux-commands.patch.yml"] : [])];
   const env = createRuntimeEnvironment(process.env, { DSH_HOME: stateHome, DSH_WEB_WORKSPACE_ROOT: workspace,
-    DSH_WEB_PAIRING_TOKEN: pairing.token, DSH_WEB_ALLOWED_EXTENSION_ORIGINS: pairing.origins.join(","), DSH_WEB_BROKER_PORT: String(pairing.port), DSH_WEB_BROWSER_WAIT_MS: String(browserWaitMs) });
-  return { executable: process.execPath, args: [join(active.runtime, "node_modules/@deepseek-ai/dsh/lib/bin.js"), "--profile", PROFILE_NAME, ...patches.flatMap((patch) => ["--patch", join(bundle, patch)]), "--patch", join(bundle, "bin/browser-ready.patch.yml"), ...(interactive ? ["--patch", join(bundle, "bin/terminal-app.patch.yml"), ...(resume === undefined ? [] : ["--resume", resume])] : [task])], cwd: workspace, env, shell: false, windowsHide: true };
+    DSH_WEB_PAIRING_TOKEN: pairing.token, DSH_WEB_ALLOWED_EXTENSION_ORIGINS: pairing.origins.join(","), DSH_WEB_BROKER_PORT: String(pairing.port), DSH_WEB_BROWSER_WAIT_MS: String(browserWaitMs),
+    ...(surface === "web" ? { DSH_WEB_TOOL_MODE: mode } : {}) });
+  return { executable: process.execPath, args: [join(active.runtime, "node_modules/@deepseek-ai/dsh/lib/bin.js"), "--profile", PROFILE_NAME, ...patches.flatMap((patch) => ["--patch", join(bundle, patch)]), ...presentationArguments({ bundle, surface, task, resume, port, noOpen })], cwd: workspace, env, shell: false, windowsHide: true };
 }
 
 export async function start(options) {
@@ -438,12 +450,18 @@ export async function start(options) {
   return withLock(root, async () => {
     const active = await loadActive(root);
     if (command.args[0] !== join(active.runtime, "node_modules/@deepseek-ai/dsh/lib/bin.js")) fail("START_INSTALLATION_CHANGED");
-    process.stderr.write("正在等待已配对的 DeepSeek++ 浏览器；请保持登录，并在本机 Harness 中保存连接设置。\n");
+    process.stderr.write(options.surface === "web"
+      ? "正在启动本机 Harness 网页；使用已有配对，请保持 DeepSeek 网页登录并打开。\n"
+      : "正在等待已配对的 DeepSeek++ 浏览器自动连接；请保持 DeepSeek 网页登录并打开。\n");
     // One product lease spans the original CLI, including browser wait. Upgrade/uninstall cannot replace its links.
-    // No loop here: the unchanged official headless CLI owns the full task and its lifetime.
+    // The official CLI owns the selected presentation, all agents and their lifetime.
     return runProcess(command.executable, command.args, { cwd: command.cwd, env: command.env, inherit: true, timeoutMs: null, gracefulInterrupt: true,
       onAbort: () => process.stderr.write("START_CANCELLED: 已请求取消，正在等待本地会话保存并退出。\n") });
   });
+}
+
+export async function web(options) {
+  return start({ ...options, surface: "web" });
 }
 
 export async function pair({ home, origins, port, copyToken = false }) {
@@ -496,17 +514,17 @@ export async function cli(args = process.argv.slice(2), defaultAction = "install
   const values = { "--home": "home", "--distribution": "distribution", "--sha256": "manifestSha256", "--origin": "origins", "--port": "port", "--workspace": "workspace", "--task": "task", "--resume": "resume", "--mode": "mode" };
   while (args.length) {
     const key = args.shift();
-    if (["--dry-run", "--offline", "--copy-token"].includes(key)) { options[{ "--dry-run": "dryRun", "--offline": "offline", "--copy-token": "copyToken" }[key]] = true; continue; }
+    if (["--dry-run", "--offline", "--copy-token", "--no-open"].includes(key)) { options[{ "--dry-run": "dryRun", "--offline": "offline", "--copy-token": "copyToken", "--no-open": "noOpen" }[key]] = true; continue; }
     if (!Object.hasOwn(values, key) || !args.length) fail("INSTALL_ARGUMENTS_INVALID");
     const name = values[key], value = args.shift();
     if (name === "origins") (options.origins ??= []).push(value);
     else if (Object.hasOwn(options, name)) fail("INSTALL_ARGUMENTS_INVALID");
     else options[name] = name === "port" ? Number(value) : value;
   }
-  const handlers = { install, doctor, start, pair, uninstall };
+  const handlers = { install, doctor, start, web, pair, uninstall };
   if (!Object.hasOwn(handlers, action)) fail("INSTALL_ARGUMENTS_INVALID");
   const result = await handlers[action](options);
-  if (action === "start") process.exitCode = result.code;
+  if (action === "start" || action === "web") process.exitCode = result.code;
   else process.stdout.write(`${JSON.stringify(result)}\n`);
   return result;
 }

@@ -231,6 +231,7 @@ import {
 import { createDeepSeekAutomationClient } from '../core/deepseek/active-client';
 import { HarnessBridgeClient } from '../core/harness-bridge/client';
 import { HarnessBridgeCoordinator } from '../core/harness-bridge/coordinator';
+import { HarnessBridgeReconnectWake } from '../core/harness-bridge/reconnect-wake';
 import { createDeepSeekWebModelTurnAdapter } from '../core/harness-bridge/deepseek-turn-adapter';
 import { createHarnessBridgeSettingsStore } from '../core/harness-bridge/settings';
 import { submitOfficialDeepSeekStreaming } from '../core/deepseek/official-api';
@@ -334,11 +335,22 @@ const harnessBridgeCoordinator = new HarnessBridgeCoordinator({
     });
   },
   notifyStatus(status) {
+    void harnessBridgeReconnectWake.update(status);
     deliverRuntimeMessageBestEffort(
       chrome.runtime.sendMessage({ type: 'HARNESS_BRIDGE_STATUS_CHANGED', payload: status }),
       'harness_bridge_status_notify_failed',
       reportBackgroundStartupError,
     );
+  },
+  reportError(code) {
+    reportBackgroundStartupError(code, new Error(code));
+  },
+});
+const harnessBridgeReconnectWake = new HarnessBridgeReconnectWake({
+  alarms: chrome.alarms,
+  async wake() {
+    await harnessBridgeCoordinator.reconnectOffline();
+    return harnessBridgeCoordinator.getStatus();
   },
   reportError(code) {
     reportBackgroundStartupError(code, new Error(code));
@@ -748,7 +760,8 @@ type ActionApi = {
 };
 
 export default defineBackground(() => {
-  void harnessBridgeCoordinator.initialize();
+  harnessBridgeReconnectWake.start();
+  void harnessBridgeCoordinator.getStatus().then((status) => harnessBridgeReconnectWake.update(status));
   void syncLocalRecoveryBarrier.ensureReady().catch(acknowledgeReportedSyncRecoveryFailure);
   enableSidePanelActionClick();
   registerContextMenuClickListener();

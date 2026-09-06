@@ -1,0 +1,115 @@
+# Official browser surface over the standalone web-model profile. Never load
+# dsh-base, shipped agent presets, model adapters or editable plugin runners.
+- id: headless-startup
+  disabled: true
+- id: headless-runner
+  disabled: true
+- insert:
+    - id: web-typert
+      name: '@deepseek-ai/dsh-typert-registry'
+    - id: web-typert-loader
+      name: '@deepseek-ai/dsh-typert-loader'
+    - id: web-credentials
+      name: '@deepseek-ai/dsh-credentials-local'
+      config:
+        watch: false
+    - id: web-attachments
+      name: '@deepseek-ai/dsh-attachment-local'
+    - id: web-session-query
+      name: '@deepseek-ai/dsh-session-query-sqlite'
+      config:
+        path: ':memory:'
+        openAt: never
+    - id: web-storage
+      name: '@deepseek-ai/dsh-storage'
+    - id: web-storage-json
+      name: '@deepseek-ai/dsh-storage-json'
+      config:
+        root: !!js dshHomePath('storages')
+    - id: web-storage-domain
+      name: '@deepseek-ai/dsh-storage-domain'
+      config:
+        backend: json
+    - id: web-workspace
+      name: '@deepseek-ai/dsh-workspace'
+    - id: web-surface-policy
+      name: './web-app-policy.mjs'
+    - id: web-gateway
+      name: '@deepseek-ai/dsh-api-gateway'
+      inject: [deepseekWebSurfacePolicy]
+    - id: web-workspace-controller
+      name: '@deepseek-ai/dsh-api-workspace-controller'
+      inject: [deepseekWebSurfacePolicy]
+    - id: web-session-controller
+      name: '@deepseek-ai/dsh-api-session-controller'
+      inject: [deepseekWebSurfacePolicy]
+      config:
+        nativeOpen: false
+    - id: web-session-title
+      name: '@deepseek-ai/dsh-session-title'
+      config:
+        fallbackMaxWords: 5
+        fallbackMaxBytes: 40
+        maxTitleBytes: 80
+    - id: web-commands
+      name: '@deepseek-ai/dsh-commands'
+    - id: web-subagents
+      name: '@deepseek-ai/dsh-subagent'
+      disabled: !!js (process.env.DSH_WEB_TOOL_MODE ?? 'readonly') !== 'readonly'
+    - id: web-settings-controller
+      name: '@deepseek-ai/dsh-api-settings-controller'
+      inject: [deepseekWebSurfacePolicy]
+      config:
+        nativeOpen: false
+    - id: web-startup
+      name: '@deepseek-ai/dsh-web-app/startup'
+    - id: webserver
+      name: '@deepseek-ai/dsh-host-webserver'
+      inject: [webStartup, deepseekWebSurfacePolicy]
+      config:
+        host: '127.0.0.1'
+        port: !!js ctx.webStartup.port ?? 3080
+        compression: gzip
+        compressionLevel: 1
+        compressionThresholdBytes: 1024
+    - id: web-runtime
+      name: '@deepseek-ai/dsh-web-app'
+      inject: [webStartup]
+      config:
+        openBrowser: !!js ctx.webStartup.openBrowser
+        printUrl: true
+        surfaceContext: false
+        trustedHosts: []
+    - id: web-modules
+      name: '@deepseek-ai/dsh-client-modules'
+    - id: web-connection
+      name: '@deepseek-ai/dsh-client-connection'
+      inject: [webRuntime, deepseekWebSurfacePolicy]
+      config:
+        trustedHosts: []
+    - id: web-api-remotes
+      name: '@deepseek-ai/dsh-api-remotes'
+    - id: web-ui-theme
+      name: '@deepseek-ai/dsh-client-ui-theme'
+    - id: web-locale
+      name: '@deepseek-ai/dsh-client-locale'
+    - id: web-ui-renderer
+      name: '@deepseek-ai/dsh-client-ui-renderer'
+    - id: web-ui-layout
+      name: '@deepseek-ai/dsh-client-ui-layout'
+    - id: web-ui-session
+      name: '@deepseek-ai/dsh-client-ui-session'
+    - id: web-ui-sidebar
+      name: '@deepseek-ai/dsh-client-ui-sidebar'
+    - id: web-ui-settings
+      name: '@deepseek-ai/dsh-client-ui-settings'
+    - id: web-ui-conversation
+      name: '@deepseek-ai/dsh-client-ui-conversation'
+    - id: web-ui-chat
+      name: '@deepseek-ai/dsh-client-ui-chat'
+    - id: web-ui-brand
+      name: '@deepseek-ai/dsh-client-ui-brand-official'
+    - id: web-ui-tool
+      name: '@deepseek-ai/dsh-client-ui-tool'
+    - id: web-ui-workspace
+      name: '@deepseek-ai/dsh-client-ui-workspace'

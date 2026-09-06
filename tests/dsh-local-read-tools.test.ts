@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { Context } from "@deepseek-ai/cordis";
 import { AgentRegistry, type Agent } from "@deepseek-ai/dsh-agent";
 import { AgentLoop } from "@deepseek-ai/dsh-agent-loop";
+import { LocalAttachmentStore } from "@deepseek-ai/dsh-attachment-local";
 import { composeEntries, loadOverlayPatches } from "@deepseek-ai/dsh-app-boot";
 import { SandboxedFileSystem } from "@deepseek-ai/dsh-fs-sandbox";
 import { LlmRuntime, type ToolCallId } from "@deepseek-ai/dsh-llm";
@@ -92,6 +93,13 @@ describe("T4.2 current-gap: official DSH 0.1.2-rc.1 read-only is not workspace-c
 });
 
 describe("DeepSeek Web fixture-only official read composition", () => {
+  it("keeps official Web's optional image registration private and exposes only the existing text read", async () => {
+    const { ctx } = await fixture(true, true);
+    expect(ctx.tools.schemas().map(({ name }) => name)).toEqual(["read"]);
+    expect(ctx.tools.get("read_image")).toBeUndefined();
+    expect((await execute(ctx, "read_image", { file_path: "inside.txt" })).isError).toBe(true);
+    expect(textOf(await execute(ctx, "read", { file_path: "inside.txt", limit: 1 }))).toContain("inside first line");
+  });
   it("adds only the reviewed official dependencies and replaces the persona without exposing cwd", async () => {
     const bundle = resolve(process.cwd(), "packages/dsh-web-agent-bundle");
     const base = loadOverlayPatches("readonly-test", join(bundle, "cordis.patch.yml"));
@@ -231,7 +239,7 @@ describe("DeepSeek Web fixture-only official read composition", () => {
   });
 });
 
-async function fixture(readonly = false) {
+async function fixture(readonly = false, attachments = false) {
   const root = await mkdtemp(join(tmpdir(), "dsh-read-containment-probe-"));
   const workspace = join(root, "workspace");
   const outsideDir = join(root, "outside");
@@ -247,6 +255,7 @@ async function fixture(readonly = false) {
   await ctx.plugin(SandboxPolicyService, { mode: "read-only", workspaceRoot: workspace });
   await ctx.plugin(SandboxedFileSystem, { cwd: workspace });
   await ctx.plugin(ToolRuntime, { mode: "native" });
+  if (attachments) await ctx.plugin(LocalAttachmentStore, { dshHome: root });
   const policy = readonly ? ctx.plugin(ReadonlyPolicy, { workspaceRoot: workspace, readLimit: 3 }) : undefined;
   if (policy) await policy;
   else await ctx.plugin(FileTools, { readLimit: 3 });

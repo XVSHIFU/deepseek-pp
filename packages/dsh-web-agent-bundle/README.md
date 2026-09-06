@@ -2,7 +2,7 @@
 
 This private workspace package supplies the standalone `deepseek-web-agent` profile used while Mode A is under development. The local DeepSeek Harness owns the Agent loop, session log, checkpoints, and empty tool registry. The only model route is `deepseek-web/current-web-session`, served by the paired DeepSeek++ browser extension.
 
-The profile deliberately excludes `dsh-base`, the official DeepSeek API and Pi adapters, settings and credential providers, telemetry, search, Skills, subagents, and local tools. Those capabilities may be added only by their planned allowlist tasks.
+The base profile deliberately excludes `dsh-base`, the official DeepSeek API and Pi adapters, settings and credential providers, telemetry, search, Skills, subagents, and local tools. The explicit file/Harness overlays below supply their existing approved capabilities. The Web overlay adds official local-page authentication, not model API credentials or another model provider.
 
 ## Fixed local installation (P6 development)
 
@@ -20,6 +20,11 @@ After installation, use `node <product-home>/dsh-web-agent.mjs` with:
 - `pair --copy-token` on Windows to copy the local pairing token. Paste it in the
   extension's Local Harness settings. Keep a signed-in DeepSeek tab in that same
   browser profile; after first loading the extension, send a normal web message.
+- `web --workspace <absolute-workspace> --mode readonly` to open the official
+  Harness browser UI with the existing paired web model. Use `files` for the
+  already approved editor/Skills/child-Agent composition, or the existing Linux
+  runtime with `linux-commands`. Original Web flags `--port <port>` and
+  `--no-open` are supported; the listener stays on `127.0.0.1`.
 - `start --workspace <absolute-workspace> --mode readonly --task <task>` for a
   single task. `files` explicitly permits the existing editor/Skills/child-Agent
   composition; `linux-commands` additionally requires the Linux setup below.
@@ -29,14 +34,25 @@ After installation, use `node <product-home>/dsh-web-agent.mjs` with:
 - `start --workspace <same-workspace> --mode readonly --resume <session-id>`
   to continue an explicitly selected completed root session. It does not select
   a recent session, accept another workspace, or replay unfinished work.
-- `install --distribution <new-directory> --sha256 <new-sha> --origin <origin>`
+- `install --distribution <new-directory> --sha256 <new-sha>`
   to install a new build while retaining sessions, recovery records and pairing.
+  Only a fresh installation needs `--origin`. Use `pair --origin <origin>` if
+  you deliberately replace the paired extension, rather than changing it as
+  an incidental upgrade side effect.
 - `uninstall` to deactivate the owned profile link. User data and old versions
   are retained; repeating it is safe. Reinstalling that same build restores it.
 
-The installed entry does not require the original checkout. It waits up to one
-minute for the paired browser; save the extension's connection settings if it
-is offline. With `--task` it uses the original one-task/headless DSH entry;
+The installed entry does not require the original checkout. The `web` command
+starts the original pinned DSH CLI with an explicit official-Web overlay; it
+does not build a second chat UI or agent loop. New sessions use the selected
+workspace and only `deepseek-web/current-web-session`. The page can open while
+the model browser is offline; model requests report that condition explicitly.
+The current extension automatically retries a disconnected local connection
+using the saved pairing. Its low-frequency wake can be delayed by browser or
+device sleep; authentication errors require correcting the pairing or login.
+
+The `start` command waits up to one minute for the paired browser. With `--task`
+it uses the original one-task/headless DSH entry;
 without it a thin terminal plugin passes input to the official Agent inbox and
 renders its events. The same Harness owns the loop, tools and session storage.
 There is no second conversation engine or terminal UI framework. Close a running task before

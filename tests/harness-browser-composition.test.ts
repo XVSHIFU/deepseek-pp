@@ -7,6 +7,7 @@ import { DeepSeekWebModelHost, createPairingToken } from '../packages/dsh-web-mo
 import { serializeGenerateRequest } from '../packages/dsh-llm-deepseek-web/src/request';
 import { HarnessBridgeClient, type HarnessBridgeSocket } from '../core/harness-bridge/client';
 import { HarnessBridgeCoordinator } from '../core/harness-bridge/coordinator';
+import { HARNESS_BRIDGE_RECONNECT_ALARM, HarnessBridgeReconnectWake } from '../core/harness-bridge/reconnect-wake';
 import type { HarnessBridgeRecoveryIndex } from '../core/harness-bridge/result-cache';
 import { createDeepSeekWebModelTurnAdapter } from '../core/harness-bridge/deepseek-turn-adapter';
 import type { DeepSeekAutomationClient } from '../core/deepseek/automation-client-port';
@@ -19,7 +20,7 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-it.each(['ready', 'missing-auth'] as const)('runs the actual browser composition for an empty-tool DSH request (%s)', async (mode) => {
+it.each(['ready', 'missing-auth', 'host-restarted'] as const)('runs the actual browser composition for an empty-tool DSH request (%s)', async (mode) => {
   vi.stubGlobal('localStorage', undefined);
   vi.stubGlobal('crypto', webcrypto);
   let recoveryIndex: HarnessBridgeRecoveryIndex | undefined;
@@ -47,6 +48,7 @@ it.each(['ready', 'missing-auth'] as const)('runs the actual browser composition
   };
   const turnAdapter = createDeepSeekWebModelTurnAdapter({ client, loadClientHeaders: loadedHeaders });
   const turnErrors: unknown[] = [];
+  let reconnectWake: HarnessBridgeReconnectWake | undefined;
   const coordinator = new HarnessBridgeCoordinator({
     recoveryStorage: {
       read: async () => structuredClone(recoveryIndex),
@@ -66,10 +68,36 @@ it.each(['ready', 'missing-auth'] as const)('runs the actual browser composition
     createClient: () => new HarnessBridgeClient({
       port: address.port, pairingToken: token,
       browserInstanceId: 'abcdefghijklmnopabcdefghijklmnop', clientVersion: '1.14.0',
+      ...(mode === 'host-restarted' ? {
+        timing: {
+          connectTimeoutMs: 1_000, helloTimeoutMs: 1_000, heartbeatIntervalMs: 10_000,
+          retryBaseMs: 10, retryMaxMs: 20, maxAttempts: 2,
+        },
+      } : {}),
     }, {
       webSocketFactory: (url, subprotocol) => new WebSocket(url, subprotocol, { origin: ORIGIN }) as unknown as HarnessBridgeSocket,
     }),
+    notifyStatus: (status) => reconnectWake?.update(status),
   });
+  let alarmListener: ((alarm: { name: string }) => void) | undefined;
+  let alarm: { periodInMinutes: number } | undefined;
+  if (mode === 'host-restarted') {
+    reconnectWake = new HarnessBridgeReconnectWake({
+      alarms: {
+        get: async () => alarm,
+        create: async (_name, options) => { alarm = options; },
+        clear: async () => { alarm = undefined; return true; },
+        onAlarm: {
+          addListener: (listener) => { alarmListener = listener; },
+          removeListener: () => { alarmListener = undefined; },
+        },
+      },
+      wake: async () => { await coordinator.reconnectOffline(); return coordinator.getStatus(); },
+      reportError: (code) => { turnErrors.push(code); },
+    });
+    reconnectWake.start();
+    disposers.push(() => reconnectWake!.stop());
+  }
   disposers.push(() => coordinator.stop());
   await coordinator.initialize();
   await vi.waitFor(() => expect(host.hasAuthenticatedPeer).toBe(true));
@@ -93,4 +121,30 @@ it.each(['ready', 'missing-auth'] as const)('runs the actual browser composition
   expect(events).toEqual([{ type: 'text_delta', text: 'ok' }, { type: 'completed', finish_reason: 'stop' }]);
   expect(loadedHeaders).toHaveBeenCalledOnce();
   expect(client.submitPromptStreaming).toHaveBeenCalledOnce();
+  if (mode === 'host-restarted') {
+    await host.stop();
+    await vi.waitFor(async () => expect(await coordinator.getStatus()).toMatchObject({
+      state: { phase: 'offline', errorCode: 'RETRY_EXHAUSTED' },
+    }));
+    expect(alarm).toEqual({ periodInMinutes: 0.5 });
+    const restartedHost = new DeepSeekWebModelHost({ pairingToken: token, allowedOrigins: [ORIGIN], port: address.port });
+    await restartedHost.start();
+    disposers.push(() => restartedHost.stop());
+    expect(restartedHost.hasAuthenticatedPeer).toBe(false);
+    alarmListener!({ name: HARNESS_BRIDGE_RECONNECT_ALARM });
+    await vi.waitFor(() => expect(restartedHost.hasAuthenticatedPeer).toBe(true));
+    // A reconnect only re-authenticates/hydrates; it never repeats the completed model turn.
+    expect(client.submitPromptStreaming).toHaveBeenCalledOnce();
+    const nextRequest = serializeGenerateRequest({
+      provider: 'deepseek-web', model: 'current-web-session', sessionId: 'session-restarted' as GenerateOptions['sessionId'],
+      tools: [], messages: [createUserMessage({
+        source: { kind: 'user' }, content: [{ type: 'text', text: 'Reply exactly ok after reconnect.' }],
+      })],
+    });
+    const nextEvents = [];
+    for await (const event of restartedHost.generate(nextRequest)) nextEvents.push(event);
+    expect(nextEvents).toEqual(events);
+    expect(client.submitPromptStreaming).toHaveBeenCalledTimes(2);
+    expect(turnErrors).toEqual([]);
+  }
 });

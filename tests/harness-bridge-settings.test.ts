@@ -132,6 +132,56 @@ describe('Harness bridge browser-local settings', () => {
 
 describe('Harness bridge background coordinator', () => {
   it.each([
+    ['offline', 'RETRY_EXHAUSTED', 1],
+    ['offline', undefined, 0],
+    ['retry_wait', 'CONNECTION_FAILED', 0],
+    ['connecting', undefined, 0],
+    ['authenticating', undefined, 0],
+    ['ready', undefined, 0],
+    ['needs_pairing', 'PAIRING_REJECTED', 0],
+    ['protocol_error', 'PROTOCOL_ERROR', 0],
+    ['handler_error', 'HANDLER_FAILED', 0],
+    ['stopped', undefined, 0],
+  ] as const)('automatic wake only reconnects exhausted network retries: %s/%s', async (phase, errorCode, calls) => {
+    const client = new FakeClient();
+    const turnPort = fakeTurnPort();
+    const coordinator = new HarnessBridgeCoordinator({
+      recoveryStorage: recoveryStorage(),
+      settings: fixedSettingsStore(enabledSettings()),
+      turnPort,
+      createClient: () => client,
+    });
+    await coordinator.initialize();
+    client.transition({ phase, attempt: 6, ...(errorCode ? { errorCode } : {}) });
+    client.reconnect.mockImplementation(() => client.transition({ phase: 'connecting', attempt: 1 }));
+    await Promise.all([coordinator.reconnectOffline(), coordinator.reconnectOffline()]);
+    expect(client.reconnect).toHaveBeenCalledTimes(calls);
+    expect(turnPort.generate).not.toHaveBeenCalled();
+    coordinator.stop();
+    await coordinator.reconnectOffline();
+    expect(client.reconnect).toHaveBeenCalledTimes(calls);
+  });
+
+  it('serializes configuration disable with an automatic reconnect wake', async () => {
+    const client = new FakeClient();
+    const fixture = storageFixture({ version: 1, enabled: true, port: 43_123, pairingToken: TOKEN });
+    const coordinator = new HarnessBridgeCoordinator({
+      recoveryStorage: recoveryStorage(),
+      settings: createHarnessBridgeSettingsStore(fixture.port),
+      turnPort: fakeTurnPort(),
+      createClient: () => client,
+    });
+    await coordinator.initialize();
+    client.transition({ phase: 'offline', attempt: 6, errorCode: 'RETRY_EXHAUSTED' });
+    await Promise.all([
+      coordinator.updateSettings({ enabled: false, port: 43_123 }),
+      coordinator.reconnectOffline(),
+    ]);
+    expect(client.reconnect).not.toHaveBeenCalled();
+    expect(client.stop).toHaveBeenCalledOnce();
+  });
+
+  it.each([
     'DEEPSEEK_AUTH_REQUIRED',
     'DEEPSEEK_PREPARATION_FAILED',
   ] as const)('forwards only the safe pre-dispatch adapter code %s', async (code) => {

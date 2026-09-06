@@ -151,6 +151,17 @@ export class HarnessBridgeCoordinator {
     this.retireClient();
   }
 
+  /** Resume a bounded connection burst, never a model generation or a failed pairing. */
+  reconnectOffline(): Promise<void> {
+    return this.initialize().then(() => this.serialize(async () => {
+      const binding = this.binding;
+      if (this.configurationError || !this.settingsValue?.enabled || !binding) return;
+      if (binding.client.state.phase === 'offline' && binding.client.state.errorCode === 'RETRY_EXHAUSTED') {
+        binding.client.reconnect();
+      }
+    }));
+  }
+
   private serialize(operation: () => Promise<void>): Promise<void> {
     const next = this.lifecycleTail.then(operation, operation);
     this.lifecycleTail = next.then(() => undefined, () => undefined);

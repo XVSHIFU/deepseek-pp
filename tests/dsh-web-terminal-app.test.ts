@@ -5,6 +5,7 @@ import { randomBytes } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { FakeBrowserPeer, FAKE_EXTENSION_ORIGIN, type FakeGenerationInput } from "./fixtures/harness-bridge/fake-peer/index.ts";
 import { WEB_MODEL_PATH, WEB_MODEL_SUBPROTOCOL, createPairingToken } from "@deepseek-pp/dsh-web-model-transport";
@@ -14,6 +15,7 @@ import { createReadLoopScripts, NONCE_FILE } from "./fixtures/dsh-web-agent/tool
 const terminal = await import(new URL("../packages/dsh-web-agent-bundle/bin/terminal-app.mjs", import.meta.url).href);
 const options = await import(new URL("../packages/dsh-web-agent-bundle/bin/terminal-options.mjs", import.meta.url).href);
 const { seedProfile } = await import(new URL("../packages/dsh-web-agent-bundle/scripts/seed-profile.mjs", import.meta.url).href);
+const { runProcess } = await import(new URL("../packages/dsh-web-agent-bundle/bin/install-runtime.mjs", import.meta.url).href);
 const repo = resolve(import.meta.dirname, "..");
 const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
@@ -32,13 +34,14 @@ async function fixture() {
   return { root, home, workspace };
 }
 
-type TerminalInput = string | ((io: { write: (text: string) => void; output: () => string; errors: () => string; peer: FakeBrowserPeer }) => Promise<string>);
-async function run(f: Awaited<ReturnType<typeof fixture>>, scripts: readonly FakeGenerationInput[], input: TerminalInput, resume?: string, idleProbe = false) {
+type TerminalInput = string | ((io: { write: (text: string) => void; output: () => string; errors: () => string; peer: FakeBrowserPeer; interrupt: () => Promise<void> }) => Promise<string | undefined>);
+async function run(f: Awaited<ReturnType<typeof fixture>>, scripts: readonly FakeGenerationInput[], input: TerminalInput, resume?: string, idleProbe = false, signalProbe = false) {
   const port = await reserveLoopbackPort(), token = createPairingToken();
   const bundle = join(repo, "packages/dsh-web-agent-bundle");
   const env = createHeadlessEnvironment(process.env, { DSH_HOME: f.home, DSH_TELEMETRY_DISABLED: "1", DSH_WEB_WORKSPACE_ROOT: f.workspace,
-    DSH_WEB_BROKER_PORT: String(port), DSH_WEB_PAIRING_TOKEN: token, DSH_WEB_ALLOWED_EXTENSION_ORIGINS: FAKE_EXTENSION_ORIGIN, DSH_WEB_BROWSER_WAIT_MS: "5000" });
-  const child = spawn(process.execPath, [join(repo, "node_modules/@deepseek-ai/dsh/lib/bin.js"), "--profile", "deepseek-web-agent", "--patch", join(bundle, "cordis.readonly.patch.yml"), "--patch", join(bundle, "bin/browser-ready.patch.yml"), "--patch", join(bundle, "bin/terminal-app.patch.yml"), ...(resume ? ["--resume", resume] : [])], {
+    DSH_WEB_BROKER_PORT: String(port), DSH_WEB_PAIRING_TOKEN: token, DSH_WEB_ALLOWED_EXTENSION_ORIGINS: FAKE_EXTENSION_ORIGIN, DSH_WEB_BROWSER_WAIT_MS: "5000",
+    ...(signalProbe ? { DSH_TERMINAL_TEST_SIGNAL_FILE: join(f.root, "terminal-interrupt") } : {}) });
+  const child = spawn(process.execPath, [...(signalProbe ? ["--import", pathToFileURL(join(repo, "tests/fixtures/harness-bridge/installation/terminal-signal.mjs")).href] : []), join(repo, "node_modules/@deepseek-ai/dsh/lib/bin.js"), "--profile", "deepseek-web-agent", "--patch", join(bundle, "cordis.readonly.patch.yml"), "--patch", join(bundle, "bin/browser-ready.patch.yml"), "--patch", join(bundle, "bin/terminal-app.patch.yml"), ...(resume ? ["--resume", resume] : [])], {
     cwd: f.workspace, env, shell: false, windowsHide: true, detached: process.platform !== "win32", stdio: ["pipe", "pipe", "pipe"],
   });
   const capture = captureChild(child as unknown as Parameters<typeof captureChild>[0], 12000, "TERMINAL_TEST_TIMEOUT");
@@ -66,7 +69,9 @@ async function run(f: Awaited<ReturnType<typeof fixture>>, scripts: readonly Fak
       await new Promise((done) => setTimeout(done, 100));
       assert.equal(peer.observedGenerateRequests.length, 0, "Resume must wait for an explicit new user input");
     }
-    child.stdin.end(typeof input === "string" ? input : await input({ write: (text) => { child.stdin.write(text); }, output: () => stdout, errors: () => stderr, peer }));
+    const finalInput = typeof input === "string" ? input : await input({ write: (text) => { child.stdin.write(text); }, output: () => stdout, errors: () => stderr, peer,
+      interrupt: async () => { assert.ok(signalProbe); await writeFile(join(f.root, "terminal-interrupt"), "interrupt\n", { flag: "wx" }); } });
+    if (finalInput !== undefined) child.stdin.end(finalInput);
     const result = await capture.result;
     peer.throwIfFailed();
     assert.equal(result.stderr.includes(token), false);
@@ -105,6 +110,47 @@ describe("product terminal argument and resume boundary", () => {
 });
 
 describe("unchanged official CLI with product terminal and fake web model", () => {
+  it.runIf(process.platform === "win32")("flushes the aborted turn after actual Windows terminal Ctrl+C during a model request", async () => {
+    const result = await runProcess(process.execPath, [join(repo, "tests/fixtures/harness-bridge/installation/terminal-control-pty.mjs")],
+      { cwd: repo, env: createHeadlessEnvironment(process.env, {}), timeoutMs: 20000 });
+    expect(result.code, result.stderr).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({ ok: true, real_pty: true, real_web: false, exit_code: 130,
+      tool_results: 1, cancelled_requests: 1, cancelled_turn_persisted: true });
+  }, 25000);
+  it.each([false, true])("exits on process SIGINT after a real read (active request: %s) without accessing disposed services", async (active) => {
+    const f = await fixture();
+    await writeFile(join(f.workspace, NONCE_FILE), `fixture-nonce=${randomBytes(16).toString("hex")}`);
+    const scripts: FakeGenerationInput[] = [...createReadLoopScripts("read")];
+    if (active) scripts.push({ delivery: "after_cancel", events: [{ type: "failed", error: { code: "CANCELLED", message: "Fixture cancelled", retryable: false, external_outcome: "started" } }] });
+    const result = await run(f, scripts, async (io) => {
+      io.write(`Read ${NONCE_FILE}\n`);
+      const deadline = Date.now() + 5000;
+      while (!io.output().includes("Read complete:") && Date.now() < deadline) await new Promise((done) => setTimeout(done, 20));
+      assert.match(io.output(), /Read complete:/u);
+      if (active) { io.write("Wait for cancellation\n"); await io.peer.waitForGenerateCount(3); }
+      else await new Promise((done) => setTimeout(done, 100));
+      await io.interrupt();
+      return undefined; // Leave stdin open: only SIGINT owns this shutdown.
+    }, undefined, false, true);
+    expect(result.exitCode, result.stderr).toBe(130);
+    expect(result.stderr).not.toMatch(/START_TERMINAL_FAILED|cannot get property|inactive context|fatal load failure/u);
+    expect(result.requests).toHaveLength(active ? 3 : 2);
+    const log = await readOnlySessionLog(join(f.home, "sessions"));
+    expect(log.records.filter((row) => row.type === "tool/result")).toHaveLength(1);
+    const endings = log.records.filter((row) => row.type === "turn/end").map((row) => (row.data as { reason: { kind: string } }).reason.kind);
+    expect(endings[0]).toBe("completed");
+    if (active) {
+      // current-gap: upstream whole-process shutdown can detach persistence
+      // before recording cancellation. The terminal owner must never replay or
+      // repair this interrupted turn; its exact durable log stays untouched.
+      expect(endings.slice(1).every((kind) => kind === "aborted")).toBe(true);
+      const rejected = await run(f, [], "Do not replay\n", result.requests[0]!.session_id);
+      expect(rejected.exitCode).toBe(1);
+      expect(rejected.stderr).toContain("START_RESUME_NOT_QUIESCENT");
+      expect(rejected.requests).toHaveLength(0);
+      expect((await readOnlySessionLog(join(f.home, "sessions"))).raw).toBe(log.raw);
+    } else expect(endings).toEqual(["completed"]);
+  }, 15000);
   it("runs two separate user turns, reads a real file, resumes that same durable session, and rejects a different cwd without model work", async () => {
     const f = await fixture();
     const nonce = `fixture-nonce=${randomBytes(16).toString("hex")}`;

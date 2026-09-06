@@ -26,9 +26,13 @@ export function validateResumeTail(lastEvent, hasPending = false, beforeMarker) 
 
 /** A terminal view/controller; every turn, tool call, cancel and disk record is Harness-owned. */
 export function apply(ctx) {
-  if (!ctx.appReady || !ctx.appExit) fail("START_TERMINAL_LAUNCHER_REQUIRED");
+  // Like the official headless app, capture launcher capabilities while this
+  // context is live. Looking them up after owner disposal is itself an error.
+  const ready = ctx.get("appReady"), exit = ctx.get("appExit");
+  if (!ready || !exit) fail("START_TERMINAL_LAUNCHER_REQUIRED");
   const options = parseTerminalArguments(ctx.cmdlineArgs.get());
-  let input, handle, interrupted = false, stopping = false, completed = false;
+  let input, handle, interrupted = false, stopping = false, completed = false, unloading = false;
+  let cancelReady = () => {};
   let disposeHandle;
   const disposeAgent = () => disposeHandle ??= handle?.dispose();
   const interrupt = () => {
@@ -36,12 +40,14 @@ export function apply(ctx) {
     interrupted = true; stopping = true;
     handle?.agent.cancel({ kind: "user" });
     input?.close();
-    ctx.appExit(130);
+    // Readline's raw-mode Ctrl+C drains through run(). A process SIGINT is
+    // already owned by the official launcher's bounded whole-tree shutdown.
   };
   ctx.effect(() => {
     process.on("SIGINT", interrupt);
     return async () => {
-      stopping = true;
+      unloading = true; stopping = true;
+      cancelReady();
       process.off("SIGINT", interrupt);
       input?.close();
       await disposeAgent();
@@ -50,6 +56,7 @@ export function apply(ctx) {
 
   const run = async () => {
     const workspace = await realpath(process.cwd());
+    if (unloading) return;
     const selection = ctx.agentDefaultModel.currentSelection();
     if (selection.provider !== "deepseek-web" || selection.model !== "current-web-session") fail("START_TERMINAL_MODEL_INVALID");
     const setup = async (agentCtx) => {
@@ -65,6 +72,7 @@ export function apply(ctx) {
       const inspection = await ctx.sessionPersistence.inspect(options.resume);
       await validateResumeHeader(inspection.meta, workspace);
       validateResumeTail(inspection.events.at(-1), false, inspection.events.at(-2));
+      if (unloading) return;
       handle = await ctx.agents.resume({ resumeSessionId: options.resume, agentOptions, setup });
     } else {
       handle = await ctx.agents.create({ sessionId: `session-${randomUUID()}`, meta: { cwd: workspace }, agentOptions, setup });
@@ -72,7 +80,9 @@ export function apply(ctx) {
     if (stopping) { await disposeAgent(); return; }
     const agent = handle.agent;
     await agent.whenIdle();
+    if (unloading) return;
     await ctx.sessionPersistence.ensureMaterialized(agent.session);
+    if (unloading) return;
     process.stdout.write(`会话：${agent.session.id}\n输入任务后回车；/exit 退出并保留会话，Ctrl+C 取消并退出。\n`);
     ctx.on("session/event", (session, event) => {
       if (session !== agent.session) return;
@@ -106,25 +116,29 @@ export function apply(ctx) {
         if (line.trim()) {
           agent.followup(createUserMessage({ content: [{ type: "text", text: line }], source: { kind: "user" } }));
           await agent.whenIdle();
-          await ctx.sessions.flush(agent.session);
+          if (!unloading) await ctx.sessions.flush(agent.session);
         }
         if (!stopping && input.terminal) input.prompt();
       }).catch((error) => { failure = error; stopping = true; input.close(); });
     });
     await new Promise((done) => input.once("close", done));
     await queue; // EOF must not discard lines already admitted by readline.
+    // Owner teardown owns disposal through the official AgentHandle.
+    // Its services/session may already be detached when our awaits resume.
+    if (unloading) { if (failure !== undefined) throw failure; return; }
     await agent.whenIdle();
+    if (unloading) return;
     await ctx.sessions.flush(agent.session);
     await disposeAgent();
     if (failure !== undefined) throw failure;
     completed = true;
-    ctx.appExit(interrupted ? 130 : 0);
+    if (!unloading) exit(interrupted ? 130 : 0);
   };
-  ctx.appReady.onReady(() => {
+  cancelReady = ready.onReady(() => {
     run().catch((error) => {
       const code = typeof error?.code === "string" && /^[A-Z][A-Z0-9_]+$/u.test(error.code) ? error.code : "START_TERMINAL_FAILED";
       process.stderr.write(`${code}\n`);
-      ctx.appExit(1);
+      exit(1);
     });
   });
 }
