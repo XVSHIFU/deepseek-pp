@@ -19,6 +19,15 @@ import {
 
 export const inject = ["slots", "settingsScope", "remote"] as const;
 
+/** Remote packages are unique in the browser loader, so mount all plugin descriptors together. */
+export const DEEPSEEK_WEB_CLIENT_REMOTE_CONTRIBUTION = Object.freeze({
+  package: DEEPSEEK_WEB_REMOTE_CONTRIBUTION.package,
+  descriptors: Object.freeze([
+    ...DEEPSEEK_WEB_REMOTE_CONTRIBUTION.descriptors,
+    ...DEEPSEEK_WEB_SESSION_IMPORT_REMOTE_CONTRIBUTION.descriptors,
+  ]),
+});
+
 interface RemoteResult<T> {
   readonly ok: boolean;
   readonly value?: T;
@@ -493,14 +502,7 @@ function DeepSeekWebSettingsCard({ controller }: { readonly controller: DeepSeek
 
 export async function apply(ctx: Context): Promise<() => Promise<void>> {
   const client = ctx as Context & ClientContext;
-  const unmountConnection = await client.remote.$mount(DEEPSEEK_WEB_REMOTE_CONTRIBUTION);
-  let unmountImport: (() => Promise<void>) | undefined;
-  try {
-    unmountImport = await client.remote.$mount(DEEPSEEK_WEB_SESSION_IMPORT_REMOTE_CONTRIBUTION);
-  } catch (error) {
-    await unmountConnection();
-    throw error;
-  }
+  const unmountRemote = await client.remote.$mount(DEEPSEEK_WEB_CLIENT_REMOTE_CONTRIBUTION);
   client.slots.inject("settings.plugin.item", () => {
     const settings = client.settingsScope.bind<DeepSeekWebOfficialSettings>({
       namespace: DEEPSEEK_WEB_SETTINGS_NAMESPACE,
@@ -523,10 +525,7 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
     };
   });
   return async () => {
-    const failures = await Promise.allSettled([unmountImport!(), unmountConnection()]);
-    const rejected = failures.flatMap((failure) => failure.status === "rejected" ? [failure.reason] : []);
-    if (rejected.length === 1) throw rejected[0];
-    if (rejected.length > 1) throw new AggregateError(rejected, "DeepSeek Web client Remote cleanup failed");
+    await unmountRemote();
   };
 }
 

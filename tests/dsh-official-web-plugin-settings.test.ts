@@ -20,6 +20,7 @@ import { DEEPSEEK_WEB_REMOTE_CONTRIBUTION } from "../packages/dsh-deepseek-web-o
 import { DEEPSEEK_WEB_SESSION_IMPORT_REMOTE_CONTRIBUTION } from "../packages/dsh-deepseek-web-official-plugin/src/session-import-contract.ts";
 import {
   apply as applyClient,
+  DEEPSEEK_WEB_CLIENT_REMOTE_CONTRIBUTION,
   DeepSeekWebClientController,
 } from "../packages/dsh-deepseek-web-official-plugin/src/client.ts";
 import { applyRequestedDefault } from "../packages/dsh-deepseek-web-official-plugin/src/index.ts";
@@ -397,8 +398,12 @@ describe("official DeepSeek Web settings and connection", () => {
       },
     } as never);
 
-    expect(mount).toHaveBeenNthCalledWith(1, DEEPSEEK_WEB_REMOTE_CONTRIBUTION);
-    expect(mount).toHaveBeenNthCalledWith(2, DEEPSEEK_WEB_SESSION_IMPORT_REMOTE_CONTRIBUTION);
+    expect(mount).toHaveBeenCalledOnce();
+    expect(mount).toHaveBeenCalledWith(DEEPSEEK_WEB_CLIENT_REMOTE_CONTRIBUTION);
+    expect(DEEPSEEK_WEB_CLIENT_REMOTE_CONTRIBUTION.descriptors).toEqual([
+      ...DEEPSEEK_WEB_REMOTE_CONTRIBUTION.descriptors,
+      ...DEEPSEEK_WEB_SESSION_IMPORT_REMOTE_CONTRIBUTION.descriptors,
+    ]);
     const importParameter = DEEPSEEK_WEB_SESSION_IMPORT_REMOTE_CONTRIBUTION.descriptors[0]!.parameters[0]!;
     expect(importParameter).toMatchObject({
       name: "request",
@@ -420,7 +425,7 @@ describe("official DeepSeek Web settings and connection", () => {
     (slotCleanup as () => void)();
     expect(unregister).toHaveBeenCalledOnce();
     await dispose();
-    expect(unmount).toHaveBeenCalledTimes(2);
+    expect(unmount).toHaveBeenCalledOnce();
   });
 
   it("exports only redacted live state and refuses reconnect while the broker is busy", async () => {

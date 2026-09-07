@@ -35,6 +35,7 @@ window.__ModuleLoader__.load({
     // src/client.ts
     var client_exports = {};
     __export(client_exports, {
+      DEEPSEEK_WEB_CLIENT_REMOTE_CONTRIBUTION: () => DEEPSEEK_WEB_CLIENT_REMOTE_CONTRIBUTION,
       DeepSeekWebClientController: () => DeepSeekWebClientController,
       apply: () => apply,
       inject: () => inject
@@ -104,6 +105,13 @@ window.__ModuleLoader__.load({
 
     // src/client.ts
     var inject = ["slots", "settingsScope", "remote"];
+    var DEEPSEEK_WEB_CLIENT_REMOTE_CONTRIBUTION = Object.freeze({
+      package: DEEPSEEK_WEB_REMOTE_CONTRIBUTION.package,
+      descriptors: Object.freeze([
+        ...DEEPSEEK_WEB_REMOTE_CONTRIBUTION.descriptors,
+        ...DEEPSEEK_WEB_SESSION_IMPORT_REMOTE_CONTRIBUTION.descriptors
+      ])
+    });
     var DeepSeekWebClientController = class {
       constructor(options) {
         this.options = options;
@@ -520,14 +528,7 @@ window.__ModuleLoader__.load({
     }
     async function apply(ctx) {
       const client = ctx;
-      const unmountConnection = await client.remote.$mount(DEEPSEEK_WEB_REMOTE_CONTRIBUTION);
-      let unmountImport;
-      try {
-        unmountImport = await client.remote.$mount(DEEPSEEK_WEB_SESSION_IMPORT_REMOTE_CONTRIBUTION);
-      } catch (error) {
-        await unmountConnection();
-        throw error;
-      }
+      const unmountRemote = await client.remote.$mount(DEEPSEEK_WEB_CLIENT_REMOTE_CONTRIBUTION);
       client.slots.inject("settings.plugin.item", () => {
         const settings = client.settingsScope.bind({
           namespace: DEEPSEEK_WEB_SETTINGS_NAMESPACE,
@@ -549,10 +550,7 @@ window.__ModuleLoader__.load({
         };
       });
       return async () => {
-        const failures = await Promise.allSettled([unmountImport(), unmountConnection()]);
-        const rejected = failures.flatMap((failure) => failure.status === "rejected" ? [failure.reason] : []);
-        if (rejected.length === 1) throw rejected[0];
-        if (rejected.length > 1) throw new AggregateError(rejected, "DeepSeek Web client Remote cleanup failed");
+        await unmountRemote();
       };
     }
     function decodeSettings(value) {
