@@ -1,6 +1,6 @@
 {
   "extension_name": {
-    "message": "DeepSeek++",
+    "message": "DeepSeek++ Harness",
     "description": "浏览器界面中显示的扩展名称"
   },
   "extension_description": {
@@ -8,7 +8,7 @@
     "description": "浏览器界面中显示的扩展描述"
   },
   "extension_action_title": {
-    "message": "DeepSeek++",
+    "message": "DeepSeek++ Harness",
     "description": "工具栏按钮标题"
   }
 }

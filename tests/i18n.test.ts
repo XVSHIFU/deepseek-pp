@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   createTranslator,
   formatMessage,
@@ -13,6 +15,19 @@ import {
 import { getPetLines } from '../core/pet/lines';
 
 describe('i18n resources', () => {
+  it('distinguishes the Harness fork in browser and sidepanel names', () => {
+    for (const [locale, directory] of [['en', 'en'], ['zh-CN', 'zh_CN']] as const) {
+      const messages = JSON.parse(readFileSync(resolve(`public/_locales/${directory}/messages.json`), 'utf8'));
+      expect(translate(locale, 'manifest.name')).toBe('DeepSeek++ Harness');
+      expect(messages.extension_name.message).toBe(translate(locale, 'manifest.name'));
+      expect(messages.extension_action_title.message).toBe(translate(locale, 'manifest.actionTitle'));
+    }
+    const about = readFileSync(resolve('entrypoints/sidepanel/components/settings/AboutSubPage.tsx'), 'utf8');
+    expect(about).toContain("t('manifest.name')");
+    const page = readFileSync(resolve('entrypoints/sidepanel/index.html'), 'utf8');
+    expect(page).toContain('<title>DeepSeek++ Harness</title>');
+  });
+
   it('keeps English and Chinese string keys in parity', () => {
     expect(getLocaleStringKeys('en').sort()).toEqual(getLocaleStringKeys('zh-CN').sort());
   });

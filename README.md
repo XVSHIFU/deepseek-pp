@@ -159,10 +159,33 @@ dsh plugin --profile web add ./vendor/harness-request-budget/*.tgz ./.release/ma
 
 **Chrome / Edge：**
 
-1. 解压安装包中对应浏览器的 ZIP；源码构建则使用 `dist/chrome-mv3` 或 `dist/edge-mv3`。
-2. 打开 `chrome://extensions`（Edge 是 `edge://extensions`），开启“开发者模式”。
-3. 点击“加载已解压的扩展程序”，选择包含 `manifest.json` 的目录。
-4. 记下扩展卡片上的 **ID**，并确保只启用一份 DeepSeek++。
+这里要**解压两次**：先解压配套整包，再解压其中的浏览器扩展 ZIP。
+
+1. 打开解压后的 `deepseek-web-official-395cf37` 文件夹。
+2. 进入 `extensions` → `chrome`（Edge 进入 `extensions` → `edge`）。
+3. 找到 `deepseek-plus-plus-1.14.0-chrome.zip`（Edge 对应 `…-edge.zip`），右键选择“全部解压”。**不要直接选择 ZIP 文件。**
+4. 打开刚解压出来的文件夹，找到与 `_locales`、`assets` 等扩展资源放在一起的 `manifest.json`。如果外面还有一层文件夹，就继续进入。
+5. 在浏览器地址栏输入 `chrome://extensions`（Edge 是 `edge://extensions`），开启右上角“开发者模式”。
+6. 点击“加载已解压的扩展程序”，选择**第 4 步找到的文件夹**，不是 `manifest.json` 文件本身。
+7. 记下扩展卡片上的 **ID**，并确保只启用一份 DeepSeek++。Harness 版的名称标识为 **DeepSeek++ Harness**；旧安装包仍可能显示 DeepSeek++。
+
+目录对应关系：
+
+```text
+deepseek-web-official-395cf37/          ← 配套整包，不要选这里
+├─ manifest.json                       ← 安装包清单，不是浏览器扩展清单
+├─ plugin/                             ← 本机 Harness 插件
+├─ vendor/                             ← 配套依赖
+└─ extensions/
+   └─ chrome/
+      ├─ deepseek-plus-plus-1.14.0-chrome.zip
+      └─ 解压出的扩展文件夹/             ← 加载这一层
+         ├─ manifest.json
+         ├─ _locales/
+         └─ assets/
+```
+
+选对后，浏览器会显示扩展卡片。请长期保留这个扩展文件夹，浏览器从这里加载文件。源码构建直接选择 `dist/chrome-mv3` 或 `dist/edge-mv3`，无需再解压。
 
 **Firefox：** 解压 Firefox ZIP，打开 `about:debugging#/runtime/this-firefox`，选择“临时载入附加组件”，打开扩展目录中的 `manifest.json`。配对时使用该扩展的 `moz-extension://…` 地址。临时加载在浏览器退出后失效；重载后的地址如有变化，需更新配对设置。
 

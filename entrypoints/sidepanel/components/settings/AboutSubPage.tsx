@@ -19,7 +19,7 @@ export default function AboutSubPage({ state }: { state: SettingsState }) {
           </div>
           <div>
             <div className="text-sm font-medium" style={{ color: 'var(--ds-text)' }}>
-              DeepSeek++ v{state.version}
+              {t('manifest.name')} v{state.version}
             </div>
             <div className="text-[11px]" style={{ color: 'var(--ds-text-tertiary)' }}>
               {t('sidepanel.settings.aboutTagline')}
@@ -27,7 +27,7 @@ export default function AboutSubPage({ state }: { state: SettingsState }) {
           </div>
         </div>
         <a
-          href="https://github.com/zhu1090093659/deepseek-pp"
+          href="https://github.com/XVSHIFU/deepseek-pp"
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-1.5 text-[11px] mt-1 transition-colors hover:opacity-80"

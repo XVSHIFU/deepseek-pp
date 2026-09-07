@@ -35,6 +35,8 @@ Download the companion archive `deepseek-web-harness-preview-395cf37.zip` from [
 
 Then [pair them in the settings UI](README.md#首次配对只做一次). The extension ID and pairing token are saved for daily use.
 
+For Chrome / Edge, extract the companion archive first, then extract the browser ZIP inside `extensions/chrome/` or `extensions/edge/`. In the browser's **Load unpacked** dialog, choose the extracted browser folder containing `manifest.json` alongside `_locales/` and `assets/`. Do not choose the companion archive's top-level folder: its `manifest.json` is a package inventory, not a browser extension manifest. The Harness fork is named **DeepSeek++ Harness**; older packages may still show DeepSeek++.
+
 ## Daily use
 
 Keep the signed-in DeepSeek page open. From your project directory, run:

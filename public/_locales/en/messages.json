@@ -1,6 +1,6 @@
 {
   "extension_name": {
-    "message": "DeepSeek++",
+    "message": "DeepSeek++ Harness",
     "description": "Extension name shown in browser UI"
   },
   "extension_description": {
@@ -8,7 +8,7 @@
     "description": "Extension description shown in browser UI"
   },
   "extension_action_title": {
-    "message": "DeepSeek++",
+    "message": "DeepSeek++ Harness",
     "description": "Toolbar action title"
   }
 }

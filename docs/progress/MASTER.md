@@ -14,6 +14,15 @@
 
 ## 2026-09-07 README 与推送准备（待用户确认）
 
+### 另一台 Windows 电脑反馈与易用性调整
+
+- 已完整读取用户提供的测试文本，并查看关键中断 / 写文件截图。官方 DSH 和四个配套包已安装、浏览器已配对；文件写入及随后读取有截图证据。该次 PowerShell 未启用，模型改用 read，不能将其计为命令执行通过。
+- 某个首轮回复将 `[调用 glob]` / `[调用 read]` 作为普通正文输出，截图中未出现真正工具调用；新会话可以继续。仅凭现有截图不能归因网络或确定解析器根因，保留为待取该会话日志复现的问题，不声称已修复。npm install-scripts 阻止部分全局依赖脚本的告警也记录待实际命令启用时核对，不建议无条件批准全部安装脚本。
+- 用户测试文档提出设置卡片应与官方一致地折叠 / 展开，并提供中文。已记录，未将附件中的意见自动扩展为本轮 Host/UI 行为变更。
+- 本轮按直接请求补充 README 两次解压、正确 manifest 所在层级和目录树；扩展管理页、工具栏、侧栏标题、关于页名称统一为 `DeepSeek++ Harness`，保留包版本 1.14.0 和存储 / 扩展身份合同；关于页仓库入口指向 fork。没有改变已有 release 附件或用户安装。
+- 模式核对：上游 main 的 GeneralSubPage / ChatPage 已有默认、expert、vision 选择；共用浏览器协议接受这些值。官方 Harness 适配器 `packages/dsh-llm-deepseek-web/src/request.ts` 仍固定 default、thinking=false、search=false，不读取网页按钮选中状态。Harness 消息序列化拒绝 image；因此识图不能只增加下拉选项，必须另行接通图片输入与上传。此轮仅回答和记录，不实施模式切换。
+- 验证：名称与 manifest 权限定向 18/18 通过，根 compile 通过；WXT 在含 `+++++` 的原路径遇到现有正则路径限制，改用独立普通路径源文件快照构建，未修改依赖或用户安装。Chrome / Edge / Firefox 构建、manifest policy、177 文本产物 UTF-8/ASCII 检查和六组浏览器语言名称检查均通过。本地三份 ZIP 在 `.release/harness-branding-20260907/`，未上传或替换已有 Release。
+
 **后续授权与执行：** 用户确认后已将 `feature/web-harness` 推送到 `XVSHIFU/deepseek-pp`，首次远端 HEAD 为 `3186c9d`，main 保持 `0a02c72b135bf2936e11aa78fd6136931ed65908`。已发布 `web-harness-preview-20260907` 预发布供跨电脑试用，附件为原 `395cf37` 候选的完整 ZIP、校验文件和 Apache-2.0 许可；不修改原候选 manifest 的 pending / release_eligible 状态，不冒充稳定发行。13 个 ZIP 内文件逐项与原候选散列一致，GitHub 返回上传状态及整包 digest 与本地一致。产品代码未变，无 PR、商店上传或 main 修改。下列“待确认 / 不发布”内容是此前准备阶段记录。
 
 - 下载页：`https://github.com/XVSHIFU/deepseek-pp/releases/tag/web-harness-preview-20260907`
