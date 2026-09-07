@@ -31,6 +31,8 @@ npm install --global @deepseek-ai/dsh@0.1.2-rc.1
 
 Follow the [Windows / Linux installation instructions](README.md#首次安装) to install prerequisites, load the browser extension, and install the DSH plugin with its companion dependencies. Browser extension builds and Harness plugin builds are separate steps; when using a matching prebuilt package, source compilation is unnecessary.
 
+Download the companion archive `deepseek-web-harness-preview-395cf37.zip` from [GitHub Releases](https://github.com/XVSHIFU/deepseek-pp/releases/tag/web-harness-preview-20260907), rather than the generated Source code archives. Extract it and open the enclosed `deepseek-web-official-395cf37` directory for the package-based installation steps.
+
 Then [pair them in the settings UI](README.md#首次配对只做一次). The extension ID and pairing token are saved for daily use.
 
 ## Daily use

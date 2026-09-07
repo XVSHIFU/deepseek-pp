@@ -75,6 +75,8 @@ npm install --global @deepseek-ai/dsh@0.1.2-rc.1
 
 这两项是不同的软件：**浏览器扩展安装到浏览器，DSH 插件安装到本机 Harness。**
 
+从 [GitHub Releases 下载配套整包](https://github.com/XVSHIFU/deepseek-pp/releases/tag/web-harness-preview-20260907)，选择附件 `deepseek-web-harness-preview-395cf37.zip`，解压后进入其中的 `deepseek-web-official-395cf37` 文件夹。不要选择 GitHub 自动生成的 Source code。
+
 使用配套安装包时，解压到准备长期保留的目录。浏览器 ZIP 位于 `extensions/`，DSH 插件位于 `plugin/`，配套依赖位于 `vendor/`；无需执行下面的源码构建。
 
 <details>

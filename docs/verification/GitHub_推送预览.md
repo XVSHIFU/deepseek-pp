@@ -4,7 +4,7 @@
 
 直接使用当前 `deepseek+++++` 仓库，**不另建一份代码文件夹**。本地构建包、临时文件和参考源码已被 Git 排除，不会因为放在仓库目录里就上传。
 
-**尚未推送。需要你看过本页和 README 后确认。**
+**已获用户确认并推送。** `feature/web-harness` 首次推送提交为 `3186c9d`，main 未改。另按确认的安装包方向提供 [GitHub 预发布附件](https://github.com/XVSHIFU/deepseek-pp/releases/tag/web-harness-preview-20260907)，供另一台电脑下载试用。安装包作为 Release 附件上传，不进入源码 Git 树。下文保留推送前的范围预览。
 
 - 目标仓库：[XVSHIFU/deepseek-pp](https://github.com/XVSHIFU/deepseek-pp)
 - 目标分支：`feature/web-harness`，不是 `main`。

@@ -14,6 +14,12 @@
 
 ## 2026-09-07 README 与推送准备（待用户确认）
 
+**后续授权与执行：** 用户确认后已将 `feature/web-harness` 推送到 `XVSHIFU/deepseek-pp`，首次远端 HEAD 为 `3186c9d`，main 保持 `0a02c72b135bf2936e11aa78fd6136931ed65908`。已发布 `web-harness-preview-20260907` 预发布供跨电脑试用，附件为原 `395cf37` 候选的完整 ZIP、校验文件和 Apache-2.0 许可；不修改原候选 manifest 的 pending / release_eligible 状态，不冒充稳定发行。13 个 ZIP 内文件逐项与原候选散列一致，GitHub 返回上传状态及整包 digest 与本地一致。产品代码未变，无 PR、商店上传或 main 修改。下列“待确认 / 不发布”内容是此前准备阶段记录。
+
+- 下载页：`https://github.com/XVSHIFU/deepseek-pp/releases/tag/web-harness-preview-20260907`
+- 整包 SHA-256：`a8e1380a0d81086abb3753486c6a94b232fb540cf7b97cc3dd038dc010122537`
+- README 增加直接下载入口；本次只执行文档检查、原候选校验和封装传输完整性检查，没有重跑网页测试。
+
 - 将官方插件的 Windows / Linux 安装、首次网页配对和日常 `dsh web` 使用统一到根 `README.md`；旧快速上手改为入口链接，避免重复说明。按用户复核意见，中英文 README 只保留能力、环境、安装和使用，移除开发状态、历史故障解释、长篇旧功能和版本历史，保留友情链接、致谢与许可。
 - 环境部分补充 Windows WinGet、Linux Ubuntu / Debian + nvm 的命令，以及官方 DSH 本机安装。明确浏览器扩展和 Harness 插件分别构建，配套安装包可跳过源码构建；状态与测试结论仅保留在本进度及推送预览。核对 DSH `0.1.2-rc.1` 的 CLI 和设置页源码：安装使用 `dsh plugin --profile web add`，图形页用于配置 / 清单而非安装包上传。
 - README 二次修订静态检查：4 个 PowerShell 代码块解析通过，11 个 shell 代码块经 Git Bash `-n` 解析通过（未执行安装），3 个本地文件链接有效，264 文件推送清单仍与 Git 差异一致，`git diff --check` 通过。未进行运行时代码改动或重跑网页测试。
