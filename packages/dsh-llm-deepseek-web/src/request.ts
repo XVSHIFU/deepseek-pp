@@ -77,7 +77,13 @@ function assertRoute(options: GenerateOptions): void {
 }
 
 function assertSupportedGenerationOptions(options: GenerateOptions): void {
-  if (options.temperature !== undefined || options.maxTokens !== undefined || options.stop !== undefined) {
+  // The official preset's BasicCompactionEngine always supplies its local
+  // summary cap. Protocol v1 cannot enforce that cap in the browser, but the
+  // engine still rejects a checkpoint unless it is smaller than the history it
+  // replaces. Accept and deliberately omit only that compaction-local hint so
+  // the stock preset can use the web route without pretending it was sent.
+  const unsupportedMaxTokens = options.maxTokens !== undefined && options.purpose !== "compaction";
+  if (options.temperature !== undefined || unsupportedMaxTokens || options.stop !== undefined) {
     throw unsupportedOption("DeepSeek Web Protocol v1 does not support per-request generation controls.");
   }
   if (options.reasoningEffort !== undefined) {

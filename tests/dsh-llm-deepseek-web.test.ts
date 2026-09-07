@@ -431,6 +431,22 @@ describe("DeepSeek Web DSH adapter", () => {
     expect(adHoc.request_digest).toMatch(/^[a-f0-9]{64}$/);
   });
 
+  it("accepts but does not serialize the official compaction engine's local max-token hint", () => {
+    const request = serializeGenerateRequest({
+      ...generateOptions(),
+      purpose: "compaction",
+      maxTokens: 4_096,
+    }, { requestId: "request-official-compaction" });
+
+    expect(request.purpose).toBe("compaction");
+    expect(request.options).toEqual({
+      thinking_enabled: false,
+      search_enabled: false,
+      model_type: "default",
+    });
+    expect(request).not.toHaveProperty("maxTokens");
+  });
+
   it("loads without model credentials and uses no private Harness imports", async () => {
     vi.stubEnv("DEEPSEEK_API_KEY", "");
     expect(() => new DeepSeekWebAdapter({ broker: new FakeBroker([]) })).not.toThrow();
