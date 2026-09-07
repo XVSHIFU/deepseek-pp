@@ -1,6 +1,6 @@
 # T7 官方 DSH 插件化接入与 Windows 原生命令计划
 
-状态：`blocked / real_web_pending`（2026-09-07 启动；T7.1–T7.5 与 T7.6 自动包验收已验证，只等待明确授权的真实已登录浏览器验收）
+状态：`verified / local_delivery_complete`（2026-09-07 启动并完成；T7.1–T7.6 的自动包验收与明确授权的真实已登录浏览器验收均已验证）
 
 本计划是已完成 standalone 交付之后的独立增量阶段。旧计划、验收记录、用户安装和 `.release/deepseek-web-harness-e09baf0` 均保持原样；本页只约束新的官方 DSH 增量插件。除非本页明确说明，旧 standalone profile、启动器和受限网页合同不得被放宽。
 
@@ -86,13 +86,13 @@
 | T7.3 | PowerShell 7：官方执行器、逐条审批、自动执行 opt-in、取消与权限 | T7.1 | `verified` |
 | T7.4 | 官方 tools/Skills/subagent/压缩/恢复兼容与无模型 fallback 证据 | T7.1；汇合 T7.2/T7.3 | `verified` |
 | T7.5 | 显式旧会话导入：预检、冲突、事务、保留源、导入后查看/继续 completed 会话 | T7.1 | `verified` |
-| T7.6 | DSH 插件包 + 浏览器包 + 简短说明；从包安装并完成官方真实验收 | T7.2–T7.5 | `blocked / real_web_pending` |
+| T7.6 | DSH 插件包 + 浏览器包 + 简短说明；从包安装并完成官方真实验收 | T7.2–T7.5 | `verified` |
 
 关键路径：`T7.1 → (T7.2 || T7.3 || T7.5) → T7.4 → T7.6`。
 
 T7.5 最初因锁版官方 `SessionPersistence` 没有根/子多会话 CAS 而阻塞；最终采用插件自有的官方 JSONL persistence 子类，在 backend 层用 prepared/committed durable journal、同卷 hard-link 提交、源安装互斥锁、提交前后双 revision 校验和恢复扫描补齐组事务。导入提交同时产生永久 Windows deny tombstone，因而不会从同 ID 旧记录恢复原生命令权限；任一步失败均保持源字节不变，并回滚或在下次启动确定性恢复。该方案不修改官方 Harness 核心，也不把内存 target 当作落盘证据。
 
-T7.6 的自动部分已完成：最终候选从精确干净提交组装并校验，独立临时官方 home 完成在线依赖解析、插件首装、认证 Web 启动、以 `--config.offline=true --force` 从前一同版本本地候选升级，以及以相同离线/强制参数只移除插件的安全卸载；base/web、三项 vendor override、credential、workspace settings 与 session history 均按合同保留。候选 manifest 仍保持 `acceptance.*=pending`、`release_eligible=false`，不能据此发布。唯一剩余门槛是从该候选加载匹配扩展后，经明确授权的真实已登录浏览器完成本页第 7 节的真实链路。
+T7.6 已完成：最终候选从精确干净提交组装并校验，独立临时官方 home 完成在线依赖解析、插件首装、认证 Web 启动、以 `--config.offline=true --force` 从前一同版本本地候选升级，以及以相同离线/强制参数只移除插件的安全卸载；base/web、三项 vendor override、credential、workspace settings 与 session history 均按合同保留。随后从候选安装到隔离 official `web` profile，复用用户明确指定且已登录的 Chrome/DeepSeek 页面完成配对、真实 read/追问、editor、逐条批准 PowerShell 7 和冷重启历史恢复。候选 manifest 仍保持 `acceptance.*=pending`、`release_eligible=false`：验收证据记录在版本化文档中，未改写不可变候选，也不据此发布。
 
 T7.1 冻结 Host/Client settings namespace、credential key、model identity、增量 patch 边界和测试夹具。冻结后可按文件所有权并行：T7.2 只写配置/连接，T7.3 只写 Windows composition/approval，T7.5 只写 importer/session fixture；编排 owner 负责共享依赖、官方 profile 组合与集成测试。不得把整阶段交给一个宽泛任务。
 
@@ -117,6 +117,15 @@ T7.1 冻结 Host/Client settings namespace、credential key、model identity、�
 3. editor 修改并核对；
 4. 网页逐条批准一条 PowerShell 7 命令，完成文件或短测试；
 5. 重启后无需重新填写 ID/token，历史仍可用。
+
+2026-09-07 的真实验收在隔离 `DSH_HOME=C:\temp\t7-real-fbcd-home`、自有 workspace `C:\temp\t7-real-fbcd-workspace` 完成，最终 session 为 `session-3e9650a3-00e6-477f-a620-d2deda3bdff9`：
+
+- read 实际返回 `T7-READ-NONCE-20260907-3BCB38C`，无工具追问只依据本会话返回 `FILE=acceptance-read.txt; NONCE=T7-READ-NONCE-20260907-3BCB38C`；
+- editor 将唯一目标改为 `editor_state=T7-EDITOR-AFTER`，落盘文件 SHA-256=`B8A7F35EB18EA092E1DBA793FA7C16E74B7BA648C9FB7D485DC3C5E7E931C3E9`；
+- 官方审批 UI 展示完整命令，选择“允许一次”后 PowerShell 输出 `T7-PWSH-APPROVED-20260907-395CF37`，落盘文件 SHA-256=`9C4E018803A50D9F691BCEFA4C6638AD94A56E61CD4E4042FF834657177DCD9C`；
+- 冷停/重启后 pairing、模型设置、workspace 和同一 session 自动恢复；无工具追问正确返回 `EDIT=editor_state=T7-EDITOR-AFTER; PWSH=T7-PWSH-APPROVED-20260907-395CF37`。五轮 session 存档 SHA-256=`CB7981B4166C614C25FEF859E687979548C7E8CF2A1BCB12BAF3B673305FA418`。
+
+真实链路依次暴露四个不能由 fake 自动验收发现的集成问题，并分别由 `afd22883`（session import Remote 参数 codec）、`e242adb6`（Remote descriptor 重复挂载）、`3bcb38cd`（settings client 子服务依赖作用域）和 `395cf370`（官方 host singleton 包身份）修复。最终候选 `.release/deepseek-web-official-395cf37` 来源 `395cf370382d52f108e4060dabc71c12ecf3991f`，raw `manifest.json` SHA-256=`3ae99a51a32eb25445e94996738710158659661ddfd1fbef2086ce70f4595c95`，管理 11 个文件；package verify、17/17 定向回归、插件 build 与根 compile 均通过。
 
 拒绝与取消优先由自动矩阵证明；fake 证据不得冒充 real。若当前任务不能控制已授权浏览器，先完成全部开发和自动验收，最终只请求一次必要操作，不重复旧 smoke。
 
