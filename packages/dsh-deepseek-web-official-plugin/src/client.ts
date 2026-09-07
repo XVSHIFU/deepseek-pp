@@ -17,7 +17,15 @@ import {
   type CompletedSessionImportRequest,
 } from "./session-import-contract.ts";
 
-export const inject = ["slots", "settingsScope", "remote"] as const;
+export const inject = ["remote"] as const;
+
+export const DEEPSEEK_WEB_SETTINGS_CLIENT_INJECT = [
+  "slots",
+  "settingsScope",
+  "remote.credentials",
+  `remote.${DEEPSEEK_WEB_CONNECTION_NAMESPACE}`,
+  `remote.${DEEPSEEK_WEB_SESSION_IMPORT_NAMESPACE}`,
+] as const;
 
 /** Remote packages are unique in the browser loader, so mount all plugin descriptors together. */
 export const DEEPSEEK_WEB_CLIENT_REMOTE_CONTRIBUTION = Object.freeze({
@@ -503,29 +511,41 @@ function DeepSeekWebSettingsCard({ controller }: { readonly controller: DeepSeek
 export async function apply(ctx: Context): Promise<() => Promise<void>> {
   const client = ctx as Context & ClientContext;
   const unmountRemote = await client.remote.$mount(DEEPSEEK_WEB_CLIENT_REMOTE_CONTRIBUTION);
-  client.slots.inject("settings.plugin.item", () => {
-    const settings = client.settingsScope.bind<DeepSeekWebOfficialSettings>({
+  const settingsFiber = client.inject(DEEPSEEK_WEB_SETTINGS_CLIENT_INJECT, (injectedCtx) => {
+    const injected = injectedCtx as Context & ClientContext;
+    injected.slots.inject("settings.plugin.item", () => {
+      const settings = injected.settingsScope.bind<DeepSeekWebOfficialSettings>({
       namespace: DEEPSEEK_WEB_SETTINGS_NAMESPACE,
       decode: decodeSettings,
     });
     const controller = new DeepSeekWebClientController({
       settings,
-      credentials: client.remote.credentials,
-      callConnection: (method) => client.remote[DEEPSEEK_WEB_CONNECTION_NAMESPACE][method]() as
+      credentials: injected.remote.credentials,
+      callConnection: (method) => injected.remote[DEEPSEEK_WEB_CONNECTION_NAMESPACE][method]() as
         Promise<RemoteResult<DeepSeekWebConnectionStatus | DeepSeekWebReconnectReceipt>>,
-      importCompleted: (request) => client.remote[DEEPSEEK_WEB_SESSION_IMPORT_NAMESPACE].importCompleted(request),
+      importCompleted: (request) => injected.remote[DEEPSEEK_WEB_SESSION_IMPORT_NAMESPACE].importCompleted(request),
     });
-    const unregister = client.slots.register({
+      const unregister = injected.slots.register({
       name: "settings.plugin.item",
       key: DEEPSEEK_WEB_SETTINGS_NAMESPACE,
     }, () => React.createElement(DeepSeekWebSettingsCard, { controller }));
-    return () => {
-      controller.dispose();
-      if (typeof unregister === "function") unregister();
-    };
+      return () => {
+        controller.dispose();
+        if (typeof unregister === "function") unregister();
+      };
+    });
   });
-  return async () => {
+  try {
+    await settingsFiber;
+  } catch (error) {
     await unmountRemote();
+    throw error;
+  }
+  return async () => {
+    const failures = await Promise.allSettled([settingsFiber.dispose(), unmountRemote()]);
+    const rejected = failures.flatMap((failure) => failure.status === "rejected" ? [failure.reason] : []);
+    if (rejected.length === 1) throw rejected[0];
+    if (rejected.length > 1) throw new AggregateError(rejected, "DeepSeek Web client cleanup failed");
   };
 }
 

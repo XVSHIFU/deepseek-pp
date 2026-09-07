@@ -36,6 +36,7 @@ window.__ModuleLoader__.load({
     var client_exports = {};
     __export(client_exports, {
       DEEPSEEK_WEB_CLIENT_REMOTE_CONTRIBUTION: () => DEEPSEEK_WEB_CLIENT_REMOTE_CONTRIBUTION,
+      DEEPSEEK_WEB_SETTINGS_CLIENT_INJECT: () => DEEPSEEK_WEB_SETTINGS_CLIENT_INJECT,
       DeepSeekWebClientController: () => DeepSeekWebClientController,
       apply: () => apply,
       inject: () => inject
@@ -104,7 +105,14 @@ window.__ModuleLoader__.load({
     });
 
     // src/client.ts
-    var inject = ["slots", "settingsScope", "remote"];
+    var inject = ["remote"];
+    var DEEPSEEK_WEB_SETTINGS_CLIENT_INJECT = [
+      "slots",
+      "settingsScope",
+      "remote.credentials",
+      `remote.${DEEPSEEK_WEB_CONNECTION_NAMESPACE}`,
+      `remote.${DEEPSEEK_WEB_SESSION_IMPORT_NAMESPACE}`
+    ];
     var DEEPSEEK_WEB_CLIENT_REMOTE_CONTRIBUTION = Object.freeze({
       package: DEEPSEEK_WEB_REMOTE_CONTRIBUTION.package,
       descriptors: Object.freeze([
@@ -529,28 +537,40 @@ window.__ModuleLoader__.load({
     async function apply(ctx) {
       const client = ctx;
       const unmountRemote = await client.remote.$mount(DEEPSEEK_WEB_CLIENT_REMOTE_CONTRIBUTION);
-      client.slots.inject("settings.plugin.item", () => {
-        const settings = client.settingsScope.bind({
-          namespace: DEEPSEEK_WEB_SETTINGS_NAMESPACE,
-          decode: decodeSettings
+      const settingsFiber = client.inject(DEEPSEEK_WEB_SETTINGS_CLIENT_INJECT, (injectedCtx) => {
+        const injected = injectedCtx;
+        injected.slots.inject("settings.plugin.item", () => {
+          const settings = injected.settingsScope.bind({
+            namespace: DEEPSEEK_WEB_SETTINGS_NAMESPACE,
+            decode: decodeSettings
+          });
+          const controller = new DeepSeekWebClientController({
+            settings,
+            credentials: injected.remote.credentials,
+            callConnection: (method) => injected.remote[DEEPSEEK_WEB_CONNECTION_NAMESPACE][method](),
+            importCompleted: (request) => injected.remote[DEEPSEEK_WEB_SESSION_IMPORT_NAMESPACE].importCompleted(request)
+          });
+          const unregister = injected.slots.register({
+            name: "settings.plugin.item",
+            key: DEEPSEEK_WEB_SETTINGS_NAMESPACE
+          }, () => import_react.default.createElement(DeepSeekWebSettingsCard, { controller }));
+          return () => {
+            controller.dispose();
+            if (typeof unregister === "function") unregister();
+          };
         });
-        const controller = new DeepSeekWebClientController({
-          settings,
-          credentials: client.remote.credentials,
-          callConnection: (method) => client.remote[DEEPSEEK_WEB_CONNECTION_NAMESPACE][method](),
-          importCompleted: (request) => client.remote[DEEPSEEK_WEB_SESSION_IMPORT_NAMESPACE].importCompleted(request)
-        });
-        const unregister = client.slots.register({
-          name: "settings.plugin.item",
-          key: DEEPSEEK_WEB_SETTINGS_NAMESPACE
-        }, () => import_react.default.createElement(DeepSeekWebSettingsCard, { controller }));
-        return () => {
-          controller.dispose();
-          if (typeof unregister === "function") unregister();
-        };
       });
-      return async () => {
+      try {
+        await settingsFiber;
+      } catch (error) {
         await unmountRemote();
+        throw error;
+      }
+      return async () => {
+        const failures = await Promise.allSettled([settingsFiber.dispose(), unmountRemote()]);
+        const rejected = failures.flatMap((failure) => failure.status === "rejected" ? [failure.reason] : []);
+        if (rejected.length === 1) throw rejected[0];
+        if (rejected.length > 1) throw new AggregateError(rejected, "DeepSeek Web client cleanup failed");
       };
     }
     function decodeSettings(value) {

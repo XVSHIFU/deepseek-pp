@@ -21,6 +21,7 @@ import { DEEPSEEK_WEB_SESSION_IMPORT_REMOTE_CONTRIBUTION } from "../packages/dsh
 import {
   apply as applyClient,
   DEEPSEEK_WEB_CLIENT_REMOTE_CONTRIBUTION,
+  DEEPSEEK_WEB_SETTINGS_CLIENT_INJECT,
   DeepSeekWebClientController,
 } from "../packages/dsh-deepseek-web-official-plugin/src/client.ts";
 import { applyRequestedDefault } from "../packages/dsh-deepseek-web-official-plugin/src/index.ts";
@@ -372,7 +373,8 @@ describe("official DeepSeek Web settings and connection", () => {
     const unregister = vi.fn();
     let slotCleanup: unknown;
     const mount = vi.fn(async () => unmount);
-    const dispose = await applyClient({
+    const injectedDispose = vi.fn(async () => undefined);
+    const clientContext: Record<string, unknown> = {
       remote: {
         $mount: mount,
         credentials: {
@@ -396,10 +398,17 @@ describe("official DeepSeek Web settings and connection", () => {
         inject(_name: string, register: () => unknown) { slotCleanup = register(); },
         register: () => unregister,
       },
-    } as never);
+    };
+    const injectClient = vi.fn((_deps: unknown, callback: (ctx: unknown) => void) => {
+      callback(clientContext);
+      return Object.assign(Promise.resolve(), { dispose: injectedDispose });
+    });
+    clientContext.inject = injectClient;
+    const dispose = await applyClient(clientContext as never);
 
     expect(mount).toHaveBeenCalledOnce();
     expect(mount).toHaveBeenCalledWith(DEEPSEEK_WEB_CLIENT_REMOTE_CONTRIBUTION);
+    expect(injectClient).toHaveBeenCalledWith(DEEPSEEK_WEB_SETTINGS_CLIENT_INJECT, expect.any(Function));
     expect(DEEPSEEK_WEB_CLIENT_REMOTE_CONTRIBUTION.descriptors).toEqual([
       ...DEEPSEEK_WEB_REMOTE_CONTRIBUTION.descriptors,
       ...DEEPSEEK_WEB_SESSION_IMPORT_REMOTE_CONTRIBUTION.descriptors,
@@ -426,6 +435,7 @@ describe("official DeepSeek Web settings and connection", () => {
     expect(unregister).toHaveBeenCalledOnce();
     await dispose();
     expect(unmount).toHaveBeenCalledOnce();
+    expect(injectedDispose).toHaveBeenCalledOnce();
   });
 
   it("exports only redacted live state and refuses reconnect while the broker is busy", async () => {
