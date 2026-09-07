@@ -92,7 +92,7 @@
 
 T7.5 最初因锁版官方 `SessionPersistence` 没有根/子多会话 CAS 而阻塞；最终采用插件自有的官方 JSONL persistence 子类，在 backend 层用 prepared/committed durable journal、同卷 hard-link 提交、源安装互斥锁、提交前后双 revision 校验和恢复扫描补齐组事务。导入提交同时产生永久 Windows deny tombstone，因而不会从同 ID 旧记录恢复原生命令权限；任一步失败均保持源字节不变，并回滚或在下次启动确定性恢复。该方案不修改官方 Harness 核心，也不把内存 target 当作落盘证据。
 
-T7.6 的自动部分已完成：最终候选从精确干净提交组装并校验，独立临时官方 home 完成在线依赖解析、插件首装、认证 Web 启动、以 `--force` 从前一同版本本地候选升级，以及只移除插件的安全卸载；base/web、三项 vendor override、credential、workspace settings 与 session history 均按合同保留。候选 manifest 仍保持 `acceptance.*=pending`、`release_eligible=false`，不能据此发布。唯一剩余门槛是从该候选加载匹配扩展后，经明确授权的真实已登录浏览器完成本页第 7 节的真实链路。
+T7.6 的自动部分已完成：最终候选从精确干净提交组装并校验，独立临时官方 home 完成在线依赖解析、插件首装、认证 Web 启动、以 `--force` 从前一同版本本地候选升级，以及以 `remove <plugin> --force` 只移除插件的安全卸载；base/web、三项 vendor override、credential、workspace settings 与 session history 均按合同保留。候选 manifest 仍保持 `acceptance.*=pending`、`release_eligible=false`，不能据此发布。唯一剩余门槛是从该候选加载匹配扩展后，经明确授权的真实已登录浏览器完成本页第 7 节的真实链路。
 
 T7.1 冻结 Host/Client settings namespace、credential key、model identity、增量 patch 边界和测试夹具。冻结后可按文件所有权并行：T7.2 只写配置/连接，T7.3 只写 Windows composition/approval，T7.5 只写 importer/session fixture；编排 owner 负责共享依赖、官方 profile 组合与集成测试。不得把整阶段交给一个宽泛任务。
 
