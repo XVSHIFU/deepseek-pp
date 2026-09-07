@@ -159,7 +159,7 @@
 | T7.3 PowerShell 7 与审批 | `verified` | 只组合锁版官方 pwsh/tool/subprocess/approval；默认关闭、真实 Gateway rejected/allowed-once/rejected、显式 auto、超时/取消/树清理通过 |
 | T7.4 能力兼容 | `verified` | 真实 standard preset 经公开 Gateway 完成 Skill、前台 subagent、write、`/compact`、冷重启恢复；全部请求只走 deepseek-web/current-web-session |
 | T7.5 旧会话导入 | `verified` | 插件自有官方 JSONL backend 以 durable journal 完成根+子组事务、崩溃恢复、源锁/双 revision、幂等/冲突和永久 Windows deny tombstone；设置页显式导入入口已接通 |
-| T7.6 包与真实验收 | `verified` | 最终 `395cf37` 候选包校验通过；明确授权的真实已登录 Chrome 完成 read/追问/editor/一次批准 pwsh/冷重启恢复 |
+| T7.6 包与真实验收 | `verified` | 最终 `395cf37` 候选包及真实 Chrome 主流程已通过；验收后夹具收尾 8 files / 83 tests 全绿，Windows 子进程改为隐藏启动且仍实测超时/取消树清理 |
 
 T7 只新增官方 DSH 增量插件；旧 `packages/dsh-web-agent-bundle` standalone policy（包括禁止 settings/credentials 写入）不被悄悄放宽。用户现有 `%LOCALAPPDATA%\DeepSeekWebAgent` `0a66c3a`、配对和旧交付保持不变。T7.1–T7.6 均已收口；最后的插件网页验收来自隔离 official profile 与用户明确授权的真实已登录 Chrome，不以旧门禁、认证 HTTP 或 fake browser 证据代替。
 
@@ -174,6 +174,8 @@ T7 只新增官方 DSH 增量插件；旧 `packages/dsh-web-agent-bundle` standa
 **T7.6 真实网页退出结论（2026-09-07）**：隔离 official `web` profile、用户指定扩展 ID 和已登录 Chrome 完成真实 read、无工具追问、editor、官方逐条审批 PowerShell 7 与冷重启恢复。session=`session-3e9650a3-00e6-477f-a620-d2deda3bdff9`；read nonce=`T7-READ-NONCE-20260907-3BCB38C`；editor 落盘 SHA-256=`B8A7F35EB18EA092E1DBA793FA7C16E74B7BA648C9FB7D485DC3C5E7E931C3E9`；一次批准的 PowerShell 落盘 SHA-256=`9C4E018803A50D9F691BCEFA4C6638AD94A56E61CD4E4042FF834657177DCD9C`；冷恢复后五轮 session 存档 SHA-256=`CB7981B4166C614C25FEF859E687979548C7E8CF2A1BCB12BAF3B673305FA418`。首次未刷新 DeepSeek 页的认证失败没有工具调用，修复 singleton 前工具 `prepare` 失败且模型先行臆测内容，均明确不记成功。最终无 API key、其他 provider 或 fake peer。
 
 候选 manifest 仍按不可变本地候选合同保持 `acceptance.*=pending`、`release_eligible=false`；真实验收写入本记录，不改写候选，也不表示已获 push、PR、tag、商店上传或公开发布授权。
+
+**T7.6 验收后夹具收尾（2026-09-07）**：独立复核发现四项 `dsh-official-web-plugin` 夹具仍描述修复前的组合形状，另有两处测试内层 `Start-Process` 未继承外层 `windowsHide`。本轮只更新测试：Client stub 真实实现当前 Cordis `inject` fiber 及清理，组合断言固定为插件 persistence + Host 并验证旧 JSONL 被禁用，dump 明确拒绝独立 adapter 行，Host 未配对测试确认 `deepseek-web` provider 只注册一次且官方默认模型保持不变；两条 PowerShell PID 夹具加入 `-WindowStyle Hidden`，没有删除、跳过或放宽超时、取消和后代进程消失断言。五个 outer-55s 批次依次为 1 file / 4 tests / 7.64s、1/23/16.17s、1/1/13.85s、3/43/2.70s、2/12/18.49s，合计 8 files / 83 passed / 0 failed / 0 skipped；官方插件 build、根 compile、`git diff --check` 均 exit 0，测试后 0 自有临时目录、0 相关 Node/PowerShell 子进程。产品代码与不可变 `395cf37` 候选无改动，不重跑已经通过的真实网页主流程。
 
 **本轮工作（2026-09-06）**：用户授权收尾后，`web_stage_reconnect` 完成全质量子门禁及 Windows 测试夹具修正，`web_stage_surface` 完成最终候选三端构建与裸首装验证，`web_stage_terminal_fix` 完成简明用户文档和两处 Shell 测试兼容修正；编排修复裸首装依赖时机、执行真实网页验收并收口。旧候选、测试日志及 Ubuntu 配置保留。未替用户升级安装、替换扩展或更改配对；通过现有产品入口只新增了自有临时工作区的验收会话，没有读取或修改 `cc-learning` 文件。
 
@@ -214,6 +216,7 @@ Windows 启动器只临时用 `WSLENV` 的 `/u` 标记传递固定配对配置�
 
 | Date | Scope | Command | Result | Notes |
 |:--|:--|:--|:--|:--|
+| 2026-09-07 | T7.6 post-acceptance fixture closeout | 8 个相关测试文件分 5 个 outer55s 批次；official plugin build；root compile；diff/process/temp checks | `fixed; 83/83 passed` | 更新 Cordis Client inject、persistence+Host composition、唯一 provider/default 保留断言；两处内层 PowerShell `Start-Process` 使用 `-WindowStyle Hidden`。完整 timeout/cancel 与 native profile 均实际执行，0 skip、0 残留；只改测试与本记录，未改产品或 `395cf37` 候选，未重复真实网页主流程 |
 | 2026-09-07 | T7.6 final real Web acceptance | 隔离 official profile；真实已登录 Chrome；read/追问/editor；允许一次 pwsh；冷停/重启 | `verified real web` | 最终 session=`session-3e9650a3-00e6-477f-a620-d2deda3bdff9`，严格 read nonce 与无工具追问正确；editor/pwsh 文件 SHA 分别为 `B8A7F35E…C3E9`、`9C4E0188…D9C`；重启后 pairing、模型、workspace、历史恢复，无工具回忆结果正确；五轮存档 SHA=`CB7981B4…A418`。无 API key、其他 provider 或 fake peer |
 | 2026-09-07 | T7.6 real-chain integration repairs | 逐候选真实启动、设置卡加载、模型工具调度；package regression；build/compile | `fixed; final 17/17 passed` | `afd22883` 修 Remote codec，`e242adb6` 修 descriptor 重挂载，`3bcb38cd` 修 client dependency scope，`395cf370` 将官方 core 包改为 host singleton peer。最终插件工具 runtime 与 agent-loop 解析同一 `@deepseek-ai/dsh-tools` 实例 |
 | 2026-09-07 | T7.6 immutable final candidate | clean `395cf370` 三端串行 `build-extension`；官方 package/verify；插件 build；root compile | `verified local candidate` | `.release/deepseek-web-official-395cf37`，来源 `395cf370382d52f108e4060dabc71c12ecf3991f`，manifest SHA-256=`3ae99a51a32eb25445e94996738710158659661ddfd1fbef2086ce70f4595c95`，11 个受管文件。Chrome/Edge/Firefox ZIP SHA 分别为 `c831afc3…4429`、`a2f5cf28…d01c`、`f1e93342…6621`；manifest 仍 pending/non-release，不表示公开发布 |

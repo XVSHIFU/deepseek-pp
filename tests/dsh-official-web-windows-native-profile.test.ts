@@ -171,7 +171,7 @@ function pwshCall(callId: string, path: string, value: string) {
 
 function childWaitCommand(pidFile: string): string {
   const escaped = pidFile.replaceAll("'", "''");
-  return `$c = Start-Process -FilePath (Join-Path $PSHOME 'pwsh.exe') -ArgumentList '-NoLogo','-NoProfile','-NonInteractive','-Command','Start-Sleep -Seconds 20' -PassThru; Set-Content -LiteralPath '${escaped}' -Value $c.Id; Wait-Process -Id $c.Id`;
+  return `$c = Start-Process -FilePath (Join-Path $PSHOME 'pwsh.exe') -ArgumentList '-NoLogo','-NoProfile','-NonInteractive','-Command','Start-Sleep -Seconds 20' -WindowStyle Hidden -PassThru; Set-Content -LiteralPath '${escaped}' -Value $c.Id; Wait-Process -Id $c.Id`;
 }
 
 async function createSelectedSession(fixture: OfficialWebProfileFixture): Promise<string> {

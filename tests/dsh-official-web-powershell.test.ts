@@ -538,7 +538,7 @@ describe.skipIf(process.platform !== "win32")("T7 official PowerShell 7 policy",
     runtimes.push(runtime);
     runtime.agent.session.append("turn/start", { turn: 1 });
     const timeout = await runtime.execute({
-      command: "$c = Start-Process -FilePath (Join-Path $PSHOME 'pwsh.exe') -ArgumentList '-NoLogo','-NoProfile','-NonInteractive','-Command','Start-Sleep -Seconds 20' -PassThru; Set-Content -LiteralPath './timeout-child.pid' -Value $c.Id; Wait-Process -Id $c.Id",
+      command: "$c = Start-Process -FilePath (Join-Path $PSHOME 'pwsh.exe') -ArgumentList '-NoLogo','-NoProfile','-NonInteractive','-Command','Start-Sleep -Seconds 20' -WindowStyle Hidden -PassThru; Set-Content -LiteralPath './timeout-child.pid' -Value $c.Id; Wait-Process -Id $c.Id",
       description: "Timeout owned descendant process tree",
       timeoutMs: 800,
     });
@@ -548,7 +548,7 @@ describe.skipIf(process.platform !== "win32")("T7 official PowerShell 7 policy",
 
     const abort = new AbortController();
     const cancelled = runtime.execute({
-      command: "$c = Start-Process -FilePath (Join-Path $PSHOME 'pwsh.exe') -ArgumentList '-NoLogo','-NoProfile','-NonInteractive','-Command','Start-Sleep -Seconds 20' -PassThru; Set-Content -LiteralPath './cancel-child.pid' -Value $c.Id; Wait-Process -Id $c.Id",
+      command: "$c = Start-Process -FilePath (Join-Path $PSHOME 'pwsh.exe') -ArgumentList '-NoLogo','-NoProfile','-NonInteractive','-Command','Start-Sleep -Seconds 20' -WindowStyle Hidden -PassThru; Set-Content -LiteralPath './cancel-child.pid' -Value $c.Id; Wait-Process -Id $c.Id",
       description: "Cancel owned descendant process tree",
     }, abort.signal);
     const cancelPidFile = join(runtime.workspace, "cancel-child.pid");
