@@ -399,6 +399,23 @@ describe("official DeepSeek Web settings and connection", () => {
 
     expect(mount).toHaveBeenNthCalledWith(1, DEEPSEEK_WEB_REMOTE_CONTRIBUTION);
     expect(mount).toHaveBeenNthCalledWith(2, DEEPSEEK_WEB_SESSION_IMPORT_REMOTE_CONTRIBUTION);
+    const importParameter = DEEPSEEK_WEB_SESSION_IMPORT_REMOTE_CONTRIBUTION.descriptors[0]!.parameters[0]!;
+    expect(importParameter).toMatchObject({
+      name: "request",
+      wire: "request",
+      source: "json",
+      codec: { mode: "strict" },
+    });
+    expect(importParameter.codec.schema.parse({
+      sourceHome: "C:\\fixture",
+      rootSessionId: "root",
+      sourceProcessesStopped: true,
+    })).toEqual({ sourceHome: "C:\\fixture", rootSessionId: "root", sourceProcessesStopped: true });
+    expect(() => importParameter.codec.schema.parse({
+      sourceHome: "C:\\fixture",
+      rootSessionId: "root",
+      sourceProcessesStopped: false,
+    })).toThrow("Invalid completed session import request");
     expect(typeof slotCleanup).toBe("function");
     (slotCleanup as () => void)();
     expect(unregister).toHaveBeenCalledOnce();

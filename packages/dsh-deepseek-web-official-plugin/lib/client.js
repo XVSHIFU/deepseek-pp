@@ -61,6 +61,27 @@ window.__ModuleLoader__.load({
 
     // src/session-import-contract.ts
     var DEEPSEEK_WEB_SESSION_IMPORT_NAMESPACE = "deepseekWebSessionImport";
+    var COMPLETED_SESSION_IMPORT_REQUEST_CODEC = Object.freeze({
+      mode: "strict",
+      typeSymbol: "@deepseek-pp/dsh-deepseek-web-official-plugin/session-import-contract#CompletedSessionImportRequest",
+      schema: Object.freeze({
+        parse(value) {
+          if (typeof value !== "object" || value === null || Array.isArray(value)) {
+            throw new Error("Completed session import request must be an object");
+          }
+          const record = value;
+          const keys = Object.keys(record).sort();
+          if (keys.join("\0") !== ["rootSessionId", "sourceHome", "sourceProcessesStopped"].join("\0") || typeof record.sourceHome !== "string" || typeof record.rootSessionId !== "string" || record.sourceProcessesStopped !== true) {
+            throw new Error("Invalid completed session import request");
+          }
+          return {
+            sourceHome: record.sourceHome,
+            rootSessionId: record.rootSessionId,
+            sourceProcessesStopped: true
+          };
+        }
+      })
+    });
     var DEEPSEEK_WEB_SESSION_IMPORT_REMOTE_CONTRIBUTION = Object.freeze({
       package: "@deepseek-pp/dsh-deepseek-web-official-plugin",
       descriptors: Object.freeze([Object.freeze({
@@ -70,7 +91,12 @@ window.__ModuleLoader__.load({
         method: "importCompleted",
         invocation: Object.freeze({ kind: "direct" }),
         parameters: Object.freeze([
-          Object.freeze({ mode: "src-json" })
+          Object.freeze({
+            name: "request",
+            wire: "request",
+            source: "json",
+            codec: COMPLETED_SESSION_IMPORT_REQUEST_CODEC
+          })
         ]),
         result: Object.freeze({ mode: "src-json" })
       })])
