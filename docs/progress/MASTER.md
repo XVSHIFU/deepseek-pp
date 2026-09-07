@@ -14,7 +14,9 @@
 
 ## 2026-09-07 README 与推送准备（待用户确认）
 
-- 将官方插件的 Windows / Linux 安装、首次网页配对和日常 `dsh web` 使用统一到根 `README.md`；旧快速上手改为入口链接，避免重复说明。保留上游浏览器内功能介绍并折叠展示。
+- 将官方插件的 Windows / Linux 安装、首次网页配对和日常 `dsh web` 使用统一到根 `README.md`；旧快速上手改为入口链接，避免重复说明。按用户复核意见，中英文 README 只保留能力、环境、安装和使用，移除开发状态、历史故障解释、长篇旧功能和版本历史，保留友情链接、致谢与许可。
+- 环境部分补充 Windows WinGet、Linux Ubuntu / Debian + nvm 的命令，以及官方 DSH 本机安装。明确浏览器扩展和 Harness 插件分别构建，配套安装包可跳过源码构建；状态与测试结论仅保留在本进度及推送预览。核对 DSH `0.1.2-rc.1` 的 CLI 和设置页源码：安装使用 `dsh plugin --profile web add`，图形页用于配置 / 清单而非安装包上传。
+- README 二次修订静态检查：4 个 PowerShell 代码块解析通过，11 个 shell 代码块经 Git Bash `-n` 解析通过（未执行安装），3 个本地文件链接有效，264 文件推送清单仍与 Git 差异一致，`git diff --check` 通过。未进行运行时代码改动或重跑网页测试。
 - Windows + Chrome 的 T7 真实验收结论不变；Linux 仅核对官方 Bash / sandbox / approval 组合及安装方法，尚未完成当前官方插件的 Linux 真实网页全流程，未拿旧 standalone / WSL 结果代替。
 - 使用现有工作树，不复制交付目录。共享 `.gitignore` 排除 `.release/`、`.tmp/` 和 `参考/`；三份必需的 MIT 预算依赖归档仍随源代码保留。
 - 推送范围见 `docs/verification/GitHub_推送预览.md`。目标仍为 `XVSHIFU/deepseek-pp` 的 `feature/web-harness`，先由用户检查；本次不 push、不更新 main、不推送 Harness 源仓库、不创建 PR、tag 或 Release。
