@@ -133,7 +133,7 @@ async function packPlugin(source, destination, run) {
   for (const dependency of Object.keys(pkg.dependencies ?? {})) {
     if (dependency.startsWith("@deepseek-pp/")) fail("OFFICIAL_PACKAGE_PRIVATE_RUNTIME_DEPENDENCY");
   }
-  if (pkg.dependencies?.ws !== "8.21.0" || Object.hasOwn(pkg.dependencies ?? {}, "koffi")) {
+  if (pkg.dependencies?.ws !== "8.21.0" || pkg.dependencies?.koffi !== "3.2.1") {
     fail("OFFICIAL_PACKAGE_RUNTIME_DEPENDENCY_INVALID");
   }
   const host = await readFile(join(pluginRoot, "lib", "index.js"), "utf8");
