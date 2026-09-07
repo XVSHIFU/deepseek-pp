@@ -9,6 +9,7 @@ import { AgentLoop } from "@deepseek-ai/dsh-agent-loop";
 import { LlmRuntime, ToolCallId } from "@deepseek-ai/dsh-llm";
 import { PwshLocalExecutor } from "@deepseek-ai/dsh-pwsh-local";
 import { SessionId, SessionStore, type SessionEvent } from "@deepseek-ai/dsh-session";
+import { JsonlSessionPersistence } from "@deepseek-ai/dsh-session-persistence-jsonl";
 import { SessionProjectionRegistry } from "@deepseek-ai/dsh-session-projection";
 import { ShellEnvRegistry } from "@deepseek-ai/dsh-shell-env";
 import { LocalSubprocessRuntime } from "@deepseek-ai/dsh-subprocess-local";
@@ -31,6 +32,9 @@ interface OfficialPowerShellRuntimeOptions {
   readonly sessionId?: string;
   readonly seed?: readonly SessionEvent[];
   readonly readConfig?: () => WindowsPowerShellConfig;
+  readonly persistenceRoot?: string;
+  readonly resumeSessionId?: string;
+  readonly isImportedSessionDenied?: (sessionId: string) => boolean;
 }
 
 export async function createOfficialPowerShellRuntime(
@@ -60,22 +64,43 @@ export async function createOfficialPowerShellRuntime(
     await ctx.plugin(PwshTools, { enableRunInBackground: false });
     const policyStorePath = options.policyStorePath ?? join(root, "windows-session-policies.json");
     const policyStore = options.policyStore ?? new JsonWindowsSessionPolicyStore(policyStorePath);
-    const policy = await installWindowsPowerShellPolicy(ctx, config, policyStore, options.readConfig);
+    const policy = await installWindowsPowerShellPolicy(
+      ctx,
+      config,
+      policyStore,
+      options.readConfig,
+      undefined,
+      options.isImportedSessionDenied,
+    );
     await ctx.plugin(SessionStore);
+    if (options.persistenceRoot !== undefined) {
+      await ctx.plugin(JsonlSessionPersistence, { root: options.persistenceRoot, compression: "none" });
+    }
     await ctx.plugin(AgentRegistry);
     await ctx.plugin(LlmRuntime);
     await ctx.plugin(AgentLoop, { agents: [], maxParallelToolCalls: 1 });
     const handles: Awaited<ReturnType<typeof ctx.agents.create>>[] = [];
-    const createAgent = async (seed?: readonly SessionEvent[], sessionId = `t7-powershell-${randomUUID()}`) => {
+    const createAgent = async (
+      seed?: readonly SessionEvent[],
+      sessionId = `t7-powershell-${randomUUID()}`,
+      provider = "deepseek-web",
+    ) => {
       const handle = await ctx.agents.create({
         sessionId: SessionId(sessionId),
         meta: { cwd: workspace },
         ...(seed === undefined ? {} : { seed }),
+        agentOptions: { provider, model: provider === "deepseek-web" ? "current-web-session" : "fixture-model" },
       });
       handles.push(handle);
       return handle;
     };
-    const handle = await createAgent(options.seed, options.sessionId);
+    const handle = options.resumeSessionId === undefined
+      ? await createAgent(options.seed, options.sessionId)
+      : await ctx.agents.resume({
+        resumeSessionId: SessionId(options.resumeSessionId),
+        agentOptions: { provider: "deepseek-web", model: "current-web-session" },
+      });
+    if (options.resumeSessionId !== undefined) handles.push(handle);
     return {
       ctx,
       root,

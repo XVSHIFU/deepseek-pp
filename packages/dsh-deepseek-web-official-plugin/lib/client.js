@@ -59,6 +59,23 @@ window.__ModuleLoader__.load({
       })))
     });
 
+    // src/session-import-contract.ts
+    var DEEPSEEK_WEB_SESSION_IMPORT_NAMESPACE = "deepseekWebSessionImport";
+    var DEEPSEEK_WEB_SESSION_IMPORT_REMOTE_CONTRIBUTION = Object.freeze({
+      package: "@deepseek-pp/dsh-deepseek-web-official-plugin",
+      descriptors: Object.freeze([Object.freeze({
+        id: "@deepseek-pp/dsh-deepseek-web-official-plugin#deepseekWebSessionImport/importCompleted",
+        service: "deepseekWebSessionImportRemote",
+        namespace: DEEPSEEK_WEB_SESSION_IMPORT_NAMESPACE,
+        method: "importCompleted",
+        invocation: Object.freeze({ kind: "direct" }),
+        parameters: Object.freeze([
+          Object.freeze({ mode: "src-json" })
+        ]),
+        result: Object.freeze({ mode: "src-json" })
+      })])
+    });
+
     // src/client.ts
     var inject = ["slots", "settingsScope", "remote"];
     var DeepSeekWebClientController = class {
@@ -66,6 +83,10 @@ window.__ModuleLoader__.load({
         this.options = options;
         this.snapshotValue = this.snapshot();
         this.unsubscribeSettings = options.settings.subscribe(() => {
+          if (!this.savingSettings && this.staged.size > 0 && options.settings.getSnapshot().revision !== this.draftRevision) {
+            if (this.stagedValuesLanded()) this.clearSettingsDraft();
+            else this.settingsConflict = true;
+          }
           this.publish();
           void this.refreshConnection();
         });
@@ -84,6 +105,9 @@ window.__ModuleLoader__.load({
       refreshGeneration = 0;
       disposed = false;
       staged = /* @__PURE__ */ new Map();
+      draftRevision;
+      savingSettings = false;
+      settingsConflict = false;
       snapshotValue;
       statusTimer;
       statusRequestActive = false;
@@ -128,18 +152,24 @@ window.__ModuleLoader__.load({
         }
       }
       editSetting(field, value) {
+        if (this.staged.size === 0) this.draftRevision = this.options.settings.getSnapshot().revision;
         this.staged.set(field, value);
         this.error = null;
         this.publish();
       }
       discardSettings() {
-        this.staged.clear();
+        this.clearSettingsDraft();
         this.error = null;
         this.publish();
       }
       async saveSettings() {
+        if (this.staged.size === 0) return;
         const draft = this.draft();
         if (draft === void 0 || !validDraft(draft)) this.fail(void 0, "Connection settings are invalid.");
+        if (this.settingsConflict || this.options.settings.getSnapshot().revision !== this.draftRevision) {
+          this.settingsConflict = true;
+          this.fail(void 0, "Settings changed in another client. Discard this draft before editing again.");
+        }
         const values = {
           browser: draft.browser,
           chromiumExtensionId: draft.chromiumExtensionId,
@@ -155,12 +185,26 @@ window.__ModuleLoader__.load({
           path: [field],
           value: values[field]
         }));
+        this.savingSettings = true;
         try {
-          await this.options.settings.mutate(ops, this.options.settings.getSnapshot().revision);
-          this.staged.clear();
+          await this.options.settings.mutate(ops, this.draftRevision);
+          this.savingSettings = false;
+          if (!this.stagedValuesLanded()) {
+            if (this.options.settings.getSnapshot().revision !== this.draftRevision) {
+              this.settingsConflict = true;
+              this.fail(void 0, "Settings changed in another client. Discard this draft before editing again.");
+            }
+            this.fail(void 0, "Settings were not saved.");
+          }
+          this.clearSettingsDraft();
           this.error = null;
           this.publish();
         } catch (error) {
+          this.savingSettings = false;
+          if (this.options.settings.getSnapshot().revision !== this.draftRevision && !this.stagedValuesLanded()) {
+            this.settingsConflict = true;
+            this.fail(void 0, "Settings changed in another client. Discard this draft before editing again.");
+          }
           this.fail(error, "Settings were not saved.");
         }
       }
@@ -173,6 +217,14 @@ window.__ModuleLoader__.load({
         this.connection = receipt.status;
         this.publish();
         return receipt;
+      }
+      async importCompleted(request) {
+        if (this.options.importCompleted === void 0) this.fail(void 0, "Session import is unavailable.");
+        const response = await this.options.importCompleted(request);
+        if (!response.ok || response.value === void 0) {
+          this.fail(response.error?.message, "Session import failed.");
+        }
+        return response.value;
       }
       async pair() {
         return this.replacePairingToken();
@@ -233,6 +285,7 @@ window.__ModuleLoader__.load({
           connection: this.connection,
           draft,
           dirty: this.staged.size > 0,
+          conflicted: this.settingsConflict,
           invalid: draft !== void 0 && !validDraft(draft),
           loading: this.loading,
           error: this.error
@@ -253,6 +306,19 @@ window.__ModuleLoader__.load({
           powerShellExecutable: String(read("powerShellExecutable"))
         };
       }
+      stagedValuesLanded() {
+        const current = this.options.settings.getSnapshot().value;
+        if (current === void 0) return false;
+        for (const [field, value] of this.staged) {
+          if (!Object.is(current[field], normalizedSettingValue(field, value))) return false;
+        }
+        return true;
+      }
+      clearSettingsDraft() {
+        this.staged.clear();
+        this.draftRevision = void 0;
+        this.settingsConflict = false;
+      }
       fail(error, fallback) {
         const message = typeof error === "string" ? error : error instanceof Error ? error.message : fallback;
         this.error = message;
@@ -263,6 +329,11 @@ window.__ModuleLoader__.load({
     function DeepSeekWebSettingsCard({ controller }) {
       const snapshot = import_react.default.useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
       const [pairingTokenValue, setPairingTokenValue] = import_react.default.useState(null);
+      const [importSourceHome, setImportSourceHome] = import_react.default.useState("");
+      const [importRootSessionId, setImportRootSessionId] = import_react.default.useState("");
+      const [sourceProcessesStopped, setSourceProcessesStopped] = import_react.default.useState(false);
+      const [importing, setImporting] = import_react.default.useState(false);
+      const [importStatus, setImportStatus] = import_react.default.useState(null);
       import_react.default.useEffect(() => {
         void controller.refresh();
       }, [controller]);
@@ -347,7 +418,7 @@ window.__ModuleLoader__.load({
         })),
         import_react.default.createElement("button", {
           type: "button",
-          disabled: disabled || !snapshot.dirty || snapshot.invalid,
+          disabled: disabled || !snapshot.dirty || snapshot.invalid || snapshot.conflicted,
           onClick: () => {
             void controller.saveSettings().catch(() => void 0);
           }
@@ -357,6 +428,11 @@ window.__ModuleLoader__.load({
           disabled: !snapshot.dirty,
           onClick: () => controller.discardSettings()
         }, "Discard"),
+        snapshot.conflicted ? import_react.default.createElement(
+          "p",
+          { role: "status" },
+          "Settings changed in another client. Discard this draft before editing again."
+        ) : null,
         import_react.default.createElement("p", null, snapshot.credential.configured ? "Pairing token configured" : "No pairing token configured"),
         import_react.default.createElement("button", { type: "button", disabled: !snapshot.credential.writable || snapshot.credential.configured, onClick: () => createToken(false) }, "Generate pairing token"),
         import_react.default.createElement("button", { type: "button", disabled: !snapshot.credential.writable, onClick: () => createToken(true) }, "Re-pair"),
@@ -372,12 +448,60 @@ window.__ModuleLoader__.load({
           } }, "Copy"),
           import_react.default.createElement("p", null, "Copy this token now. It cannot be read back later.")
         ),
+        import_react.default.createElement("h4", null, "Import completed standalone session"),
+        import_react.default.createElement(
+          "p",
+          null,
+          "The completed root and its completed child sessions are validated and committed as one group. Source records are retained; imported sessions never inherit Windows command permission."
+        ),
+        field("Old DeepSeek Web Agent installation directory", import_react.default.createElement("input", {
+          value: importSourceHome,
+          disabled: importing,
+          placeholder: "C:\\Users\\you\\AppData\\Local\\DeepSeekWebAgent",
+          onChange: (event) => setImportSourceHome(event.currentTarget.value)
+        })),
+        field("Completed root session ID", import_react.default.createElement("input", {
+          value: importRootSessionId,
+          disabled: importing,
+          onChange: (event) => setImportRootSessionId(event.currentTarget.value)
+        })),
+        field("I have stopped every process using the old installation", import_react.default.createElement("input", {
+          type: "checkbox",
+          checked: sourceProcessesStopped,
+          disabled: importing,
+          onChange: (event) => setSourceProcessesStopped(event.currentTarget.checked)
+        })),
+        import_react.default.createElement("button", {
+          type: "button",
+          disabled: importing || !sourceProcessesStopped || importSourceHome.trim() === "" || importRootSessionId.trim() === "",
+          onClick: () => {
+            setImporting(true);
+            setImportStatus(null);
+            void controller.importCompleted({
+              sourceHome: importSourceHome.trim(),
+              rootSessionId: importRootSessionId.trim(),
+              sourceProcessesStopped: true
+            }).then((receipt) => {
+              setImportStatus(`Imported ${receipt.imported}; already identical ${receipt.idempotent}.`);
+            }, (error) => {
+              setImportStatus(error instanceof Error ? error.message : "Session import failed.");
+            }).finally(() => setImporting(false));
+          }
+        }, importing ? "Importing\u2026" : "Import completed session"),
+        importStatus === null ? null : import_react.default.createElement("p", { role: "status" }, importStatus),
         snapshot.error === null ? null : import_react.default.createElement("p", { role: "alert" }, snapshot.error)
       );
     }
     async function apply(ctx) {
       const client = ctx;
-      const unmountRemote = await client.remote.$mount(DEEPSEEK_WEB_REMOTE_CONTRIBUTION);
+      const unmountConnection = await client.remote.$mount(DEEPSEEK_WEB_REMOTE_CONTRIBUTION);
+      let unmountImport;
+      try {
+        unmountImport = await client.remote.$mount(DEEPSEEK_WEB_SESSION_IMPORT_REMOTE_CONTRIBUTION);
+      } catch (error) {
+        await unmountConnection();
+        throw error;
+      }
       client.slots.inject("settings.plugin.item", () => {
         const settings = client.settingsScope.bind({
           namespace: DEEPSEEK_WEB_SETTINGS_NAMESPACE,
@@ -386,7 +510,8 @@ window.__ModuleLoader__.load({
         const controller = new DeepSeekWebClientController({
           settings,
           credentials: client.remote.credentials,
-          callConnection: (method) => client.remote[DEEPSEEK_WEB_CONNECTION_NAMESPACE][method]()
+          callConnection: (method) => client.remote[DEEPSEEK_WEB_CONNECTION_NAMESPACE][method](),
+          importCompleted: (request) => client.remote[DEEPSEEK_WEB_SESSION_IMPORT_NAMESPACE].importCompleted(request)
         });
         const unregister = client.slots.register({
           name: "settings.plugin.item",
@@ -397,7 +522,12 @@ window.__ModuleLoader__.load({
           if (typeof unregister === "function") unregister();
         };
       });
-      return unmountRemote;
+      return async () => {
+        const failures = await Promise.allSettled([unmountImport(), unmountConnection()]);
+        const rejected = failures.flatMap((failure) => failure.status === "rejected" ? [failure.reason] : []);
+        if (rejected.length === 1) throw rejected[0];
+        if (rejected.length > 1) throw new AggregateError(rejected, "DeepSeek Web client Remote cleanup failed");
+      };
     }
     function decodeSettings(value) {
       if (!isRecord(value)) return void 0;
@@ -464,6 +594,9 @@ window.__ModuleLoader__.load({
         return value.firefoxExtensionOrigin === "" || /^moz-extension:\/\/[a-zA-Z0-9_-]+$/u.test(value.firefoxExtensionOrigin);
       }
       return value.chromiumExtensionId === "" || /^[a-p]{32}$/u.test(value.chromiumExtensionId);
+    }
+    function normalizedSettingValue(field, value) {
+      return field === "port" ? Number(value) : value;
     }
     function validWindowsStatus(value) {
       if (!isRecord(value)) return false;

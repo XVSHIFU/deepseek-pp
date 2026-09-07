@@ -1,8 +1,13 @@
 # Incremental layer for the official `web` profile. The base and web bundles
 # continue to own the Harness loop, sessions, tools, approval, settings and UI.
 - insert:
+    - id: deepseek-web-session-persistence
+      name: '@deepseek-pp/dsh-deepseek-web-official-plugin/session-persistence'
+      config:
+        root: !!js dshHomePath('sessions')
+        importRoot: !!js dshHomePath('profiles', 'web', 'deepseek-web-official', 'session-import')
     - id: deepseek-web-official
       name: '@deepseek-pp/dsh-deepseek-web-official-plugin'
-
-    - id: llm-deepseek-web
-      name: '@deepseek-pp/dsh-llm-deepseek-web'
+- id: session-persistence-jsonl
+  name: '@deepseek-ai/dsh-session-persistence-jsonl'
+  disabled: true

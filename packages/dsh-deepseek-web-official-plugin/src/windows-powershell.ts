@@ -3,9 +3,12 @@ import { open, lstat, mkdir, readFile, rename, unlink } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, parse, relative } from "node:path";
 
 import type { Context } from "@deepseek-ai/cordis";
+import type { Agent } from "@deepseek-ai/dsh-agent";
+import { PwshLocalExecutor } from "@deepseek-ai/dsh-pwsh-local";
 import type { Session } from "@deepseek-ai/dsh-session";
 import type {} from "@deepseek-ai/dsh-shell";
 import type {} from "@deepseek-ai/dsh-subprocess";
+import * as PwshTools from "@deepseek-ai/dsh-tool-pwsh";
 import type { ToolExecution } from "@deepseek-ai/dsh-tools";
 
 export const POWERSHELL_7_REQUIRED = "POWERSHELL_7_REQUIRED";
@@ -16,6 +19,7 @@ export const WINDOWS_SESSION_POLICY_UNAVAILABLE = "WINDOWS_SESSION_POLICY_UNAVAI
 export const WINDOWS_COMMAND_DISCLOSURE =
   "Commands run with the current Windows user's permissions; cwd is not a sandbox or an isolation boundary.";
 export const POWERSHELL_PROBE_TIMEOUT_MS = 3_000;
+export const DEEPSEEK_WEB_PROVIDER = "deepseek-web";
 
 export type WindowsCommandApprovalPolicy = "ask" | "auto";
 
@@ -265,9 +269,11 @@ function raceAbort<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
 }
 
 /**
- * Add only the product-specific admission layer over the official pwsh tool,
- * approval service, executor and subprocess runtime. This function neither
- * registers a shell tool nor executes a command itself.
+ * Add the product-specific admission layer and a per-Agent, isolated composition
+ * of the official local executor and official pwsh tool. The official profile's
+ * global sandbox executor remains intact for every other provider; only an Agent
+ * whose current request route is `deepseek-web` sees the scoped native tool.
+ * This function owns no executor or tool implementation and executes no command.
  */
 export async function installWindowsPowerShellPolicy(
   ctx: Context,
@@ -275,6 +281,7 @@ export async function installWindowsPowerShellPolicy(
   sessionPolicies: WindowsSessionPolicyStore,
   readCurrentConfig?: () => WindowsPowerShellConfig,
   readRequiredExecutable?: () => string,
+  isImportedSessionDenied?: (sessionId: string) => boolean,
 ): Promise<WindowsPowerShellPolicyInstallation> {
   let defaultConfig = resolveWindowsPowerShellConfig(input);
   let verifiedPowerShell: PowerShell7Probe | undefined;
@@ -287,6 +294,13 @@ export async function installWindowsPowerShellPolicy(
   }
   const policies = new WeakMap<Session, SessionPolicyState>();
   const pendingWrites = new Set<Promise<void>>();
+
+  interface NativePowerShellStack {
+    readonly executable: string;
+    readonly shellFiber: { dispose(): void | Promise<void> };
+    readonly toolFiber: { dispose(): void | Promise<void> };
+  }
+  const nativeStacks = new Map<Agent, NativePowerShellStack>();
 
   const configuredExecutable = (): string => {
     if (process.platform !== "win32") {
@@ -339,7 +353,7 @@ export async function installWindowsPowerShellPolicy(
   const createState = (session: Session): SessionPolicyState => {
     const existing = policies.get(session);
     if (existing !== undefined) return existing;
-    const isNew = Number(session.firstLiveSeq) === 0;
+    const isNew = isFreshWindowsPolicySession(session);
     const currentDefault = resolveWindowsPowerShellConfig(readCurrentConfig?.() ?? defaultConfig);
     const state: SessionPolicyState = {
       policy: isNew ? currentDefault : DISABLED_SESSION_POLICY,
@@ -347,7 +361,11 @@ export async function installWindowsPowerShellPolicy(
     };
     policies.set(session, state);
     const identity = windowsSessionPolicyIdentity(session);
-    const operation = isNew
+    const imported = isImportedSessionDenied?.(String(session.id)) === true;
+    if (imported) state.policy = DISABLED_SESSION_POLICY;
+    const operation = imported
+      ? Promise.resolve(undefined)
+      : isNew
       ? sessionPolicies.putIfAbsent(String(session.id), identity, state.policy)
       : sessionPolicies.get(String(session.id), identity);
     const ready = operation.then((stored) => {
@@ -379,6 +397,71 @@ export async function installWindowsPowerShellPolicy(
     createState(session);
   });
 
+  const disposeNativeStack = async (agent: Agent): Promise<void> => {
+    const stack = nativeStacks.get(agent);
+    if (stack === undefined) return;
+    nativeStacks.delete(agent);
+    const failures: unknown[] = [];
+    try { await stack.toolFiber.dispose(); } catch (error) { failures.push(error); }
+    try { await stack.shellFiber.dispose(); } catch (error) { failures.push(error); }
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1) throw new AggregateError(failures, "native PowerShell stack disposal failed");
+  };
+  const ensureNativeStack = async (agent: Agent): Promise<void> => {
+    if (process.platform !== "win32" || providerForNextStep(agent) !== DEEPSEEK_WEB_PROVIDER) {
+      await disposeNativeStack(agent);
+      return;
+    }
+    const executable = configuredExecutable();
+    const current = nativeStacks.get(agent);
+    if (current?.executable === executable) return;
+    await disposeNativeStack(agent);
+
+    // `ctx.shell` is a single profile service. A fresh Cordis isolation realm
+    // lets the official local executor coexist without replacing the base
+    // sandbox service; retaining the Agent scope makes this tool definition
+    // shadow the global one for this Agent only. Isolating settings prevents a
+    // second registration of the shared `shell` settings namespace: the plugin
+    // settings owner supplies this exact executable instead.
+    const nativeCtx = agent.ctx.isolate("shell").isolate("settings");
+    const shellFiber = await nativeCtx.plugin(PwshLocalExecutor, { pwshPath: executable });
+    try {
+      const toolFiber = await nativeCtx.plugin(PwshTools, { enableRunInBackground: false });
+      nativeStacks.set(agent, { executable, shellFiber, toolFiber });
+    } catch (error) {
+      await shellFiber.dispose();
+      throw error;
+    }
+  };
+  ctx.on("system-prompt/assemble", async (assembly, context, next) => {
+    const agent = context.agent;
+    if (agent === undefined) return next();
+    await ensureNativeStack(agent);
+    const transformed = await next();
+    const pwsh = ctx.tools.schemas(agent).find((schema) => schema.name === "pwsh");
+    if (pwsh === undefined || !assembly.tools.some((schema) => schema.name === "pwsh")) {
+      return transformed;
+    }
+    // SystemPrompt collected its tool providers immediately before this
+    // awaited waterfall. Replace only the pwsh snapshot after the scoped stack
+    // settles so the first request after a model switch advertises the exact
+    // definition ToolRuntime will dispatch; every unrelated schema and its
+    // established ordering remain byte-for-byte untouched.
+    return {
+      ...transformed,
+      tools: transformed.tools.map((schema) => schema.name === "pwsh" ? pwsh : schema),
+    };
+  }, { prepend: true });
+  ctx.on("agent/disposed", ({ agent }) => {
+    nativeStacks.delete(agent);
+  });
+  ctx.effect(() => async () => {
+    const failures = await Promise.allSettled([...nativeStacks.keys()].map(disposeNativeStack));
+    const rejected = failures.flatMap((failure) => failure.status === "rejected" ? [failure.reason] : []);
+    if (rejected.length === 1) throw rejected[0];
+    if (rejected.length > 1) throw new AggregateError(rejected, "native PowerShell stacks disposal failed");
+  });
+
   // Missing PowerShell 7 is displayable state, never a reason to stop the
   // official Web host. An enabled session rechecks lazily before its command.
   await refreshStatus();
@@ -390,7 +473,7 @@ export async function installWindowsPowerShellPolicy(
   // one-shot admission also proves this policy's prepended listener actually
   // saw the exact runtime-owned execution object before dispatch.
   ctx.tools.guard((exec) => {
-    if (exec.name !== "pwsh") return undefined;
+    if (exec.name !== "pwsh" || !isDeepSeekWebExecution(exec)) return undefined;
     const state = exec.agent === undefined ? undefined : policies.get(exec.agent.session);
     if (state === undefined || !state.policy.enabled) return WINDOWS_COMMANDS_DISABLED;
     if (requestsBackgroundExecution(exec)) return WINDOWS_BACKGROUND_COMMANDS_DISABLED;
@@ -402,7 +485,7 @@ export async function installWindowsPowerShellPolicy(
   // ToolRuntime then delegates the ask to the official ApprovalService, whose
   // only granting outcome is the audited one-shot `allowed-once`.
   ctx.on("tools/pre-execute", async (exec, next) => {
-    if (exec.name !== "pwsh") return next();
+    if (exec.name !== "pwsh" || !isDeepSeekWebExecution(exec)) return next();
     const state = await policyFor(exec.agent?.session);
     if (state.failure !== undefined) return { kind: "deny", reason: state.failure };
     const policy = state.policy;
@@ -444,6 +527,53 @@ const DISABLED_SESSION_POLICY: ResolvedWindowsPowerShellConfig = Object.freeze({
   enabled: false,
   approvalPolicy: "ask",
 });
+
+/**
+ * A fresh Session has no constructor seed. An empty persistence restore is the
+ * subtle boundary: its `firstLiveSeq` is also zero, but the official Session
+ * constructor records `session/end-seed` at that exact position. Treat every
+ * seeded/restored incarnation as existing so a missing policy record fails
+ * closed instead of inheriting today's default.
+ */
+export function isFreshWindowsPolicySession(session: Session): boolean {
+  return Number(session.firstLiveSeq) === 0
+    && session.snapshotEvents()[0]?.type !== "session/end-seed";
+}
+
+/** The provider selected for the next prompt assembly. */
+export function providerForNextStep(agent: Agent): string | undefined {
+  const events = agent.session.snapshotEvents();
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]!;
+    // The selection event is contributed by the optional official session
+    // controller package, so this plugin validates it structurally rather than
+    // acquiring that UI/controller package as a runtime dependency.
+    if ((event.type as string) === "model/selection") {
+      const data = plainRecord(event.data);
+      if (typeof data?.provider === "string") return data.provider;
+    }
+    if (event.type === "request/header") return event.data.header.config.provider;
+  }
+  return agent.options.provider;
+}
+
+/**
+ * Tool calls belong to the latest durable request header. A selection appended
+ * while a step is running is only for a later request and must not change the
+ * executor beneath the current tool call.
+ */
+export function providerForToolExecution(agent: Agent): string | undefined {
+  const events = agent.session.snapshotEvents();
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]!;
+    if (event.type === "request/header") return event.data.header.config.provider;
+  }
+  return agent.options.provider;
+}
+
+function isDeepSeekWebExecution(exec: ToolExecution): boolean {
+  return exec.agent !== undefined && providerForToolExecution(exec.agent) === DEEPSEEK_WEB_PROVIDER;
+}
 
 /** Binds an external policy record to one immutable durable session header. */
 export function windowsSessionPolicyIdentity(session: Session): string {

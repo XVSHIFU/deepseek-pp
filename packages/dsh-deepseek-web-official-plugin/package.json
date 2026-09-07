@@ -5,15 +5,19 @@
   "description": "Incremental DeepSeek Web model plugin for the official DeepSeek Harness web profile",
   "type": "module",
   "main": "./lib/index.js",
-  "types": "./src/index.ts",
+  "types": "./lib/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
+      "types": "./lib/index.d.ts",
       "default": "./lib/index.js"
     },
     "./client": {
       "types": "./lib/client.d.ts",
       "default": "./lib/client.js"
+    },
+    "./session-persistence": {
+      "types": "./lib/session-persistence.d.ts",
+      "default": "./lib/session-persistence.js"
     },
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
@@ -21,6 +25,9 @@
   "files": [
     "src/**/*.ts",
     "lib/index.js",
+    "lib/index.d.ts",
+    "lib/session-persistence.js",
+    "lib/session-persistence.d.ts",
     "lib/client.js",
     "lib/client.d.ts",
     "scripts/build-client.mjs",
@@ -45,24 +52,32 @@
     }
   },
   "dependencies": {
+    "@deepseek-ai/dsh-agent": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-atomic-write": "0.1.2-rc.1",
     "@deepseek-ai/dsh-credentials": "0.1.2-rc.1",
     "@deepseek-ai/dsh-home-paths": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-pwsh-local": "0.1.2-rc.1",
     "@deepseek-ai/dsh-session": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-session-persistence": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-session-persistence-jsonl": "0.1.2-rc.1",
     "@deepseek-ai/dsh-settings": "0.1.2-rc.1",
     "@deepseek-ai/dsh-shell": "0.1.2-rc.1",
     "@deepseek-ai/dsh-subprocess": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-tool-pwsh": "0.1.2-rc.1",
     "@deepseek-ai/dsh-tools": "0.1.2-rc.1",
     "@deepseek-ai/dsh-typert-protocol": "0.1.2-rc.1",
     "@deepseek-ai/schemastery": "3.18.2",
-    "@deepseek-pp/dsh-llm-deepseek-web": "0.0.0-private",
-    "@deepseek-pp/dsh-web-model-transport": "0.0.0-private",
-    "@deepseek-pp/web-model-protocol": "0.0.0-private"
+    "koffi": "3.2.1",
+    "ws": "8.21.0"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "4.0.2"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.2",
+    "@deepseek-pp/dsh-llm-deepseek-web": "0.0.0-private",
+    "@deepseek-pp/dsh-web-model-transport": "0.0.0-private",
+    "@deepseek-pp/web-model-protocol": "0.0.0-private",
     "esbuild": "0.27.7"
   }
 }

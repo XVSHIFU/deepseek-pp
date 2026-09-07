@@ -201,7 +201,6 @@ export class DeepSeekWebConnectionController {
           reported = new AggregateError([error, cleanupError], "DeepSeek Web connection startup cleanup failed");
         }
       }
-      this.tokenConfigured = false;
       this.connectionFailed(reported);
     }
   }

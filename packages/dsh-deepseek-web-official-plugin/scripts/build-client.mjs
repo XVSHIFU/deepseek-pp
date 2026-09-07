@@ -49,7 +49,12 @@ const hostOutput = await build({
   format: "esm",
   platform: "node",
   target: "node24",
-  packages: "external",
+  // Public Harness services must keep the official profile's singleton
+  // identities. Private @deepseek-pp workspaces are bundled so the resulting
+  // npm tarball can be installed without the source checkout. `ws` remains an
+  // exact public dependency because its CommonJS Node entry uses dynamic
+  // built-in requires that cannot execute inside an ESM bundle wrapper.
+  external: ["@deepseek-ai/*", "ws"],
   write: false,
   legalComments: "none",
   sourcemap: false,
@@ -57,3 +62,41 @@ const hostOutput = await build({
 const hostBody = hostOutput.outputFiles?.[0]?.text;
 if (hostBody === undefined) throw new Error("DeepSeek Web Host bundle produced no JavaScript output");
 await writeFile(resolve(packageRoot, "lib", "index.js"), hostBody, "utf8");
+await writeFile(resolve(packageRoot, "lib", "index.d.ts"), [
+  'import type { Context } from "@deepseek-ai/cordis";',
+  "",
+  'export declare const name = "deepseek-web-official";',
+  'export declare const inject: readonly ["settings", "credentials", "agentDefaultModel", "llm", "tools", "subprocess", "shell", "deepseekWebSessionImport"];',
+  "export declare function apply(ctx: Context): Promise<() => Promise<void>>;",
+  "",
+].join("\n"), "utf8");
+
+const persistenceOutput = await build({
+  entryPoints: [resolve(packageRoot, "src", "session-persistence.ts")],
+  bundle: true,
+  format: "esm",
+  platform: "node",
+  target: "node24",
+  external: ["@deepseek-ai/*", "koffi"],
+  write: false,
+  legalComments: "none",
+  sourcemap: false,
+});
+const persistenceBody = persistenceOutput.outputFiles?.[0]?.text;
+if (persistenceBody === undefined) throw new Error("DeepSeek Web persistence bundle produced no JavaScript output");
+await writeFile(resolve(packageRoot, "lib", "session-persistence.js"), persistenceBody, "utf8");
+await writeFile(resolve(packageRoot, "lib", "session-persistence.d.ts"), [
+  'import type { Context } from "@deepseek-ai/cordis";',
+  "",
+  "export interface Config {",
+  "  readonly root: string;",
+  "  readonly importRoot: string;",
+  '  readonly compression?: "none" | "zstd";',
+  "  readonly packChunks?: boolean;",
+  "  readonly preparedSessionCacheSize?: number;",
+  "  readonly writeBatchMaxDelayMs?: number;",
+  "}",
+  'export declare const inject: readonly ["sessions"];',
+  "export declare function apply(ctx: Context, config: Config): Promise<() => Promise<void>>;",
+  "",
+].join("\n"), "utf8");

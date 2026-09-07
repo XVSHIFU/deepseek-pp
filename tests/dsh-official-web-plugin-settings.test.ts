@@ -17,6 +17,7 @@ import {
   DeepSeekWebConnectionRemote,
 } from "../packages/dsh-deepseek-web-official-plugin/src/connection-remote.ts";
 import { DEEPSEEK_WEB_REMOTE_CONTRIBUTION } from "../packages/dsh-deepseek-web-official-plugin/src/connection-contract.ts";
+import { DEEPSEEK_WEB_SESSION_IMPORT_REMOTE_CONTRIBUTION } from "../packages/dsh-deepseek-web-official-plugin/src/session-import-contract.ts";
 import {
   apply as applyClient,
   DeepSeekWebClientController,
@@ -120,7 +121,7 @@ describe("official DeepSeek Web settings and connection", () => {
   });
 
   it("keeps the official Web surface available with an explicit redacted connection error", async () => {
-    const failure = new Error("fixture bind failure with local detail");
+    const failure = Object.assign(new Error("fixture bind failure with local detail"), { code: "EADDRINUSE" });
     const reportError = vi.fn();
     const controller = new DeepSeekWebConnectionController({
       readSettings: () => ({
@@ -143,7 +144,12 @@ describe("official DeepSeek Web settings and connection", () => {
     });
 
     await controller.start();
-    expect(controller.status()).toMatchObject({ phase: "error", errorCode: "CONNECTION_START_FAILED" });
+    expect(controller.status()).toMatchObject({
+      phase: "error",
+      configured: true,
+      tokenConfigured: true,
+      errorCode: "CONNECTION_START_FAILED",
+    });
     expect(JSON.stringify(controller.status())).not.toContain("local detail");
     expect(reportError).toHaveBeenCalledWith(failure);
     await controller.dispose();
@@ -266,6 +272,100 @@ describe("official DeepSeek Web settings and connection", () => {
     controller.dispose();
   });
 
+  it("keeps the draft's opening revision and refuses a stale cross-client overwrite", async () => {
+    const authority = sharedClientSettings();
+    const first = clientController(authority.bind());
+    const second = clientController(authority.bind());
+
+    first.editSetting("chromiumExtensionId", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    second.editSetting("chromiumExtensionId", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+    await second.saveSettings();
+
+    expect(authority.snapshot()).toMatchObject({
+      revision: 1,
+      value: { chromiumExtensionId: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
+    });
+    expect(first.getSnapshot()).toMatchObject({
+      dirty: true,
+      conflicted: true,
+      draft: { chromiumExtensionId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    });
+    await expect(first.saveSettings()).rejects.toThrow("Settings changed in another client");
+    expect(authority.mutations).toHaveLength(1);
+    expect(authority.snapshot().value.chromiumExtensionId).toBe("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+
+    first.discardSettings();
+    expect(first.getSnapshot()).toMatchObject({
+      dirty: false,
+      conflicted: false,
+      draft: { chromiumExtensionId: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
+      error: null,
+    });
+    first.editSetting("chromiumExtensionId", "cccccccccccccccccccccccccccccccc");
+    await first.saveSettings();
+    expect(authority.mutations.map((mutation) => mutation.revision)).toEqual([0, 1]);
+    expect(authority.snapshot()).toMatchObject({
+      revision: 2,
+      value: { chromiumExtensionId: "cccccccccccccccccccccccccccccccc" },
+    });
+
+    first.dispose();
+    second.dispose();
+  });
+
+  it("reports a conflict when the revision changes inside an in-flight CAS mutation", async () => {
+    const authority = sharedClientSettings();
+    const binding = authority.bind();
+    const controller = clientController({
+      ...binding,
+      mutate: async () => {
+        await authority.bind().mutate([{
+          op: "set",
+          path: ["chromiumExtensionId"],
+          value: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        }], 0);
+        throw new Error("SETTINGS_REVISION_MISMATCH");
+      },
+    });
+
+    controller.editSetting("chromiumExtensionId", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    await expect(controller.saveSettings()).rejects.toThrow("Settings changed in another client");
+    expect(controller.getSnapshot()).toMatchObject({
+      dirty: true,
+      conflicted: true,
+      draft: { chromiumExtensionId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    });
+    expect(authority.snapshot()).toMatchObject({
+      revision: 1,
+      value: { chromiumExtensionId: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
+    });
+    controller.dispose();
+  });
+
+  it("imports only through the explicit completed-session Remote action", async () => {
+    const importCompleted = vi.fn(async () => ({ ok: true, value: {
+      transactionId: "tx", rootSessionId: "root", sessionIds: ["root", "child"], imported: 2, idempotent: 0,
+    } }));
+    const controller = new DeepSeekWebClientController({
+      settings: fakeClientSettings(),
+      credentials: {
+        describe: async () => ({ ok: true, value: {} }),
+        set: async () => ({ ok: true, value: undefined }),
+      },
+      callConnection: async () => ({ ok: true, value: connectionView() }),
+      importCompleted,
+    });
+    const request = {
+      sourceHome: "C:\\fixture\\DeepSeekWebAgent",
+      rootSessionId: "root",
+      sourceProcessesStopped: true as const,
+    };
+    await expect(controller.importCompleted(request)).resolves.toMatchObject({ imported: 2, sessionIds: ["root", "child"] });
+    expect(importCompleted).toHaveBeenCalledOnce();
+    expect(importCompleted).toHaveBeenCalledWith(request);
+    controller.dispose();
+  });
+
   it("mounts the typed Remote contribution in the client fiber and releases every owned handle", async () => {
     const unmount = vi.fn(async () => undefined);
     const unregister = vi.fn();
@@ -284,6 +384,11 @@ describe("official DeepSeek Web settings and connection", () => {
             accepted: true, deferred: false, status: connectionView(),
           } }),
         },
+        deepseekWebSessionImport: {
+          importCompleted: async () => ({ ok: true, value: {
+            transactionId: "fixture", rootSessionId: "root", sessionIds: ["root"], imported: 1, idempotent: 0,
+          } }),
+        },
       },
       settingsScope: { bind: () => fakeClientSettings() },
       slots: {
@@ -292,12 +397,13 @@ describe("official DeepSeek Web settings and connection", () => {
       },
     } as never);
 
-    expect(mount).toHaveBeenCalledWith(DEEPSEEK_WEB_REMOTE_CONTRIBUTION);
+    expect(mount).toHaveBeenNthCalledWith(1, DEEPSEEK_WEB_REMOTE_CONTRIBUTION);
+    expect(mount).toHaveBeenNthCalledWith(2, DEEPSEEK_WEB_SESSION_IMPORT_REMOTE_CONTRIBUTION);
     expect(typeof slotCleanup).toBe("function");
     (slotCleanup as () => void)();
     expect(unregister).toHaveBeenCalledOnce();
     await dispose();
-    expect(unmount).toHaveBeenCalledOnce();
+    expect(unmount).toHaveBeenCalledTimes(2);
   });
 
   it("exports only redacted live state and refuses reconnect while the broker is busy", async () => {
@@ -411,7 +517,7 @@ class FakeHost implements DeepSeekWebHost {
 }
 
 function fakeClientSettings(mutations: Array<{ ops: readonly unknown[]; revision?: number }> = []) {
-  const snapshot = {
+  let snapshot = {
     status: "ready" as const,
     value: {
       browser: "chrome" as const,
@@ -434,7 +540,64 @@ function fakeClientSettings(mutations: Array<{ ops: readonly unknown[]; revision
     subscribe: () => () => undefined,
     set: async () => undefined,
     unset: async () => undefined,
-    mutate: async (ops: readonly unknown[], revision?: number) => { mutations.push({ ops, revision }); },
+    mutate: async (ops: readonly unknown[], revision?: number) => {
+      mutations.push({ ops, revision });
+      const value = { ...snapshot.value } as Record<string, unknown>;
+      for (const candidate of ops) {
+        const op = candidate as { op: string; path: readonly string[]; value?: unknown };
+        if (op.op === "set" && op.path.length === 1) value[op.path[0]!] = op.value;
+      }
+      snapshot = { ...snapshot, value: value as typeof snapshot.value, revision: snapshot.revision + 1 };
+    },
+  };
+}
+
+function clientController(settings: ReturnType<ReturnType<typeof sharedClientSettings>["bind"]>): DeepSeekWebClientController {
+  return new DeepSeekWebClientController({
+    settings,
+    credentials: {
+      describe: async () => ({ ok: true, value: {} }),
+      set: async () => ({ ok: true, value: undefined }),
+    },
+    callConnection: async () => ({ ok: true, value: connectionView() }),
+  });
+}
+
+function sharedClientSettings() {
+  type Snapshot = ReturnType<ReturnType<typeof fakeClientSettings>["getSnapshot"]>;
+  let snapshot: Snapshot = fakeClientSettings().getSnapshot();
+  const listeners = new Set<() => void>();
+  const mutations: Array<{ ops: readonly unknown[]; revision?: number }> = [];
+  return {
+    mutations,
+    snapshot: () => snapshot,
+    bind: () => ({
+      getSnapshot: () => snapshot,
+      subscribe(listener: () => void) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      set: async () => undefined,
+      unset: async () => undefined,
+      mutate: async (ops: readonly unknown[], revision?: number) => {
+        mutations.push({ ops, revision });
+        if (revision !== snapshot.revision) {
+          for (const listener of listeners) listener();
+          return;
+        }
+        const value = { ...snapshot.value } as Record<string, unknown>;
+        for (const candidate of ops) {
+          const op = candidate as { op: string; path: readonly string[]; value?: unknown };
+          if (op.op === "set" && op.path.length === 1) value[op.path[0]!] = op.value;
+        }
+        snapshot = {
+          ...snapshot,
+          value: value as Snapshot["value"],
+          revision: snapshot.revision + 1,
+        };
+        for (const listener of listeners) listener();
+      },
+    }),
   };
 }
 

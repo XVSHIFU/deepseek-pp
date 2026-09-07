@@ -2,6 +2,7 @@ import type { Context } from "@deepseek-ai/cordis";
 import { credentialRef } from "@deepseek-ai/dsh-credentials";
 import { dshHomePath } from "@deepseek-ai/dsh-home-paths";
 import type {} from "@deepseek-ai/dsh-settings";
+import { registerDeepSeekWebAdapter } from "@deepseek-pp/dsh-llm-deepseek-web";
 import type { DeepSeekWebBroker } from "@deepseek-pp/dsh-web-model-transport";
 
 import {
@@ -20,6 +21,7 @@ import {
   createDeepSeekWebModelHost,
 } from "./connection-controller.ts";
 import { DeepSeekWebConnectionRemote } from "./connection-remote.ts";
+import { DeepSeekWebSessionImportRemote } from "./session-import-remote.ts";
 import {
   installWindowsPowerShellPolicy,
   JsonWindowsSessionPolicyStore,
@@ -33,7 +35,7 @@ export * from "./managed-broker.ts";
 export * from "./windows-powershell.ts";
 
 export const name = "deepseek-web-official";
-export const inject = ["settings", "credentials", "agentDefaultModel", "tools", "subprocess", "shell"] as const;
+export const inject = ["settings", "credentials", "agentDefaultModel", "llm", "tools", "subprocess", "shell", "deepseekWebSessionImport"] as const;
 
 declare module "@deepseek-ai/cordis" {
   interface Context {
@@ -59,6 +61,7 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
     ),
     () => windowsConfig(settings.get()),
     () => settings.get().powerShellExecutable,
+    (sessionId) => ctx.deepseekWebSessionImport.isImportedSessionDenied(sessionId),
   );
   const connection = new DeepSeekWebConnectionController({
     readSettings: () => settings.get(),
@@ -75,7 +78,12 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
     },
   });
   const unprovide = ctx.provide("deepseekWebBroker", connection.broker);
+  // Keep the final plugin tarball independent from private workspace package
+  // installation. The Host bundle embeds the adapter/transport/protocol and
+  // registers the adapter in the same Cordis lifecycle as its broker.
+  registerDeepSeekWebAdapter(ctx, connection.broker);
   new DeepSeekWebConnectionRemote(ctx, connection);
+  new DeepSeekWebSessionImportRemote(ctx, ctx.deepseekWebSessionImport);
   const stopWatchingSettings = settings.watch(async (next, previous) => {
     if (connectionSettingsChanged(next, previous)) await connection.requestReconfigure("settings");
     if (next.powerShellExecutable !== previous.powerShellExecutable) {

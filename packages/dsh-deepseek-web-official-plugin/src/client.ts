@@ -10,6 +10,12 @@ import {
   type DeepSeekWebOfficialSettings,
   type DeepSeekWebReconnectReceipt,
 } from "./connection-contract.ts";
+import {
+  DEEPSEEK_WEB_SESSION_IMPORT_NAMESPACE,
+  DEEPSEEK_WEB_SESSION_IMPORT_REMOTE_CONTRIBUTION,
+  type CompletedSessionImportReceipt,
+  type CompletedSessionImportRequest,
+} from "./session-import-contract.ts";
 
 export const inject = ["slots", "settingsScope", "remote"] as const;
 
@@ -63,6 +69,7 @@ export interface DeepSeekWebClientSnapshot {
   readonly connection: DeepSeekWebConnectionStatus | undefined;
   readonly draft: DeepSeekWebSettingsDraft | undefined;
   readonly dirty: boolean;
+  readonly conflicted: boolean;
   readonly invalid: boolean;
   readonly loading: boolean;
   readonly error: string | null;
@@ -76,6 +83,8 @@ export interface DeepSeekWebClientControllerOptions {
   };
   readonly callConnection: (method: "status" | "reconnect") =>
     Promise<RemoteResult<DeepSeekWebConnectionStatus | DeepSeekWebReconnectReceipt>>;
+  readonly importCompleted?: (request: CompletedSessionImportRequest) =>
+    Promise<RemoteResult<CompletedSessionImportReceipt>>;
   readonly randomBytes?: (length: number) => Uint8Array;
 }
 
@@ -90,6 +99,9 @@ export class DeepSeekWebClientController {
   private refreshGeneration = 0;
   private disposed = false;
   private readonly staged = new Map<keyof DeepSeekWebOfficialSettings, unknown>();
+  private draftRevision: number | undefined;
+  private savingSettings = false;
+  private settingsConflict = false;
   private snapshotValue: DeepSeekWebClientSnapshot;
   private readonly statusTimer: ReturnType<typeof setInterval>;
   private statusRequestActive = false;
@@ -97,6 +109,11 @@ export class DeepSeekWebClientController {
   constructor(private readonly options: DeepSeekWebClientControllerOptions) {
     this.snapshotValue = this.snapshot();
     this.unsubscribeSettings = options.settings.subscribe(() => {
+      if (!this.savingSettings && this.staged.size > 0 &&
+          options.settings.getSnapshot().revision !== this.draftRevision) {
+        if (this.stagedValuesLanded()) this.clearSettingsDraft();
+        else this.settingsConflict = true;
+      }
       this.publish();
       void this.refreshConnection();
     });
@@ -148,20 +165,26 @@ export class DeepSeekWebClientController {
   }
 
   editSetting(field: keyof DeepSeekWebOfficialSettings, value: unknown): void {
+    if (this.staged.size === 0) this.draftRevision = this.options.settings.getSnapshot().revision;
     this.staged.set(field, value);
     this.error = null;
     this.publish();
   }
 
   discardSettings(): void {
-    this.staged.clear();
+    this.clearSettingsDraft();
     this.error = null;
     this.publish();
   }
 
   async saveSettings(): Promise<void> {
+    if (this.staged.size === 0) return;
     const draft = this.draft();
     if (draft === undefined || !validDraft(draft)) this.fail(undefined, "Connection settings are invalid.");
+    if (this.settingsConflict || this.options.settings.getSnapshot().revision !== this.draftRevision) {
+      this.settingsConflict = true;
+      this.fail(undefined, "Settings changed in another client. Discard this draft before editing again.");
+    }
     const values: DeepSeekWebOfficialSettings = {
       browser: draft.browser as DeepSeekWebOfficialSettings["browser"],
       chromiumExtensionId: draft.chromiumExtensionId,
@@ -177,12 +200,26 @@ export class DeepSeekWebClientController {
       path: [field],
       value: values[field],
     }));
+    this.savingSettings = true;
     try {
-      await this.options.settings.mutate(ops, this.options.settings.getSnapshot().revision);
-      this.staged.clear();
+      await this.options.settings.mutate(ops, this.draftRevision);
+      this.savingSettings = false;
+      if (!this.stagedValuesLanded()) {
+        if (this.options.settings.getSnapshot().revision !== this.draftRevision) {
+          this.settingsConflict = true;
+          this.fail(undefined, "Settings changed in another client. Discard this draft before editing again.");
+        }
+        this.fail(undefined, "Settings were not saved.");
+      }
+      this.clearSettingsDraft();
       this.error = null;
       this.publish();
     } catch (error) {
+      this.savingSettings = false;
+      if (this.options.settings.getSnapshot().revision !== this.draftRevision && !this.stagedValuesLanded()) {
+        this.settingsConflict = true;
+        this.fail(undefined, "Settings changed in another client. Discard this draft before editing again.");
+      }
       this.fail(error, "Settings were not saved.");
     }
   }
@@ -196,6 +233,15 @@ export class DeepSeekWebClientController {
     this.connection = receipt.status;
     this.publish();
     return receipt;
+  }
+
+  async importCompleted(request: CompletedSessionImportRequest): Promise<CompletedSessionImportReceipt> {
+    if (this.options.importCompleted === undefined) this.fail(undefined, "Session import is unavailable.");
+    const response = await this.options.importCompleted(request);
+    if (!response.ok || response.value === undefined) {
+      this.fail(response.error?.message, "Session import failed.");
+    }
+    return response.value;
   }
 
   async pair(): Promise<string> {
@@ -263,6 +309,7 @@ export class DeepSeekWebClientController {
       connection: this.connection,
       draft,
       dirty: this.staged.size > 0,
+      conflicted: this.settingsConflict,
       invalid: draft !== undefined && !validDraft(draft),
       loading: this.loading,
       error: this.error,
@@ -286,6 +333,21 @@ export class DeepSeekWebClientController {
     };
   }
 
+  private stagedValuesLanded(): boolean {
+    const current = this.options.settings.getSnapshot().value;
+    if (current === undefined) return false;
+    for (const [field, value] of this.staged) {
+      if (!Object.is(current[field], normalizedSettingValue(field, value))) return false;
+    }
+    return true;
+  }
+
+  private clearSettingsDraft(): void {
+    this.staged.clear();
+    this.draftRevision = undefined;
+    this.settingsConflict = false;
+  }
+
   private fail(error: unknown, fallback: string): never {
     const message = typeof error === "string" ? error : error instanceof Error ? error.message : fallback;
     this.error = message;
@@ -297,6 +359,11 @@ export class DeepSeekWebClientController {
 function DeepSeekWebSettingsCard({ controller }: { readonly controller: DeepSeekWebClientController }): React.ReactElement {
   const snapshot = React.useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
   const [pairingTokenValue, setPairingTokenValue] = React.useState<string | null>(null);
+  const [importSourceHome, setImportSourceHome] = React.useState("");
+  const [importRootSessionId, setImportRootSessionId] = React.useState("");
+  const [sourceProcessesStopped, setSourceProcessesStopped] = React.useState(false);
+  const [importing, setImporting] = React.useState(false);
+  const [importStatus, setImportStatus] = React.useState<string | null>(null);
   React.useEffect(() => {
     void controller.refresh();
   }, [controller]);
@@ -366,12 +433,14 @@ function DeepSeekWebSettingsCard({ controller }: { readonly controller: DeepSeek
       onChange: (event: React.ChangeEvent<HTMLInputElement>) => update("powerShellExecutable", event.currentTarget.value),
     })),
     React.createElement("button", {
-      type: "button", disabled: disabled || !snapshot.dirty || snapshot.invalid,
+      type: "button", disabled: disabled || !snapshot.dirty || snapshot.invalid || snapshot.conflicted,
       onClick: () => { void controller.saveSettings().catch(() => undefined); },
     }, "Save settings"),
     React.createElement("button", {
       type: "button", disabled: !snapshot.dirty, onClick: () => controller.discardSettings(),
     }, "Discard"),
+    snapshot.conflicted ? React.createElement("p", { role: "status" },
+      "Settings changed in another client. Discard this draft before editing again.") : null,
     React.createElement("p", null, snapshot.credential.configured ? "Pairing token configured" : "No pairing token configured"),
     React.createElement("button", { type: "button", disabled: !snapshot.credential.writable || snapshot.credential.configured, onClick: () => createToken(false) }, "Generate pairing token"),
     React.createElement("button", { type: "button", disabled: !snapshot.credential.writable, onClick: () => createToken(true) }, "Re-pair"),
@@ -380,13 +449,58 @@ function DeepSeekWebSettingsCard({ controller }: { readonly controller: DeepSeek
       React.createElement("output", { "aria-label": "New pairing token" }, pairingTokenValue),
       React.createElement("button", { type: "button", onClick: () => { void globalThis.navigator?.clipboard?.writeText(pairingTokenValue); } }, "Copy"),
       React.createElement("p", null, "Copy this token now. It cannot be read back later.")),
+    React.createElement("h4", null, "Import completed standalone session"),
+    React.createElement("p", null,
+      "The completed root and its completed child sessions are validated and committed as one group. Source records are retained; imported sessions never inherit Windows command permission."),
+    field("Old DeepSeek Web Agent installation directory", React.createElement("input", {
+      value: importSourceHome,
+      disabled: importing,
+      placeholder: "C:\\Users\\you\\AppData\\Local\\DeepSeekWebAgent",
+      onChange: (event: React.ChangeEvent<HTMLInputElement>) => setImportSourceHome(event.currentTarget.value),
+    })),
+    field("Completed root session ID", React.createElement("input", {
+      value: importRootSessionId,
+      disabled: importing,
+      onChange: (event: React.ChangeEvent<HTMLInputElement>) => setImportRootSessionId(event.currentTarget.value),
+    })),
+    field("I have stopped every process using the old installation", React.createElement("input", {
+      type: "checkbox",
+      checked: sourceProcessesStopped,
+      disabled: importing,
+      onChange: (event: React.ChangeEvent<HTMLInputElement>) => setSourceProcessesStopped(event.currentTarget.checked),
+    })),
+    React.createElement("button", {
+      type: "button",
+      disabled: importing || !sourceProcessesStopped || importSourceHome.trim() === "" || importRootSessionId.trim() === "",
+      onClick: () => {
+        setImporting(true);
+        setImportStatus(null);
+        void controller.importCompleted({
+          sourceHome: importSourceHome.trim(),
+          rootSessionId: importRootSessionId.trim(),
+          sourceProcessesStopped: true,
+        }).then((receipt) => {
+          setImportStatus(`Imported ${receipt.imported}; already identical ${receipt.idempotent}.`);
+        }, (error: unknown) => {
+          setImportStatus(error instanceof Error ? error.message : "Session import failed.");
+        }).finally(() => setImporting(false));
+      },
+    }, importing ? "Importing…" : "Import completed session"),
+    importStatus === null ? null : React.createElement("p", { role: "status" }, importStatus),
     snapshot.error === null ? null : React.createElement("p", { role: "alert" }, snapshot.error),
   );
 }
 
 export async function apply(ctx: Context): Promise<() => Promise<void>> {
   const client = ctx as Context & ClientContext;
-  const unmountRemote = await client.remote.$mount(DEEPSEEK_WEB_REMOTE_CONTRIBUTION);
+  const unmountConnection = await client.remote.$mount(DEEPSEEK_WEB_REMOTE_CONTRIBUTION);
+  let unmountImport: (() => Promise<void>) | undefined;
+  try {
+    unmountImport = await client.remote.$mount(DEEPSEEK_WEB_SESSION_IMPORT_REMOTE_CONTRIBUTION);
+  } catch (error) {
+    await unmountConnection();
+    throw error;
+  }
   client.slots.inject("settings.plugin.item", () => {
     const settings = client.settingsScope.bind<DeepSeekWebOfficialSettings>({
       namespace: DEEPSEEK_WEB_SETTINGS_NAMESPACE,
@@ -397,6 +511,7 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
       credentials: client.remote.credentials,
       callConnection: (method) => client.remote[DEEPSEEK_WEB_CONNECTION_NAMESPACE][method]() as
         Promise<RemoteResult<DeepSeekWebConnectionStatus | DeepSeekWebReconnectReceipt>>,
+      importCompleted: (request) => client.remote[DEEPSEEK_WEB_SESSION_IMPORT_NAMESPACE].importCompleted(request),
     });
     const unregister = client.slots.register({
       name: "settings.plugin.item",
@@ -407,7 +522,12 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
       if (typeof unregister === "function") unregister();
     };
   });
-  return unmountRemote;
+  return async () => {
+    const failures = await Promise.allSettled([unmountImport!(), unmountConnection()]);
+    const rejected = failures.flatMap((failure) => failure.status === "rejected" ? [failure.reason] : []);
+    if (rejected.length === 1) throw rejected[0];
+    if (rejected.length > 1) throw new AggregateError(rejected, "DeepSeek Web client Remote cleanup failed");
+  };
 }
 
 function decodeSettings(value: unknown): DeepSeekWebOfficialSettings | undefined {
@@ -487,6 +607,13 @@ function validDraft(value: DeepSeekWebSettingsDraft): boolean {
   return value.chromiumExtensionId === "" || /^[a-p]{32}$/u.test(value.chromiumExtensionId);
 }
 
+function normalizedSettingValue(
+  field: keyof DeepSeekWebOfficialSettings,
+  value: unknown,
+): DeepSeekWebOfficialSettings[typeof field] | unknown {
+  return field === "port" ? Number(value) : value;
+}
+
 function validWindowsStatus(value: unknown): value is DeepSeekWebConnectionStatus["windows"] {
   if (!isRecord(value)) return false;
   if (value.kind === "disabled") return Object.keys(value).length === 1;
@@ -557,6 +684,9 @@ interface ClientContext {
     readonly deepseekWebConnection: {
       status(): Promise<RemoteResult<DeepSeekWebConnectionStatus>>;
       reconnect(): Promise<RemoteResult<DeepSeekWebReconnectReceipt>>;
+    };
+    readonly deepseekWebSessionImport: {
+      importCompleted(request: CompletedSessionImportRequest): Promise<RemoteResult<CompletedSessionImportReceipt>>;
     };
     $mount(contribution: unknown): Promise<() => Promise<void>>;
   };
