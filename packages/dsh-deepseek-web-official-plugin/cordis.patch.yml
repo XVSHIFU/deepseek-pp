@@ -1,0 +1,8 @@
+# Incremental layer for the official `web` profile. The base and web bundles
+# continue to own the Harness loop, sessions, tools, approval, settings and UI.
+- insert:
+    - id: deepseek-web-official
+      name: '@deepseek-pp/dsh-deepseek-web-official-plugin'
+
+    - id: llm-deepseek-web
+      name: '@deepseek-pp/dsh-llm-deepseek-web'

@@ -154,7 +154,7 @@
 
 | Task | 当前状态 | 当前证据 / 下一退出条件 |
 |:--|:--|:--|
-| T7.1 官方插件纵切片 | `in_progress` | 计划已冻结；待新独立包通过官方 `web` profile 安装、动态设置页和模型注册定向测试 |
+| T7.1 官方插件纵切片 | `verified` | 独立增量包经真实 `dsh plugin --profile web add` 安装；官方 bundles/default 保留，未配对 Web 200、设置卡和模型注册均通过 |
 | T7.2 配置与连接 | `not_started` | 待 T7.1 公共接口冻结后开始 |
 | T7.3 PowerShell 7 与审批 | `not_started` | 待 T7.1 公共接口冻结后开始 |
 | T7.4 能力兼容 | `not_started` | 待 T7.2/T7.3/T7.5 汇合 |
@@ -162,6 +162,8 @@
 | T7.6 包与真实验收 | `not_started` | 待 T7.2–T7.5 完成 |
 
 T7 只新增官方 DSH 增量插件；旧 `packages/dsh-web-agent-bundle` standalone policy（包括禁止 settings/credentials 写入）不被悄悄放宽。用户现有 `%LOCALAPPDATA%\DeepSeekWebAgent` `0a66c3a`、配对和旧交付保持不变。当前实现顺序是先完成 T7.1，再按文件 ownership 并行 T7.2/T7.3/T7.5；不得用旧门禁或 fake 证据冒充新插件验收。
+
+**T7.1 退出结论（2026-09-07）**：新增 `@deepseek-pp/dsh-deepseek-web-official-plugin` 只向官方 `web` profile 追加 Host 与既有 DeepSeek Web adapter，官方 Harness 继续拥有 Agent loop、session、tools、approval、settings 与 UI。Host/Client namespace 固定为 `deepseek-web`，pairing token 只引用 credential key `DSH_WEB_PAIRING_TOKEN`；未配置时仍注册模型并返回 `WAITING_FOR_BROWSER`，普通官方 Web 可启动。`makeDefaultForNewSessions` 只是已冻结的 T7.2 配置合同，T7.1 未声称它已经生效；真实 DeepSeek 网页模型同样未在本切片调用。
 
 **本轮工作（2026-09-06）**：用户授权收尾后，`web_stage_reconnect` 完成全质量子门禁及 Windows 测试夹具修正，`web_stage_surface` 完成最终候选三端构建与裸首装验证，`web_stage_terminal_fix` 完成简明用户文档和两处 Shell 测试兼容修正；编排修复裸首装依赖时机、执行真实网页验收并收口。旧候选、测试日志及 Ubuntu 配置保留。未替用户升级安装、替换扩展或更改配对；通过现有产品入口只新增了自有临时工作区的验收会话，没有读取或修改 `cc-learning` 文件。
 
@@ -202,6 +204,9 @@ Windows 启动器只临时用 `WSLENV` 的 `/u` 标记传递固定配对配置�
 
 | Date | Scope | Command | Result | Notes |
 |:--|:--|:--|:--|:--|
+| 2026-09-07 | T7.1 official incremental plugin | package build；outer55s 联合 Vitest；root `tsc --noEmit`；独立审查 | `verified; 29/29 passed` | 新增测试 4/4，连同既有 adapter 回归共 29/29、6.36s；根类型检查与 `git diff --check` 通过。Client bundle 唯一运行时 external 为官方 shell 的 `react`，实际 lazy module 与 keyed settings card 可装载；独立审查的启动失败/Host 回滚清理问题已修复，最终无 blocker/high，T7.2 默认模型行为仍明确未实现 |
+| 2026-09-07 | T7.1 actual install and unpaired Web | 隔离 `DSH_HOME`；真实 `dsh plugin --profile web add --offline --workspace-root`、dump、`dsh web --no-open` 与认证 HTTP | `passed actual install / unpaired Web` | profile 保留 `@deepseek-ai/dsh-base`、`@deepseek-ai/dsh-web-app` 和官方 `deepseek-official/deepseek-v4-flash` 默认，仅追加新插件；官方页面 HTTP 200，boot graph 含新 Client 与官方 settings shell，停止后端口可重绑。不是实际 DeepSeek 网页推理或 T7.6 独立包验收 |
+| 2026-09-07 | T7.1 environment correction | 默认 DSH home 的官方 plugin remove；随后重新读取 manifest | `corrected immediately` | 首次手工探针因不存在的预期工作目录使 PowerShell 未停止，误把 checkout link 加入默认 `web` profile；发现后立即用官方 remove 精确撤销，最终 manifest 只含原官方 base/web 两层。未触碰 `%LOCALAPPDATA%\DeepSeekWebAgent`、配对、用户项目、WSL 或旧 release；后续实测全部使用显式 `C:\temp` 隔离 home |
 | 2026-09-06 | T6.1-W operator official Web | 用户升级 `0a66c3a`、复用原扩展加载路径，`web --mode readonly` 与截图 | `passed real web` | 本机官方 Harness UI 实际 read 项目 README 并终答，界面显示 1 tool call / 2 model steps。采纳既有用户证据，不让用户重复 smoke；截图中的启动 URL token 不进入文档或产物 |
 | 2026-09-06 | T6.1-W real editor and cold resume | 已安装 `0a66c3a` 原 launcher `web --mode files`；CUA 输入、真实 DeepSeek；退出后同目录重启 | `passed real web / actual file` | 自有临时 workspace `dsh-web-final-edit-7a8437c8a93f401089c2e88e6666c8a4`，session=`session-076d75df-1c57-4578-99f0-f949ab512a65`。首轮 7 model steps / 6 calls/results：模型误带行号后的空格引发两次 FS_EDIT_NOT_FOUND，原工具拒绝无写入，模型自行纠正后仅完成一次指定替换。全文件逐字节验证，SHA=`b7302cd01c04c19c877215e492f2142f33a83a5927d7dea7d65e6ee3bee07c2b`。重启恢复同 session，第二轮正确回忆 status，0 工具调用；最终 2 completed turns / 8 steps。自有 PTY 停止后无 appExit 错误，包装进程 exit1，不冒称 exit130 |
 | 2026-09-06 | T6.3 standalone bootstrap repair | 裸 bin 复制到无 node_modules 临时路径红/绿回归；installer/distribution/package/Web 4 文件 | `fixed; 100/100 passed` | 修复前裸首装顶层加载 js-yaml 导致 INSTALL_LAUNCHER_STATE_INVALID；`e09baf0` 仅把共享 profile 校验器 import 移至 staged 安装完成后。反例从无依赖裸入口到达正确的 DISTRIBUTION_HASH_MISMATCH，home 不创建；无第二校验器或依赖升级 |

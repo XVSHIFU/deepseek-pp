@@ -1,0 +1,63 @@
+{
+  "name": "@deepseek-pp/dsh-deepseek-web-official-plugin",
+  "version": "0.0.0-private",
+  "private": true,
+  "description": "Incremental DeepSeek Web model plugin for the official DeepSeek Harness web profile",
+  "type": "module",
+  "main": "./lib/index.js",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/client.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src/**/*.ts",
+    "lib/index.js",
+    "lib/client.js",
+    "lib/client.d.ts",
+    "scripts/build-client.mjs",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "node scripts/build-client.mjs && tsc -p tsconfig.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings-plugins"
+      ]
+    }
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-credentials": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-home-paths": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-settings": "0.1.2-rc.1",
+    "@deepseek-ai/schemastery": "3.18.2",
+    "@deepseek-pp/dsh-llm-deepseek-web": "0.0.0-private",
+    "@deepseek-pp/dsh-web-model-transport": "0.0.0-private",
+    "@deepseek-pp/web-model-protocol": "0.0.0-private"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "4.0.2"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.2",
+    "esbuild": "0.27.7"
+  }
+}

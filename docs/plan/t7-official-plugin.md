@@ -81,7 +81,7 @@
 
 | Task | 范围 | 前置 | 状态 |
 |:--|:--|:--|:--|
-| T7.1 | 官方插件纵切片：独立包、官方安装、动态设置页、模型注册；未配对的普通 `dsh web` 可启动 | 已完成旧交付；冻结本页公共接口 | `in_progress` |
+| T7.1 | 官方插件纵切片：独立包、官方安装、动态设置页、模型注册；未配对的普通 `dsh web` 可启动 | 已完成旧交付；冻结本页公共接口 | `verified` |
 | T7.2 | 网页配置与连接：持久化、credential 配对、状态、重启恢复、空闲变更 | T7.1 | `not_started` |
 | T7.3 | PowerShell 7：官方执行器、逐条审批、自动执行 opt-in、取消与权限 | T7.1 | `not_started` |
 | T7.4 | 官方 tools/Skills/subagent/压缩/恢复兼容与无模型 fallback 证据 | T7.1；汇合 T7.2/T7.3 | `not_started` |
@@ -123,4 +123,3 @@ T7.1 冻结 Host/Client settings namespace、credential key、model identity、�
 - 无关审计、依赖升级、PR #568、Git Bash、双击启动器、自制聊天网页、插件商店或安装向导。
 - 修改 WSL 配置、用户项目或旧 `.tmp` 归档/junction；不得运行宽泛递归扫描或重复既有越界探针。
 - 多浏览器并发、新 transport、API fallback、Cookie 导出、登录/验证码绕过。
-
