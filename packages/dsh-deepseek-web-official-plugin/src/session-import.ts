@@ -555,23 +555,18 @@ async function publishCommittedMarker(importRoot: string, journal: ImportJournal
 }
 
 async function durableRenameNoReplace(source: string, destination: string): Promise<void> {
-  if (process.platform === "win32") {
-    const koffi = (await import("koffi")).default;
-    const kernel32 = koffi.load("kernel32.dll");
-    const moveFileExW = kernel32.func("__stdcall", "MoveFileExW", "int", ["str16", "str16", "uint"]);
-    const getLastError = kernel32.func("__stdcall", "GetLastError", "uint", []);
-    if (moveFileExW(source, destination, 0x8) === 0) {
-      const code = Number(getLastError());
-      const error = new Error(`SESSION_IMPORT_RENAME_FAILED:${code}:${source}:${destination}`) as NodeJS.ErrnoException;
-      error.code = code === 80 || code === 183 ? "EEXIST" : code === 17 ? "EXDEV" : "EIO";
-      throw error;
-    }
-    return;
-  }
+  // The target/import roots are preflighted onto one device. Creating a hard
+  // link is an atomic no-replace namespace operation on NTFS and POSIX file
+  // systems; unlinking the old name afterward cannot expose partial bytes.
+  // Windows does not offer a portable directory-fsync primitive, so—as with
+  // the pinned official JSONL backend—this is a process-crash guarantee, not
+  // a claim of power-loss directory durability.
   await link(source, destination);
-  await syncDirectory(dirname(destination));
+  if (process.platform !== "win32") await syncDirectory(dirname(destination));
   await unlink(source);
-  if (dirname(source) !== dirname(destination)) await syncDirectory(dirname(source));
+  if (process.platform !== "win32" && dirname(source) !== dirname(destination)) {
+    await syncDirectory(dirname(source));
+  }
 }
 
 async function syncDirectory(directory: string): Promise<void> {

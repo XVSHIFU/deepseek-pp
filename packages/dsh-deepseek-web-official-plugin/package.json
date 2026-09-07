@@ -67,7 +67,6 @@
     "@deepseek-ai/dsh-tools": "0.1.2-rc.1",
     "@deepseek-ai/dsh-typert-protocol": "0.1.2-rc.1",
     "@deepseek-ai/schemastery": "3.18.2",
-    "koffi": "3.2.1",
     "ws": "8.21.0"
   },
   "peerDependencies": {

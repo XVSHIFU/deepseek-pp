@@ -77,7 +77,7 @@ const persistenceOutput = await build({
   format: "esm",
   platform: "node",
   target: "node24",
-  external: ["@deepseek-ai/*", "koffi"],
+  external: ["@deepseek-ai/*"],
   write: false,
   legalComments: "none",
   sourcemap: false,

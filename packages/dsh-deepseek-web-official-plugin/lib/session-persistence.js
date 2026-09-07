@@ -430,23 +430,12 @@ async function publishCommittedMarker(importRoot, journal) {
   await durableRenameNoReplace(activePath, committedPath);
 }
 async function durableRenameNoReplace(source, destination) {
-  if (process.platform === "win32") {
-    const koffi = (await import("koffi")).default;
-    const kernel32 = koffi.load("kernel32.dll");
-    const moveFileExW = kernel32.func("__stdcall", "MoveFileExW", "int", ["str16", "str16", "uint"]);
-    const getLastError = kernel32.func("__stdcall", "GetLastError", "uint", []);
-    if (moveFileExW(source, destination, 8) === 0) {
-      const code = Number(getLastError());
-      const error = new Error(`SESSION_IMPORT_RENAME_FAILED:${code}:${source}:${destination}`);
-      error.code = code === 80 || code === 183 ? "EEXIST" : code === 17 ? "EXDEV" : "EIO";
-      throw error;
-    }
-    return;
-  }
   await link(source, destination);
-  await syncDirectory(dirname(destination));
+  if (process.platform !== "win32") await syncDirectory(dirname(destination));
   await unlink(source);
-  if (dirname(source) !== dirname(destination)) await syncDirectory(dirname(source));
+  if (process.platform !== "win32" && dirname(source) !== dirname(destination)) {
+    await syncDirectory(dirname(source));
+  }
 }
 async function syncDirectory(directory) {
   const handle = await open(directory, "r");
