@@ -1,6 +1,6 @@
 # T7 官方 DSH 插件化接入与 Windows 原生命令计划
 
-状态：`blocked`（2026-09-07 启动；T7.1–T7.4 已验证，T7.5 缺官方原子导入接口）
+状态：`blocked / real_web_pending`（2026-09-07 启动；T7.1–T7.5 与 T7.6 自动包验收已验证，只等待明确授权的真实已登录浏览器验收）
 
 本计划是已完成 standalone 交付之后的独立增量阶段。旧计划、验收记录、用户安装和 `.release/deepseek-web-harness-e09baf0` 均保持原样；本页只约束新的官方 DSH 增量插件。除非本页明确说明，旧 standalone profile、启动器和受限网页合同不得被放宽。
 
@@ -85,12 +85,14 @@
 | T7.2 | 网页配置与连接：持久化、credential 配对、状态、重启恢复、空闲变更 | T7.1 | `verified` |
 | T7.3 | PowerShell 7：官方执行器、逐条审批、自动执行 opt-in、取消与权限 | T7.1 | `verified` |
 | T7.4 | 官方 tools/Skills/subagent/压缩/恢复兼容与无模型 fallback 证据 | T7.1；汇合 T7.2/T7.3 | `verified` |
-| T7.5 | 显式旧会话导入：预检、冲突、事务、保留源、导入后查看/继续 completed 会话 | T7.1 | `blocked / current_gap` |
-| T7.6 | DSH 插件包 + 浏览器包 + 简短说明；从包安装并完成官方真实验收 | T7.2–T7.5 | `blocked` |
+| T7.5 | 显式旧会话导入：预检、冲突、事务、保留源、导入后查看/继续 completed 会话 | T7.1 | `verified` |
+| T7.6 | DSH 插件包 + 浏览器包 + 简短说明；从包安装并完成官方真实验收 | T7.2–T7.5 | `blocked / real_web_pending` |
 
 关键路径：`T7.1 → (T7.2 || T7.3 || T7.5) → T7.4 → T7.6`。
 
-T7.5 当前不能安全落地：锁版官方 `SessionPersistence` 只有逐会话 `create`、`append`、`inspect`，没有一组根/子会话的 CAS 或原子事务；导入还必须与 Windows session policy 的 disabled/tombstone 同一事务提交，才能阻止同 ID、同 header 的旧 enabled 记录恢复权限。内存 target 或先后写两个文件都不能证明崩溃安全，因此试验内核未进入产品源码，T7.5 不得标记完成。T7.6 同时等待该官方接口缺口和一次明确授权的真实已登录浏览器验收；本阶段 fake browser 证据只证明官方组合与路由，不冒充真实 DeepSeek 网页调用。
+T7.5 最初因锁版官方 `SessionPersistence` 没有根/子多会话 CAS 而阻塞；最终采用插件自有的官方 JSONL persistence 子类，在 backend 层用 prepared/committed durable journal、同卷 hard-link 提交、源安装互斥锁、提交前后双 revision 校验和恢复扫描补齐组事务。导入提交同时产生永久 Windows deny tombstone，因而不会从同 ID 旧记录恢复原生命令权限；任一步失败均保持源字节不变，并回滚或在下次启动确定性恢复。该方案不修改官方 Harness 核心，也不把内存 target 当作落盘证据。
+
+T7.6 的自动部分已完成：最终候选从精确干净提交组装并校验，独立临时官方 home 完成在线依赖解析、插件首装、认证 Web 启动、从前一候选升级以及只移除插件的安全卸载；base/web、三项 vendor override、credential、workspace settings 与 session history 均按合同保留。候选 manifest 仍保持 `acceptance.*=pending`、`release_eligible=false`，不能据此发布。唯一剩余门槛是从该候选加载匹配扩展后，经明确授权的真实已登录浏览器完成本页第 7 节的真实链路。
 
 T7.1 冻结 Host/Client settings namespace、credential key、model identity、增量 patch 边界和测试夹具。冻结后可按文件所有权并行：T7.2 只写配置/连接，T7.3 只写 Windows composition/approval，T7.5 只写 importer/session fixture；编排 owner 负责共享依赖、官方 profile 组合与集成测试。不得把整阶段交给一个宽泛任务。
 

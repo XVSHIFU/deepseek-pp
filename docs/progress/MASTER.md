@@ -158,16 +158,18 @@
 | T7.2 配置与连接 | `verified` | 官方 settings/credential/Remote Gateway 实际持久化、重连、重启恢复；默认模型 opt-in 成功后一次性消费，不覆盖后续用户选择 |
 | T7.3 PowerShell 7 与审批 | `verified` | 只组合锁版官方 pwsh/tool/subprocess/approval；默认关闭、真实 Gateway rejected/allowed-once/rejected、显式 auto、超时/取消/树清理通过 |
 | T7.4 能力兼容 | `verified` | 真实 standard preset 经公开 Gateway 完成 Skill、前台 subagent、write、`/compact`、冷重启恢复；全部请求只走 deepseek-web/current-web-session |
-| T7.5 旧会话导入 | `blocked / current_gap` | 官方 persistence 无根+子多会话原子 CAS/事务，且导入必须与 Windows disabled/tombstone 原子提交；未把内存试验 target 接入产品 |
-| T7.6 包与真实验收 | `blocked` | 等待 T7.5 官方接口缺口；真实已登录浏览器仍需操作者明确授权，本轮 fake browser 不作 real 证据 |
+| T7.5 旧会话导入 | `verified` | 插件自有官方 JSONL backend 以 durable journal 完成根+子组事务、崩溃恢复、源锁/双 revision、幂等/冲突和永久 Windows deny tombstone；设置页显式导入入口已接通 |
+| T7.6 包与真实验收 | `blocked / real_web_pending` | 精确最终候选的首装、认证 Web、升级和安全卸载已通过；仅等待从候选加载匹配扩展后的明确授权真实已登录浏览器 read/追问/editor/批准 pwsh/重启验收 |
 
-T7 只新增官方 DSH 增量插件；旧 `packages/dsh-web-agent-bundle` standalone policy（包括禁止 settings/credentials 写入）不被悄悄放宽。用户现有 `%LOCALAPPDATA%\DeepSeekWebAgent` `0a66c3a`、配对和旧交付保持不变。当前实现顺序是先完成 T7.1，再按文件 ownership 并行 T7.2/T7.3/T7.5；不得用旧门禁或 fake 证据冒充新插件验收。
+T7 只新增官方 DSH 增量插件；旧 `packages/dsh-web-agent-bundle` standalone policy（包括禁止 settings/credentials 写入）不被悄悄放宽。用户现有 `%LOCALAPPDATA%\DeepSeekWebAgent` `0a66c3a`、配对和旧交付保持不变。T7.1–T7.5 与 T7.6 自动包验收已收口；不得用旧门禁、认证 HTTP 或 fake browser 证据冒充最后的真实插件网页验收。
 
 **T7.1 退出结论（2026-09-07）**：新增 `@deepseek-pp/dsh-deepseek-web-official-plugin` 只向官方 `web` profile 追加 Host 与既有 DeepSeek Web adapter，官方 Harness 继续拥有 Agent loop、session、tools、approval、settings 与 UI。Host/Client namespace 固定为 `deepseek-web`，pairing token 只引用 credential key `DSH_WEB_PAIRING_TOKEN`；未配置时仍注册模型并返回 `WAITING_FOR_BROWSER`，普通官方 Web 可启动。
 
 **T7.2–T7.4 退出结论（2026-09-07）**：隔离临时官方 `web` profile 经公开 Gateway 实际验证配置、credential、状态、重连、重启、standard preset、Skill、前台 subagent、write、官方审批和冷恢复。Windows 命令策略按不可变 session header 绑定并外置原子持久化；旧/seed/imported session 无记录即 disabled。官方 basic compaction 的本地 `maxTokens` 提示只在 `purpose=compaction` 时被接受但不发往协议，普通生成仍拒绝不受支持的控制项；上游压缩器继续负责摘要必须小于被替换历史的收敛校验。fake browser 只替代 DeepSeek 外部 I/O，不是实际网页推理证据。
 
-**T7.5 阻塞结论（2026-09-07）**：锁版官方 session API 没有多会话 CAS/事务，无法让 completed 根会话及必需子会话全有或全无地落盘；同时 Windows policy store 必须加入同一事务写 disabled/tombstone，否则同 ID、同 header 的残留 enabled policy 仍可能被导入会话继承。相关试验内核已从工作树移除，只保留本 current-gap 结论；在官方后端提供原子能力前不交付不安全的导入入口。
+**T7.5 早期阻塞与退出结论（2026-09-07）**：早期审查正确确认官方公共 API 没有根+子多会话 CAS，旧阻塞证据保留在活动验证记录中。后续实现没有伪造该能力，而是用插件自有的官方 JSONL persistence 子类把导入下沉到 backend 层：prepared/committed durable journal、同卷 hard-link 提交、源 `.installation.lock`、提交前后双 revision、确定性恢复与永久 Windows deny tombstone 共同保证组事务。兼容 completed、根/子依赖、幂等、冲突、源变化、owner lock、回滚/恢复和源字节保留均有落盘测试；设置页只允许用户显式发起。
+
+**T7.6 自动包退出结论（2026-09-07）**：最终候选 `.release/deepseek-web-official-31e3e59` 来源 `31e3e59f7de83747331b07c7380d922587efa983`，raw `manifest.json` SHA-256=`5108fc2a46c80fdfb8725056968ae9ccc83b59a8fb655cd5fee7fe2f7c57f45d`，管理 11 个文件，含三份带收据的浏览器 ZIP、三份锁定 vendor 归档、一个自包含插件 tgz 和使用说明。独立 clean home/store 经官方 CLI 使用精确 `--allow-build=koffi` 首装，只有 Koffi 执行构建脚本；实际 WinAPI PID 调用、配置图和认证 Web 303/Cookie/200 均通过。另从前一候选升级到本候选，bundle 不重复；随后官方 remove 只移除插件并恢复官方 JSONL persistence，base/web、三项 vendor override、credential、workspace settings 与 session history 哈希不变。候选保持 `acceptance.*=pending`、`release_eligible=false`；真实已登录浏览器链路仍未运行。
 
 **本轮工作（2026-09-06）**：用户授权收尾后，`web_stage_reconnect` 完成全质量子门禁及 Windows 测试夹具修正，`web_stage_surface` 完成最终候选三端构建与裸首装验证，`web_stage_terminal_fix` 完成简明用户文档和两处 Shell 测试兼容修正；编排修复裸首装依赖时机、执行真实网页验收并收口。旧候选、测试日志及 Ubuntu 配置保留。未替用户升级安装、替换扩展或更改配对；通过现有产品入口只新增了自有临时工作区的验收会话，没有读取或修改 `cc-learning` 文件。
 
@@ -208,6 +210,9 @@ Windows 启动器只临时用 `WSLENV` 的 `/u` 标记传递固定配对配置�
 
 | Date | Scope | Command | Result | Notes |
 |:--|:--|:--|:--|:--|
+| 2026-09-07 | T7.6 exact final candidate | 三端 `build-extension`；`package-dsh-official-plugin package/verify`；独立 clean home/store 官方 CLI add；dump；认证 HTTP | `automated package verified; real_web pending` | 来源 `31e3e59f7de83747331b07c7380d922587efa983`；manifest SHA-256=`5108fc2a46c80fdfb8725056968ae9ccc83b59a8fb655cd5fee7fe2f7c57f45d`，11 个受管文件。三端收据/ZIP 校验通过；fresh install 29 包且只有锁定 `koffi@3.2.1` 获准构建，WinAPI PID 调用成功；配置图只含一份插件 layer，认证 Web token exchange=303、Cookie 已签发、home=200。未输出 token，未调用 DeepSeek 网页模型 |
+| 2026-09-07 | T7.6 upgrade and safe uninstall | 官方 CLI 从 `d582171` 候选 add 最终候选；再次认证 Web；官方 remove 单一插件；前后哈希与 dump | `passed` | 升级后 package specs 全部切到 `31e3e59`，base/web/插件各一份，认证 Web 仍为 303/Cookie/200。卸载后只剩 base/web，官方 `session-persistence-jsonl` 恢复启用；三 vendor override 保留，`.anonymous-user-id`、`.credentials.yaml`、`storages/workspace.json` 与 session-history sentinel 的 SHA-256 全部逐字节不变 |
+| 2026-09-07 | T7.5 durable import backend | import/package/Windows 定向矩阵；settings/package 矩阵；native/profile E2E；root compile/build | `verified; 37/37 + 16/16 + 1/1 + 1/1` | 插件自有官方 JSONL backend 覆盖根+子组 journal、prepared/committed 恢复、同卷 hard-link、源 owner lock/双 revision、幂等/冲突/unfinished/ambiguous 拒绝、源字节保留和永久 Windows deny tombstone。没有修改官方 Harness master，也没有把内存 target 当持久化证据 |
 | 2026-09-07 | T7.2–T7.4 final official profile integration | official plugin build；root compile；outer55s 五文件联合 Vitest；owned-process/temp cleanup | `verified; 60/60 passed` | 5 files / 60 tests，17.66s；实际隔离 DSH_HOME 安装和官方 Web/Gateway，覆盖 live settings、credential、连接/重连、一次性 default、standard preset、默认关闭 pwsh、Gateway 审批 rejected/allowed-once/rejected、Skill、前台 subagent、write、`/compact`、冷重启恢复及严格唯一 web route。0 owned Node、0 T7 temp 残留；外部模型为 fake browser，不记真实 DeepSeek 网页验收 |
 | 2026-09-07 | T7 official compaction compatibility | 先真实复现 official basic compaction 失败；定向 adapter 及最终 profile 回归 | `passed after fix; 26/26 + 1/1` | 原失败 durable `compaction/end` 精确为“Protocol v1 does not support per-request generation controls”；修复仅接受并省略 `purpose=compaction` 的本地 max-token hint，普通请求仍拒绝。adapter 26/26、2.63s；profile 1/1、14.44s，并成功冷恢复 checkpoint |
 | 2026-09-07 | T7.5 atomic import review | 官方 SessionPersistence 公共 API、Windows policy identity 与试验 kernel 审查 | `blocked / current_gap` | 官方只有逐会话 create/append/inspect，无根+子多会话 CAS/事务；导入还需与 disabled/tombstone 同事务，防止同 ID/同 header 残留权限复活。未接入设置页、未保留试验产品源码、未声称内存 target 是落盘证明；T7.6 因此前置和真实浏览器授权继续阻塞 |
