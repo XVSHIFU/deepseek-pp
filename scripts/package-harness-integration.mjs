@@ -153,7 +153,7 @@ export async function buildExtension({ source, output, browser }, injected = {})
   return { ok: true, browser, source_commit: identity.commit, receipt_sha256: hash(raw), archive_sha256: archive.sha256 };
 }
 
-async function readExtension(directory, identity, browser, version, source) {
+export async function readExtension(directory, identity, browser, version, source) {
   await plainPath(directory);
   const receipt = await readJson(join(directory, 'build.json'));
   if (!exact(receipt, ['schema_version', 'kind', 'source', 'browser', 'version', 'wxt_version', 'archive', 'files'])
