@@ -1,18 +1,19 @@
 import z from "@deepseek-ai/schemastery";
 
-export const DEEPSEEK_WEB_SETTINGS_NAMESPACE = "deepseek-web" as const;
-export const DEEPSEEK_WEB_PAIRING_TOKEN_REF = "DSH_WEB_PAIRING_TOKEN" as const;
+import {
+  DEEPSEEK_WEB_PAIRING_TOKEN_REF,
+  DEEPSEEK_WEB_SETTINGS_NAMESPACE,
+  type BrowserKind,
+  type DeepSeekWebOfficialSettings as DeepSeekWebOfficialSettingsValue,
+} from "./connection-contract.ts";
+
+export {
+  DEEPSEEK_WEB_PAIRING_TOKEN_REF,
+  DEEPSEEK_WEB_SETTINGS_NAMESPACE,
+};
+export type DeepSeekWebOfficialSettings = DeepSeekWebOfficialSettingsValue;
+export type { BrowserKind };
 export const DEFAULT_DEEPSEEK_WEB_BROKER_PORT = 43_123;
-
-export type BrowserKind = "chrome" | "edge" | "firefox";
-
-export interface DeepSeekWebOfficialSettings {
-  readonly browser: BrowserKind;
-  readonly chromiumExtensionId: string;
-  readonly firefoxExtensionOrigin: string;
-  readonly port: number;
-  readonly makeDefaultForNewSessions: boolean;
-}
 
 export const DeepSeekWebOfficialSettings: z<DeepSeekWebOfficialSettings> = z.object({
   browser: z.union(["chrome", "edge", "firefox"]).default("chrome"),
@@ -20,9 +21,15 @@ export const DeepSeekWebOfficialSettings: z<DeepSeekWebOfficialSettings> = z.obj
   firefoxExtensionOrigin: z.string().default(""),
   port: z.number().step(1).min(1).max(65_535).default(DEFAULT_DEEPSEEK_WEB_BROKER_PORT),
   makeDefaultForNewSessions: z.boolean().default(false),
+  windowsCommandsEnabled: z.boolean().default(false),
+  windowsApprovalPolicy: z.union(["ask", "auto"]).default("ask"),
+  powerShellExecutable: z.string().default(""),
 });
 
 export function validateOfficialSettings(value: DeepSeekWebOfficialSettings): void {
+  if (value.powerShellExecutable.includes("\0") || value.powerShellExecutable.length > 1_024) {
+    throw new Error("powerShellExecutable must be at most 1024 characters and contain no NUL byte");
+  }
   if (value.browser === "firefox") {
     if (value.firefoxExtensionOrigin !== "" &&
       !/^moz-extension:\/\/[a-zA-Z0-9_-]+$/u.test(value.firefoxExtensionOrigin)) {

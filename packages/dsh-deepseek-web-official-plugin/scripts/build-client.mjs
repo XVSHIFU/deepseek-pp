@@ -35,6 +35,13 @@ const wrapped = [
 const target = resolve(packageRoot, "lib", "client.js");
 await mkdir(dirname(target), { recursive: true });
 await writeFile(target, wrapped, "utf8");
+await writeFile(resolve(packageRoot, "lib", "client.d.ts"), [
+  'import type { Context } from "@deepseek-ai/cordis";',
+  "",
+  'export declare const inject: readonly ["slots", "settingsScope", "remote"];',
+  "export declare function apply(ctx: Context): Promise<() => Promise<void>>;",
+  "",
+].join("\n"), "utf8");
 
 const hostOutput = await build({
   entryPoints: [resolve(packageRoot, "src", "index.ts")],

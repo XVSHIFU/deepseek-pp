@@ -20,6 +20,7 @@ const PACKAGE_ROOT = resolve(ROOT, "packages", "dsh-deepseek-web-official-plugin
 const PACKAGE_MANIFEST = resolve(PACKAGE_ROOT, "package.json");
 const PATCH_PATH = resolve(PACKAGE_ROOT, "cordis.patch.yml");
 const CLIENT_BUNDLE = resolve(PACKAGE_ROOT, "lib", "client.js");
+const CLIENT_TYPES = resolve(PACKAGE_ROOT, "lib", "client.d.ts");
 const BASE_PATCH = resolve(ROOT, "node_modules", "@deepseek-ai", "dsh-base", "cordis.patch.yml");
 const WEB_PATCH = resolve(ROOT, "node_modules", "@deepseek-ai", "dsh-web-app", "cordis.patch.yml");
 const DSH_MANIFEST = resolve(ROOT, "node_modules", "@deepseek-ai", "dsh", "package.json");
@@ -59,27 +60,54 @@ describe("official DeepSeek Web incremental plugin", () => {
     });
 
     const bundle = await readFile(CLIENT_BUNDLE, "utf8");
+    const clientTypes = await readFile(CLIENT_TYPES, "utf8");
     expect(bundle).toContain('id: "@deepseek-pp/dsh-deepseek-web-official-plugin"');
     expect(bundle).toContain('name: "settings.plugin.item"');
-    expect(bundle).toContain('key: "deepseek-web"');
+    expect(bundle).toContain("key: DEEPSEEK_WEB_SETTINGS_NAMESPACE");
     expect([...bundle.matchAll(/require\("([^"]+)"\)/gu)].map((match) => match[1])).toEqual(["react"]);
+    expect(clientTypes).toContain('readonly ["slots", "settingsScope", "remote"]');
+    expect(clientTypes).toContain("Promise<() => Promise<void>>");
 
     let loaded: ClientRegistration | undefined;
     runInNewContext(bundle, {
       window: { __ModuleLoader__: { load(value: ClientRegistration) { loaded = value; } } },
+      setInterval,
+      clearInterval,
     });
     expect(loaded?.id).toBe("@deepseek-pp/dsh-deepseek-web-official-plugin");
     const client = loaded?.factory((specifier) => {
       if (specifier !== "react") throw new Error(`unexpected client external: ${specifier}`);
       return ReactModule;
     });
-    let card: { key?: string; component?: () => unknown } | undefined;
+    let card: { key?: string; component?: unknown } | undefined;
+    let slotCleanup: (() => void) | undefined;
     expect(typeof client?.apply).toBe("function");
-    client?.apply?.({
+    const unmount = async () => undefined;
+    const disposeClient = await client?.apply?.({
+      remote: {
+        $mount: async () => unmount,
+        credentials: {
+          describe: async () => ({ ok: true, value: {} }),
+          set: async () => ({ ok: true, value: undefined }),
+        },
+        deepseekWebConnection: {
+          status: async () => ({ ok: true, value: undefined }),
+          reconnect: async () => ({ ok: true, value: undefined }),
+        },
+      },
+      settingsScope: {
+        bind: () => ({
+          getSnapshot: () => ({ status: "unavailable", value: undefined, writable: false }),
+          subscribe: () => () => undefined,
+          set: async () => undefined,
+          unset: async () => undefined,
+          mutate: async () => undefined,
+        }),
+      },
       slots: {
         inject(name: string, register: () => unknown) {
           expect(name).toBe("settings.plugin.item");
-          register();
+          slotCleanup = register() as () => void;
         },
         register(options: { key?: string }, component: () => unknown) {
           card = { key: options.key, component };
@@ -88,9 +116,9 @@ describe("official DeepSeek Web incremental plugin", () => {
       },
     });
     expect(card?.key).toBe("deepseek-web");
-    expect(card?.component?.()).toMatchObject({
-      props: { "data-dsh-plugin-card": "deepseek-web" },
-    });
+    expect(typeof card?.component).toBe("function");
+    slotCleanup?.();
+    await disposeClient?.();
   });
 
   it("adds only its Host and adapter rows to the official web composition", () => {
@@ -174,6 +202,7 @@ describe("official DeepSeek Web incremental plugin", () => {
     ctx.provide("credentials", {
       resolve: async () => undefined,
     } as never);
+    ctx.provide("tools", { guard: () => undefined } as never);
 
     await ctx.plugin(LlmRuntime);
     const dispose = await OfficialPlugin.apply(ctx);
@@ -181,13 +210,16 @@ describe("official DeepSeek Web incremental plugin", () => {
 
     expect(registrations).toEqual([{
       ns: "deepseek-web",
-      applies: "restart",
+      applies: "live",
       value: {
         browser: "chrome",
         chromiumExtensionId: "",
         firefoxExtensionOrigin: "",
         port: 43_123,
         makeDefaultForNewSessions: false,
+        windowsCommandsEnabled: false,
+        windowsApprovalPolicy: "ask",
+        powerShellExecutable: "",
       },
     }]);
     expect(ctx.llm.listProviders()).toContainEqual({ id: "deepseek-web", name: "DeepSeek Web" });
@@ -238,7 +270,7 @@ interface Row {
 interface ClientRegistration {
   readonly id: string;
   readonly factory: (require: (specifier: string) => unknown) => {
-    readonly apply?: (ctx: unknown) => void;
+    readonly apply?: (ctx: unknown) => Promise<() => Promise<void>>;
   };
 }
 
