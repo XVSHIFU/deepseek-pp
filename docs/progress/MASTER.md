@@ -12,6 +12,12 @@
 >
 > **Active direction**: 模式 A（本机 DeepSeek Harness + DeepSeek++ 网页模型 Broker）唯一主开发线
 
+## 2026-09-07 T8 网页模型控制与工具可靠性
+
+- T8.1–T8.3 已在 `05ee53d`、`aab2aac`、`2123443` 完成本地实现：官方设置卡片中英文折叠体验、默认/专家网页模式、独立思考开关与不持久化思考 dock，以及只对明确畸形工具意图执行一次、有历史链验证且禁止副作用重放的纠正回合。截图中的 `[调用 glob]` / `[调用 read]` 已确认只是没有进入权威 XML parser 的模型正文，不再被视为工具已执行。
+- 根 compile、prompt freeze、定向 UI/adapter/digest/bridge/tool/acceptance 测试通过；全量测试首次并行运行 2503 passed、1 skipped、33 failed，行为预期修正后逐项通过，其余并行资源争用文件单独复跑全部通过。三浏览器构建、manifest policy 与 UTF-8/ASCII 产物检查通过。sidepanel raw 门槛超 32 字节，但同环境未含 T8.2/T8.3 改动的 `HEAD` 快照结果完全相同，未放宽既有预算。
+- 新不可变本地候选 `.release/deepseek-web-official-2123443` 来源 `21234430aaa6942fbc0deae514c44a77a3701970`，manifest SHA-256=`1830b874a4db77604f41b883ab379b7afdc7e1fec0f4296815e30c5b9f79aadb`，11 个受管文件，package/verify 通过。人工加载目录为 `C:\temp\deepseek-web-official-2123443-chrome`；旧候选、用户现有扩展目录、配对和会话未改。真实网页四组合与工具验收须在新候选安装/配对后进行，当前不标通过。
+
 ## 2026-09-07 README 与推送准备（待用户确认）
 
 ### 另一台 Windows 电脑反馈与易用性调整
