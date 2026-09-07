@@ -22,6 +22,11 @@ web-ext.config.ts
 native-host/
 .tmp-deepseek-live/
 
+# Local deliveries, test workspaces and reference checkouts (not source)
+/.release/
+/.tmp/
+/参考/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -12,6 +12,15 @@
 >
 > **Active direction**: 模式 A（本机 DeepSeek Harness + DeepSeek++ 网页模型 Broker）唯一主开发线
 
+## 2026-09-07 README 与推送准备（待用户确认）
+
+- 将官方插件的 Windows / Linux 安装、首次网页配对和日常 `dsh web` 使用统一到根 `README.md`；旧快速上手改为入口链接，避免重复说明。保留上游浏览器内功能介绍并折叠展示。
+- Windows + Chrome 的 T7 真实验收结论不变；Linux 仅核对官方 Bash / sandbox / approval 组合及安装方法，尚未完成当前官方插件的 Linux 真实网页全流程，未拿旧 standalone / WSL 结果代替。
+- 使用现有工作树，不复制交付目录。共享 `.gitignore` 排除 `.release/`、`.tmp/` 和 `参考/`；三份必需的 MIT 预算依赖归档仍随源代码保留。
+- 推送范围见 `docs/verification/GitHub_推送预览.md`。目标仍为 `XVSHIFU/deepseek-pp` 的 `feature/web-harness`，先由用户检查；本次不 push、不更新 main、不推送 Harness 源仓库、不创建 PR、tag 或 Release。
+- 本次仅文档和忽略规则整理，采用静态检查，不重新执行模型 / 工具验收；最终 `395cf37` 候选不改写。
+- 静态检查：README PowerShell 安装块解析无错误，新增入口的 13 个本地链接均有效，`git diff --check` 通过；三类本地目录由共享忽略规则命中，最终候选 manifest SHA-256 未变。待推 80 个开发提交从 main 线性延伸，无旧项目历史拼接；定向检查未发现真实凭据、运行转储或超限 Git 对象。
+
 ## 目标
 
 - 让本机 DeepSeek Harness（首选官方 DSH）拥有 Agent loop、session、tools、Skills、subagent 与任务生命周期，并使用 DeepSeek 网页当前登录会话作为模型后端。

@@ -1,11 +1,11 @@
-# Harness 请求预算补丁（开发依赖）
+# Harness 请求预算补丁（配套依赖）
 
 这三份 MIT 许可的包来自维护者批准的 Harness fork 独立分支，不是官方新版本或本项目发布包。保留 `0.1.2-rc.1` 的包版本及原依赖范围，用文件名 SHA-256 和 npm lock integrity 区分补丁身份。根 `devDependencies` + `$` overrides 固定全部消费者到同一份 LLM；没有复制 Harness 核心源码或修改它的 `master`。
 
 - 源仓库：`https://github.com/XVSHIFU/deepseek-harness.git`
 - 分支：`codex/web-request-budget`；提交：`34d57aed2e386af0b61874390c86fc5915c51b1a`
 - 基线及未变的 master：`76fda729799fe9b3848dbe2c211d4b231032b81e`
-- 本地源码：`C:\temp\deepseek-harness-request-budget`；尚未推送远端。
+- 补丁源码分支尚未推送远端；本仓库只携带以下锁定归档，不会随 DeepSeek++ 的推送修改 Harness 仓库或其 `master`。
 
 | 包 | SHA-256 |
 |---|---|
@@ -17,4 +17,4 @@
 
 构建使用 fork 原来的工具和配置：Node 24.18.0、pnpm 11.7.0，按原 lock 安装依赖；`tsc -b` 三个包及 Typert generator 的 tsconfig；`tsdown --env.DSH_BUILD_FACE host --workspace 'packages/{llm/llm,llm/llm-retry,compaction/compaction-basic}'` 加三个对应包的 `--filter`；再对三包执行原 `pnpm pack --pack-destination <目录>`。没有改造发布脚本。已核对所有具体 exports、host/remote 元数据、许可和包内无源码／source map。
 
-在独立 DeepSeek++ checkout 中，`npm ci --ignore-scripts --offline` 已验证可安装这些本地归档；所有已锁定版本保持不变。此目录只供当前开发 checkout 使用，P6 的独立安装器与交付流程尚未完成。后续升级须重新固定来源、包摘要及锁文件，并重跑上下文和 CLI 集成，不可把它替换为浮动 master/latest。
+在独立 DeepSeek++ checkout 中，`npm ci --ignore-scripts --offline` 已验证可安装这些本地归档；所有已锁定版本保持不变。P6 独立交付和 T7 官方增量插件均复用这三份归档；安装 T7 时需与插件包一起通过官方 `dsh plugin` 加入。当前入口见[根 README](../../README.md)，验证范围见[MASTER](../../docs/progress/MASTER.md)。后续升级须重新固定来源、包摘要及锁文件，并重跑上下文和 CLI 集成，不可把它替换为浮动 master/latest。

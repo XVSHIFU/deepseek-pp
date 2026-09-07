@@ -2,12 +2,7 @@
 
 This package is the incremental plugin for the official DeepSeek Harness `web` profile. It adds the `deepseek-web/current-web-session` model route and a settings card while leaving the official loop, sessions, tools, approval services, other models, and defaults in place.
 
-Development install into an isolated Harness home:
-
-```powershell
-dsh plugin --profile web add C:\path\to\dsh-deepseek-web-official-plugin
-dsh web
-```
+For installation, pairing, and daily use on Windows and Linux, see the [repository README](../../README.md). Build and pack this workspace, then install it together with the three pinned archives in `vendor/harness-request-budget` using the official `dsh plugin --profile web add` command. Daily startup remains `dsh web` from the project directory. The current end-to-end acceptance covers Windows + Chrome; Linux uses the official Bash/sandbox/approval composition and has not completed the T7 real-web acceptance.
 
 An unpaired deployment remains startable. The settings card owns the browser connection, protected pairing credential, status/reconnect actions, and the Windows command defaults used for newly created sessions.
 

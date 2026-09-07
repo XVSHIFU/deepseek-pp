@@ -1,66 +1,186 @@
-<p align="center">
-  <img src="assets/readme-header.png" width="860" alt="DeepSeek++ DeepSeek 浏览器插件和 AI Agent 工作台">
-</p>
+# DeepSeek++ · DeepSeek 网页模型 × 本机 Harness
 
-<h1 align="center">DeepSeek++</h1>
+在本机 **DeepSeek Harness 网页**里聊天、读写项目文件、执行命令，模型使用浏览器中已经登录的 **DeepSeek 网页版**。
 
-<p align="center">
-  <strong>DeepSeek++：把 DeepSeek 网页版扩展成支持中英文体验、记忆、项目、Skill、MCP、多模态媒体、浏览器控制、保存项、产物下载、对话导出和自动化的 AI Agent 工作台</strong>
-</p>
+**不需要模型 API Key，不需要给 Pi 配置模型。Windows 原生命令使用 PowerShell 7，不要求 WSL。**
 
-<p align="center">
-  <a href="https://github.com/zhu1090093659/deepseek-pp/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/zhu1090093659/deepseek-pp?style=flat-square"></a>
-  <a href="https://github.com/zhu1090093659/deepseek-pp/watchers"><img alt="Watchers" src="https://img.shields.io/github/watchers/zhu1090093659/deepseek-pp?style=flat-square"></a>
-  <a href="https://github.com/zhu1090093659/deepseek-pp/network/members"><img alt="Forks" src="https://img.shields.io/github/forks/zhu1090093659/deepseek-pp?style=flat-square"></a>
-  <a href="https://github.com/zhu1090093659/deepseek-pp/issues"><img alt="Issues" src="https://img.shields.io/github/issues/zhu1090093659/deepseek-pp?style=flat-square"></a>
-</p>
+日常流程：**首次安装并配对 → 运行 `dsh web` → 在 Harness 网页里使用。**
 
-<p align="center">
-  <a href="https://github.com/zhu1090093659/deepseek-pp/releases"><img alt="Release" src="https://img.shields.io/github/v/release/zhu1090093659/deepseek-pp?style=flat-square&label=release"></a>
-  <a href="https://chromewebstore.google.com/detail/deepseek++/kdmpkkahkhdmdhfkdihkopikgcocbpbf?hl=zh-CN"><img alt="Chrome Web Store" src="https://img.shields.io/badge/Chrome%20Web%20Store-available-16a34a?style=flat-square"></a>
-  <a href="#license"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-2563eb?style=flat-square"></a>
-  <a href="https://chat.deepseek.com"><img alt="DeepSeek" src="https://img.shields.io/badge/DeepSeek-web-4f46e5?style=flat-square"></a>
-  <a href="https://linux.do"><img alt="LINUX DO" src="https://img.shields.io/badge/LINUX-DO-f59e0b?style=flat-square"></a>
-</p>
+这是 [XVSHIFU/deepseek-pp](https://github.com/XVSHIFU/deepseek-pp) 的 `feature/web-harness` 分支。基于原 DeepSeek++ 扩展，配套一个按官方方式安装的 DSH 插件；原浏览器内功能继续保留。**商店中的上游扩展不包含本分支的连接功能。**
 
-<p align="center">
-  <a href="README_EN.md">English README</a> ·
-  <a href="#产品定位">产品定位</a> ·
-  <a href="#本机-harness">本机 Harness</a> ·
-  <a href="#功能速览">功能速览</a> ·
-  <a href="#适合场景">适合场景</a> ·
-  <a href="#安装">安装</a> ·
-  <a href="#1140-变更回顾">1.14.0 变更</a>
-</p>
-
-## 产品定位
-
-DeepSeek++ 是面向 [DeepSeek](https://chat.deepseek.com) 网页版的开源浏览器扩展，支持 Chrome、Edge 和 Firefox。它把 DeepSeek Web 扩展成 AI agent workspace，让用户在同一浏览器工作流里使用中英文界面、MCP 工具、图片/视频多模态分析、长期记忆、Skill、系统提示词预设、联网搜索、网页读取、对话导出和定时自动化。
-
-如果你在寻找 DeepSeek Chrome extension、DeepSeek MCP tools、DeepSeek memory plugin、DeepSeek conversation export 或 DeepSeek AI agent，DeepSeek++ 对应的是同一个本地优先的 DeepSeek 浏览器增强工作台。
-
-语言可设为跟随浏览器、简体中文或 English。DeepSeek++ 会让侧边栏、右键菜单、工具结果、内置 Skill 行为和自动续跑提示保持一致语言，同时保留用户自己写的记忆、预设、自定义 Skill、自动化任务和同步数据原文。
-
-## 目录
-
-- [产品定位](#产品定位)
-- [本机 Harness](#本机-harness)
-- [功能速览](#功能速览)
-- [适合场景](#适合场景)
-- [核心功能](#核心功能)
-- [1.14.0 变更回顾](#1140-变更回顾)
-- [安装](#安装)
-- [友情链接](#友情链接)
+[首次安装](#首次安装) · [首次配对](#首次配对只做一次) · [日常使用](#日常使用) · [执行命令](#执行命令) · [常见问题](#常见问题) · [English overview](README_EN.md#local-harness)
 
 ## 本机 Harness
 
-本 fork 的 `feature/web-harness` 分支还提供本机 DeepSeek Harness 入口（Mode A）：首次配对后，通过命令行打开官方 Harness 网页，在里面聊天、读取或编辑所选项目文件、查看工具过程和继续已完成的历史会话；也可以使用终端对话入口。
+你在 Harness 中发送任务，由 Harness 管理会话、文件工具、命令、Skills 和多步执行；DeepSeek++ 负责连接网页模型。它不是在网页外再启动一个需要 API 的模型，也不是把 Harness 换成几个简单工具。
 
-模型来自同一浏览器中已登录、保持打开的 DeepSeek 官网，**不需要模型 API key，也不需要在 Pi 中配置模型**。会话、工具执行和多步任务由本机 Harness 负责，DeepSeek++ 负责连接网页模型。读取和编辑文件可直接在 Windows 上运行；Bash 命令仍使用单独配置的 WSL/Linux 环境。
+当前交付状态：
 
-使用 Node.js 24.x，Harness 固定为 `0.1.2-rc.1`。这是本分支的本地交付功能，不代表上游商店版本已包含它。新用户见 [首次安装与配对](docs/verification/P6_首次安装.md)；已经配对后直接看 [日常使用](docs/verification/P6_本机使用.md)，无需重复安装。当前网页入口固定使用启动时选择的项目和网页模型，不开放任意模型设置、图片输入或会话分叉。
+| 环境 | 使用方式 | 验证情况 |
+| --- | --- | --- |
+| Windows + Chrome | 官方 Harness 网页；PowerShell 7 原生命令 | 已完成真实配对、读取、连续追问、编辑、命令批准、冷重启恢复 |
+| Linux 桌面 | 同一 DSH 插件；沿用官方 Linux 命令与权限机制 | 提供安装方法；当前官方增量插件尚未完成 Linux 全流程真实网页验收 |
+| Edge / Firefox 桌面 | 使用各自构建的扩展 | 已构建；本轮完整真实验收使用 Chrome |
 
-原有在 DeepSeek 页面或扩展侧边栏内工作的方式（Mode B）继续保留；下方的记忆、MCP、多模态和自动化说明仍适用于这些浏览器内功能，不表示它们自动接入本机 Harness。
+本分支已完成 Windows 本地验收，**还不是公开发行版**。以下按源码安装编写；仓库推送不会自动上传安装包。旧独立启动器文档和旧 Linux/WSL 测试记录，不代表当前官方插件的 Linux 验收结果。
+
+## 首次安装
+
+已经在日常 Harness 中安装、配对过本插件？直接跳到[日常使用](#日常使用)，无需重复安装。
+
+### 1. 准备环境
+
+- Windows 或带桌面浏览器的 Linux。
+- Git、**Node.js 24.x**（自带 npm）；安装依赖需要联网。
+- Chrome、Edge 或 Firefox，以及可正常登录的 DeepSeek 网页账号。
+- Windows 执行命令需要 **PowerShell 7**；下面 Windows 命令也请在 PowerShell 7 中运行。Linux 不需要 PowerShell 或 WSL。
+- Linux 执行命令需要 Bash，以及可用的 Bubblewrap（`bwrap`，推荐）或 Landlock 沙箱后端；缺少可用后端时命令会被拒绝，不会直接裸跑。
+- Harness 和登录 DeepSeek 的浏览器须在**同一台电脑**运行。本说明不涵盖远程服务器、容器或跨系统 WSL 桥接。
+
+本分支适配的官方 Harness 版本为 `0.1.2-rc.1`，先不要自行换成其他版本。
+
+### 2. 获取代码并构建
+
+Windows、Linux 都可执行下面的命令。选择一个准备长期保留代码的目录，不要放在稍后会清理的临时目录。任意一步报错时，先停止，不要继续安装。
+
+```sh
+git clone --branch feature/web-harness https://github.com/XVSHIFU/deepseek-pp.git
+cd deepseek-pp
+npm ci
+npm run build:chrome
+npm run build --workspace @deepseek-pp/dsh-deepseek-web-official-plugin
+npm install --global @deepseek-ai/dsh@0.1.2-rc.1
+```
+
+使用 Edge 时，把 `npm run build:chrome` 换成 `npm run build:edge`；Firefox 换成 `npm run build:firefox`。
+
+### 3. 安装 Harness 插件
+
+仍在刚才的仓库目录，只执行自己系统对应的一组。
+
+**Windows（PowerShell 7）**
+
+```powershell
+New-Item -ItemType Directory -Force .release/manual | Out-Null
+npm pack --workspace @deepseek-pp/dsh-deepseek-web-official-plugin --pack-destination .release/manual
+if ($LASTEXITCODE -ne 0) { throw '打包失败，请先解决错误' }
+$vendor = @(Get-ChildItem -LiteralPath ./vendor/harness-request-budget -Filter '*.tgz' | Select-Object -ExpandProperty FullName)
+dsh plugin --profile web add $vendor ./.release/manual/deepseek-pp-dsh-deepseek-web-official-plugin-0.0.0-private.tgz --allow-build=koffi
+```
+
+**Linux（Bash）**
+
+```bash
+mkdir -p .release/manual
+npm pack --workspace @deepseek-pp/dsh-deepseek-web-official-plugin --pack-destination .release/manual &&
+dsh plugin --profile web add ./vendor/harness-request-budget/*.tgz ./.release/manual/deepseek-pp-dsh-deepseek-web-official-plugin-0.0.0-private.tgz --allow-build=koffi
+```
+
+安装命令使用官方 `dsh plugin`，同时加入本插件所需的三份配套依赖。请一起安装，不要只装其中一个包。它不会移除你已有的其他模型或会话。
+
+如果全局 npm 安装提示权限不足，请先配置当前用户可写的 Node/npm 环境；不要为了安装方便而以管理员或 root 身份运行日常 Agent。
+
+### 4. 加载浏览器扩展
+
+**Chrome / Edge：**
+
+1. 打开 `chrome://extensions`（Edge 是 `edge://extensions`），启用“开发者模式”。
+2. 点击“加载已解压的扩展程序”。
+3. 选择仓库中的 `dist/chrome-mv3`（Edge 选择 `dist/edge-mv3`）。
+4. 暂时停用同浏览器里的上游 DeepSeek++，避免两份扩展同时处理网页。记下新扩展卡片上的 **ID**。
+
+**Firefox：** 打开 `about:debugging#/runtime/this-firefox`，选择“临时载入附加组件”，打开 `dist/firefox-mv3/manifest.json`。记录该扩展的 `moz-extension://…` 地址。临时加载在浏览器退出后失效，重载后若地址变化需更新配对配置；这不是已经签名的长期安装包。
+
+加载好后，打开 [DeepSeek 网页](https://chat.deepseek.com)，登录并刷新页面。保留这个页面，不要关闭。
+
+## 首次配对（只做一次）
+
+1. 终端运行：
+
+   ```sh
+   dsh web
+   ```
+
+   它会打开本机 Harness 网页。**这个终端保持运行**，后续配置在网页里完成。
+
+2. 在 Harness 的**设置 → 插件 → DeepSeek Web**卡片中，选择浏览器，填写刚才的扩展 ID；Firefox 填完整 `moz-extension://…` 地址。端口保留 **43123**。
+3. 勾选 **Set DeepSeek Web as the default for future new sessions**（新会话默认使用网页模型），点击 **Save settings**。已有会话和其他模型不会因此被替换。
+4. 点击 **Generate pairing token**，再点 **Copy**。令牌只在生成时显示；不要发给别人。
+5. 打开浏览器 **DeepSeek++ → 设置 → 本机 Harness**：开启桥接，端口填 **43123**，粘贴令牌，点击“保存”。
+6. 显示“**已连接**”后，回到 Harness 新建会话，选择项目文件夹，发送：
+
+   > 读取 README.md，用中文说明这个项目是做什么的。
+
+看到文件读取的工具记录和回答，就可以继续使用了。**扩展 ID、令牌只需首次配置，不需要每天复制。**
+
+## 日常使用
+
+先打开并登录 DeepSeek 网页，在**你要处理的项目目录**打开终端，再运行：
+
+```sh
+dsh web
+```
+
+启动时所在的目录是默认工作区。在打开的 Harness 网页中新建会话或继续历史会话即可。例如：
+
+- “看看这个项目的目录结构，说明主要功能。”
+- “阅读这个文件，指出哪里需要修改。”
+- “修改 README 的项目说明，并告诉我改了什么。”
+
+用完在启动 Harness 的终端按 `Ctrl+C` 停止服务。下次照常 `dsh web`，配对和已保存的会话会保留。浏览器关闭、网页退出登录或网络不可用时，网页模型无法继续推理。
+
+## 执行命令
+
+### Windows：PowerShell 7，不用 WSL
+
+默认关闭 Windows 原生命令。需要时，在 Harness 的 **DeepSeek Web** 设置中启用，保持 **Ask**（逐条确认），确认 PowerShell 7 可用后保存，**再新建会话**。
+
+例如发送“执行 `Get-Location`，告诉我当前目录”。网页弹出批准请求后，检查命令并选择“允许一次”。
+
+命令以运行 Harness 的当前 Windows 用户权限执行，**不是只允许修改项目目录的沙箱**。不要用管理员权限启动 Harness；没有把握时不要选择自动批准。不会自动退回 Windows PowerShell 5.1、Git Bash 或 WSL。
+
+### Linux：沿用官方命令机制
+
+Linux 不使用上面的 Windows 开关，也不用安装 PowerShell。沿用官方 `workspace-write + ask` 默认设置：工作区内普通命令在沙箱中执行，需要扩大文件权限时再请求批准，**并不是每条 Bash 命令都弹确认**。是否可执行取决于本机是否满足官方沙箱要求。插件不会为了让命令成功而自动切换成不受限执行；官方文件沙箱也不等于网络隔离。
+
+当前官方增量插件尚未完成 Linux 全流程真实验收；首次使用先在无重要内容的测试目录里检查读取、编辑和一条简单命令。不要把 Windows 的原生命令验收结论套到 Linux 上。
+
+## 常见问题
+
+**找不到“本机 Harness”？**
+
+通常加载的是商店上游版本。请按上面的步骤加载本仓库构建的扩展，并刷新 DeepSeek 网页。
+
+**一直显示“等待重试”或“离线”？**
+
+确认 `dsh web` 仍在运行，两边端口相同，配对 ID 属于当前加载的扩展。然后在扩展中再点一次“保存”。如果重新生成过令牌，扩展也要换成新令牌；日常不要反复重新配对。
+
+**提示需要登录 DeepSeek？**
+
+回到同一浏览器配置中的 DeepSeek 网页，完成登录后再重试。不要复制 Cookie 或提供 API Key。
+
+**以前的独立 DeepSeek Web Agent 怎么办？**
+
+不必先卸载。需要旧记录时，可在插件设置的导入区选择旧 Agent 数据目录和已结束的会话；先停止旧服务，源记录会保留。不要把旧启动器的安装命令混进本页流程。
+
+**升级或卸载？**
+
+先停止 Harness。维护候选包的具体操作见[插件维护说明](docs/verification/T7_官方插件使用.md#更新与卸载)。不要直接删除 Harness 数据目录。
+
+**会把文件发给 DeepSeek 吗？**
+
+为完成任务而读取的文件和工具结果会作为模型上下文送到 DeepSeek 网页。请只选择你允许模型处理的项目，勿提供密钥或无关的敏感文件。
+
+## 开发与记录
+
+- [当前计划](docs/plan/t7-official-plugin.md)
+- [开发进度与验收记录](docs/progress/MASTER.md)
+- [配套依赖来源与许可](vendor/harness-request-budget/README.md)
+
+下面是上游 DeepSeek++ 的浏览器内功能说明与版本历史。记忆、MCP、多模态等描述属于浏览器内模式，**不会自动变成 Harness 插件的能力**。
+
+<details>
+<summary>展开：原 DeepSeek++ 浏览器内功能与版本历史</summary>
 
 ## 功能速览
 
@@ -1112,7 +1232,7 @@ Chrome 用户可以直接从 [Chrome Web Store](https://chromewebstore.google.co
 ### 从源码构建
 
 ```bash
-git clone https://github.com/zhu1090093659/deepseek-pp.git
+git clone --branch feature/web-harness https://github.com/XVSHIFU/deepseek-pp.git
 cd deepseek-pp
 npm install
 npm run build
@@ -1151,6 +1271,12 @@ npm run smoke:shell
 - [Awesome-Prompts 角色扮演](https://github.com/dongshuyan/Awesome-Prompts/tree/master/%E8%A7%92%E8%89%B2%E6%89%AE%E6%BC%94) — 精选角色扮演 Prompt 合集
 - [LINUX DO](https://linux.do) — 新一代开源技术社区
 
+</details>
+
+## 致谢与许可
+
+基于 [DeepSeek++](https://github.com/zhu1090093659/deepseek-pp) 和 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的插件机制构建。感谢上游作者和贡献者。
+
 ## License
 
-Apache-2.0
+本仓库遵循 Apache-2.0；配套 Harness 归档遵循 MIT，保留各自的许可文件。
