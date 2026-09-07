@@ -128,3 +128,23 @@ flowchart LR
 - 本地开发可把两个仓库作为 sibling checkout；测试脚本只能接受显式相对路径或 commit，不能写机器绝对路径。
 - 默认不把 Harness 作为 submodule。只有上游包无法重现构建时，才另立决策把固定 commit 作为只读构建输入。
 - P0 不存在从 WebSocket 到 Native、MCP Sampling、CDP 或 API provider 的 fallback edge。
+
+## 6. T7 官方增量插件阶段（2026-09-07）
+
+T7 是旧 standalone 本地交付完成后的新阶段，不改变 M0–M6 的历史状态；完整计划与新合同见 [`t7-official-plugin.md`](./t7-official-plugin.md)。
+
+```mermaid
+flowchart LR
+  T71["T7.1 官方插件纵切片"] --> T72["T7.2 配置与连接"]
+  T71 --> T73["T7.3 PowerShell 7 与审批"]
+  T71 --> T75["T7.5 旧会话导入"]
+  T72 --> T74["T7.4 能力兼容"]
+  T73 --> T74
+  T75 --> T74
+  T74 --> T76["T7.6 包安装与真实验收"]
+```
+
+- T7.1 先冻结 settings namespace、credential key、model identity、增量 patch 与 client bundle 边界。
+- 冻结后 T7.2、T7.3、T7.5 可按不重叠文件 ownership 并行；共享 package/lock、官方 web profile 组合和集成测试由编排 owner 统一处理。
+- T7.4 必须使用 T7.2/T7.3/T7.5 的真实组合，逐项证明官方功能和所选模型路由独立性。
+- T7.6 只接受从新包安装的证据；不得改写旧 `.release/deepseek-web-harness-e09baf0` 或用户现有安装。

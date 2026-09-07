@@ -4,7 +4,7 @@
 >
 > **Tracking mode**: `LOCAL_ONLY`（尚未创建 GitHub Issue、Milestone 或 PR）
 >
-> **Started / last updated**: 2026-09-04 / 2026-09-06
+> **Started / last updated**: 2026-09-04 / 2026-09-07
 >
 > **Active repository**: `XVSHIFU/deepseek-pp`
 >
@@ -147,6 +147,21 @@
 10. 编排者只在代码、测试和证据都收口后更新任务状态；提交应目的单一、可独立审阅，未获授权不得创建 GitHub Issue/PR。
 
 ## 当前状态与下一步
+
+### T7 官方增量插件阶段（2026-09-07）
+
+已确认的新阶段计划见 [`docs/plan/t7-official-plugin.md`](../plan/t7-official-plugin.md)。本阶段从零开始收集证据：旧 standalone M0–M6、262 个测试文件 / 2467 passed + 1 Linux-only skip、旧真实网页会话和 `.release/deepseek-web-harness-e09baf0` 均只保留为历史基线，不记作 T7 通过。
+
+| Task | 当前状态 | 当前证据 / 下一退出条件 |
+|:--|:--|:--|
+| T7.1 官方插件纵切片 | `in_progress` | 计划已冻结；待新独立包通过官方 `web` profile 安装、动态设置页和模型注册定向测试 |
+| T7.2 配置与连接 | `not_started` | 待 T7.1 公共接口冻结后开始 |
+| T7.3 PowerShell 7 与审批 | `not_started` | 待 T7.1 公共接口冻结后开始 |
+| T7.4 能力兼容 | `not_started` | 待 T7.2/T7.3/T7.5 汇合 |
+| T7.5 旧会话导入 | `not_started` | 待 T7.1 公共接口冻结后开始 |
+| T7.6 包与真实验收 | `not_started` | 待 T7.2–T7.5 完成 |
+
+T7 只新增官方 DSH 增量插件；旧 `packages/dsh-web-agent-bundle` standalone policy（包括禁止 settings/credentials 写入）不被悄悄放宽。用户现有 `%LOCALAPPDATA%\DeepSeekWebAgent` `0a66c3a`、配对和旧交付保持不变。当前实现顺序是先完成 T7.1，再按文件 ownership 并行 T7.2/T7.3/T7.5；不得用旧门禁或 fake 证据冒充新插件验收。
 
 **本轮工作（2026-09-06）**：用户授权收尾后，`web_stage_reconnect` 完成全质量子门禁及 Windows 测试夹具修正，`web_stage_surface` 完成最终候选三端构建与裸首装验证，`web_stage_terminal_fix` 完成简明用户文档和两处 Shell 测试兼容修正；编排修复裸首装依赖时机、执行真实网页验收并收口。旧候选、测试日志及 Ubuntu 配置保留。未替用户升级安装、替换扩展或更改配对；通过现有产品入口只新增了自有临时工作区的验收会话，没有读取或修改 `cc-learning` 文件。
 

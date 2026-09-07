@@ -96,3 +96,9 @@ Broker 只监听 IPv4 回环地址。配对凭证使用高熵随机值，放在 
 - 不重写 DSH 或 Pi 的 Harness 核心。
 - 不为未来的其他 Agent/浏览器/远程访问预先抽象通用平台。
 - 不把审计、发布包装、PR #568 或无关重构放进首个可运行闭环。
+
+## 2026-09-07 官方增量插件阶段补充
+
+已完成的 standalone bundle/profile 继续按原合同保留。新的 T7 阶段采用可安装到官方 `web` profile 的独立增量插件，并通过官方 client-module 扩展点提供设置卡；它不得把 standalone 的完整 Cordis tree 叠加到官方 profile，也不得重复注册 loop、session、tools 或 approval。
+
+T7 可在自己的 settings namespace 和受保护 credential storage 中持久化连接配置，并可选组合官方 PowerShell 7 与审批能力。该授权仅适用于新的官方增量插件：不得借此解除旧 `bin/web-app-policy.mjs` 对 settings/credentials 写入的限制，也不得改变旧交付的工作区、provider 或工具策略。完整任务和验收边界见 [`docs/plan/t7-official-plugin.md`](../plan/t7-official-plugin.md)。

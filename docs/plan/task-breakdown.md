@@ -361,3 +361,7 @@ T5.1 至 T5.4 合并后执行一次 `npm run compile && npm test`，并重跑 T4
 - **MCP Sampling**：仅当 DeepSeek++ 成为可验证的 Sampling client，且其 session/cancel/recovery 语义满足本计划后评估；不能退化为把本地工具交给网页。
 - **多网页会话并发**：需要独立 conversation lease、调度、公平性和 rate-limit 证据；P0 subagent 只串行。
 - **Harness core 上游增强**：只有公开扩展面确实无法表达需求时，才在 `XVSHIFU/deepseek-harness` topic branch 提交最小上游 PR；产品不得长期维护 core fork。
+
+## 13. T7 官方插件化接入与 Windows 原生命令
+
+2026-09-07 起，新增 T7.1–T7.6 作为旧 standalone 交付之后的独立阶段。其完整目标、合同、文件所有权、依赖、验证和交付边界见 [`t7-official-plugin.md`](./t7-official-plugin.md)。旧任务及验收历史不删除、不改名，也不作为新插件已通过的证据。

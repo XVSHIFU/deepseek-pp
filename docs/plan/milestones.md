@@ -75,3 +75,16 @@ PR #568 不属于 M0-M5 的关键路径，也不阻塞 Broker、Adapter、工具
 - Cookie/网页登录态导出到 Host。
 - 多网页会话并发 subagent。
 - DeepSeek Harness core 产品私有 fork。
+
+## 6. T7 新阶段里程碑
+
+2026-09-07 新增的官方 DSH 增量插件阶段单独跟踪为 T7.1–T7.6，详见 [`t7-official-plugin.md`](./t7-official-plugin.md)。它不把上表旧 standalone M0–M7 的历史证据迁移为新插件证据；新阶段初始没有 verified 项。
+
+| Stage | 可观察结果 | 状态 |
+|:--|:--|:--|
+| T7.1 | 官方 `web` profile 增量安装，未配对也能打开官方 Web 与插件设置卡，网页模型可选择 | `in_progress` |
+| T7.2 | 设置/credential 持久化、配对和重启恢复 | `not_started` |
+| T7.3 | PowerShell 7 默认逐条官方审批，自动执行仅显式开启 | `not_started` |
+| T7.4 | tools/Skills/subagent/压缩/恢复及无 fallback 的新组合证据 | `not_started` |
+| T7.5 | completed 会话显式、事务化、无覆盖导入 | `not_started` |
+| T7.6 | 新包干净安装、官方 Web 真实验收与简短交付说明 | `not_started` |
