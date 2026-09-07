@@ -20,6 +20,8 @@ export const DeepSeekWebOfficialSettings: z<DeepSeekWebOfficialSettings> = z.obj
   chromiumExtensionId: z.string().default(""),
   firefoxExtensionOrigin: z.string().default(""),
   port: z.number().step(1).min(1).max(65_535).default(DEFAULT_DEEPSEEK_WEB_BROKER_PORT),
+  webModelMode: z.union(["default", "expert"]).default("default"),
+  thinkingEnabled: z.boolean().default(false),
   makeDefaultForNewSessions: z.boolean().default(false),
   windowsCommandsEnabled: z.boolean().default(false),
   windowsApprovalPolicy: z.union(["ask", "auto"]).default("ask"),

@@ -374,7 +374,19 @@ describe("official DeepSeek Web settings and connection", () => {
     let slotCleanup: unknown;
     const mount = vi.fn(async () => unmount);
     const injectedDispose = vi.fn(async () => undefined);
+    const unregisterLocale = vi.fn();
+    const dictionaries = new Map<string, Record<string, string>>();
     const clientContext: Record<string, unknown> = {
+      effect(register: () => unknown) { register(); },
+      locale: {
+        register: (_namespace: string, values: { zh: Record<string, string> }) => {
+          dictionaries.set("zh", values.zh);
+          return unregisterLocale;
+        },
+        bind: () => (key: string) => dictionaries.get("zh")?.[key] ?? key,
+        getSnapshot: () => ({ active: "zh", revision: 0 }),
+        subscribe: () => () => undefined,
+      },
       remote: {
         $mount: mount,
         credentials: {

@@ -38,7 +38,7 @@ await writeFile(target, wrapped, "utf8");
 await writeFile(resolve(packageRoot, "lib", "client.d.ts"), [
   'import type { Context } from "@deepseek-ai/cordis";',
   "",
-  'export declare const inject: readonly ["slots", "settingsScope", "remote"];',
+  'export declare const inject: readonly ["slots", "locale", "settingsScope", "remote"];',
   "export declare function apply(ctx: Context): Promise<() => Promise<void>>;",
   "",
 ].join("\n"), "utf8");

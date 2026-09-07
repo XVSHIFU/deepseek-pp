@@ -64,7 +64,7 @@ describe("official DeepSeek Web incremental plugin", () => {
     expect(bundle).toContain('name: "settings.plugin.item"');
     expect(bundle).toContain("key: DEEPSEEK_WEB_SETTINGS_NAMESPACE");
     expect([...bundle.matchAll(/require\("([^"]+)"\)/gu)].map((match) => match[1])).toEqual(["react"]);
-    expect(clientTypes).toContain('readonly ["slots", "settingsScope", "remote"]');
+    expect(clientTypes).toContain('readonly ["slots", "locale", "settingsScope", "remote"]');
     expect(clientTypes).toContain("Promise<() => Promise<void>>");
 
     let loaded: ClientRegistration | undefined;
@@ -83,7 +83,18 @@ describe("official DeepSeek Web incremental plugin", () => {
     expect(typeof client?.apply).toBe("function");
     const unmount = async () => undefined;
     let injectedDisposed = false;
+    const dictionaries = new Map<string, Record<string, string>>();
     const clientContext: Record<string, unknown> = {
+      effect(register: () => unknown) { register(); },
+      locale: {
+        register: (_namespace: string, values: { zh: Record<string, string> }) => {
+          dictionaries.set("zh", values.zh);
+          return () => undefined;
+        },
+        bind: () => (key: string) => dictionaries.get("zh")?.[key] ?? key,
+        getSnapshot: () => ({ active: "zh", revision: 0 }),
+        subscribe: () => () => undefined,
+      },
       remote: {
         $mount: async () => unmount,
         credentials: {
@@ -127,6 +138,7 @@ describe("official DeepSeek Web incremental plugin", () => {
     clientContext.inject = (dependencies: readonly string[], callback: (ctx: unknown) => void) => {
       expect(dependencies).toEqual([
         "slots",
+        "locale",
         "settingsScope",
         "remote.credentials",
         "remote.deepseekWebConnection",
@@ -246,6 +258,8 @@ describe("official DeepSeek Web incremental plugin", () => {
         chromiumExtensionId: "",
         firefoxExtensionOrigin: "",
         port: 43_123,
+        webModelMode: "default",
+        thinkingEnabled: false,
         makeDefaultForNewSessions: false,
         windowsCommandsEnabled: false,
         windowsApprovalPolicy: "ask",

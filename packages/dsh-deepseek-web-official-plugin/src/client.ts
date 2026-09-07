@@ -17,10 +17,130 @@ import {
   type CompletedSessionImportRequest,
 } from "./session-import-contract.ts";
 
+const DEEPSEEK_WEB_SETTINGS_LOCALE_NAMESPACE = "settings.deepseek-web";
+
+const settingsLocales = {
+  zh: {
+    title: "DeepSeek 网页模型",
+    description: "通过浏览器扩展连接已登录的 DeepSeek 网页会话。",
+    expand: "展开",
+    collapse: "收起",
+    unsaved: "未保存",
+    readOnly: "这些设置当前为只读。",
+    unavailable: "DeepSeek 网页模型设置当前不可用。",
+    connectionUnavailable: "连接状态不可用",
+    connection: "连接：{phase}",
+    changePending: "（更改等待应用）",
+    phaseUnconfigured: "未配置",
+    phaseWaiting: "等待浏览器",
+    phaseConnected: "已连接",
+    phaseBusy: "忙碌",
+    phaseError: "错误",
+    browser: "浏览器",
+    chromiumExtensionId: "Chrome / Edge 扩展 ID",
+    firefoxExtensionOrigin: "Firefox 扩展来源",
+    port: "回环端口",
+    modelMode: "网页模型模式",
+    modelDefault: "默认模式",
+    modelExpert: "专家模式",
+    thinking: "为新会话启用思考",
+    makeDefault: "将 DeepSeek 网页模型设为以后新会话的默认模型",
+    windowsTitle: "Windows PowerShell 7",
+    windowsUnavailable: "PowerShell 状态不可用。",
+    windowsDisabled: "新会话的原生 Windows 命令已禁用。",
+    windowsReady: "PowerShell {major} 已就绪：{executable}",
+    windowsEnable: "为新会话启用原生 Windows 命令",
+    windowsApproval: "新会话默认批准方式",
+    windowsAsk: "每条命令都询问",
+    windowsAuto: "自动运行（明确选择）",
+    windowsWarning: "命令以当前 Windows 用户身份运行；工作目录不是沙箱。",
+    powershellExecutable: "PowerShell 7 可执行文件",
+    save: "保存设置",
+    saving: "正在保存…",
+    discard: "放弃更改",
+    conflict: "设置已在另一个客户端中更改。请放弃当前草稿后再编辑。",
+    tokenConfigured: "配对令牌已保存（出于安全原因不能再次读取）",
+    tokenMissing: "尚未配置配对令牌",
+    generateToken: "生成配对令牌",
+    repair: "重新配对",
+    reconnect: "重新连接",
+    newTokenLabel: "新配对令牌",
+    copy: "复制",
+    tokenOnce: "请立即复制此令牌并粘贴到浏览器扩展。保存后无法再次查看。",
+    importTitle: "导入已完成的独立会话",
+    importDescription: "已完成的根会话及其已完成的子会话会作为一组验证并提交。源记录会保留；导入的会话不会继承 Windows 命令权限。",
+    importHome: "旧版 DeepSeek Web Agent 安装目录",
+    importRoot: "已完成的根会话 ID",
+    importStopped: "我已停止所有使用旧安装的进程",
+    importAction: "导入已完成会话",
+    importing: "正在导入…",
+    imported: "已导入 {imported} 个；已有相同记录 {idempotent} 个。",
+    importFailed: "会话导入失败。",
+  },
+  en: {
+    title: "DeepSeek Web model",
+    description: "Connect the signed-in DeepSeek web session through the browser extension.",
+    expand: "Expand",
+    collapse: "Collapse",
+    unsaved: "Unsaved",
+    readOnly: "These settings are currently read-only.",
+    unavailable: "DeepSeek Web model settings are unavailable.",
+    connectionUnavailable: "Connection status unavailable",
+    connection: "Connection: {phase}",
+    changePending: " (change pending)",
+    phaseUnconfigured: "unconfigured",
+    phaseWaiting: "waiting for browser",
+    phaseConnected: "connected",
+    phaseBusy: "busy",
+    phaseError: "error",
+    browser: "Browser",
+    chromiumExtensionId: "Chrome / Edge extension ID",
+    firefoxExtensionOrigin: "Firefox extension origin",
+    port: "Loopback port",
+    modelMode: "Web model mode",
+    modelDefault: "Default",
+    modelExpert: "Expert",
+    thinking: "Enable thinking for new sessions",
+    makeDefault: "Set DeepSeek Web as the default for future new sessions",
+    windowsTitle: "Windows PowerShell 7",
+    windowsUnavailable: "PowerShell status unavailable.",
+    windowsDisabled: "Native Windows commands are disabled for new sessions.",
+    windowsReady: "PowerShell {major} ready: {executable}",
+    windowsEnable: "Enable native Windows commands for new sessions",
+    windowsApproval: "Default approval for new sessions",
+    windowsAsk: "Ask for every command",
+    windowsAuto: "Run automatically (explicit opt-in)",
+    windowsWarning: "Commands run as the current Windows user; cwd is not a sandbox.",
+    powershellExecutable: "PowerShell 7 executable",
+    save: "Save settings",
+    saving: "Saving…",
+    discard: "Discard",
+    conflict: "Settings changed in another client. Discard this draft before editing again.",
+    tokenConfigured: "Pairing token saved (it cannot be read back for security)",
+    tokenMissing: "No pairing token configured",
+    generateToken: "Generate pairing token",
+    repair: "Re-pair",
+    reconnect: "Reconnect",
+    newTokenLabel: "New pairing token",
+    copy: "Copy",
+    tokenOnce: "Copy this token now and paste it into the browser extension. It cannot be viewed again after saving.",
+    importTitle: "Import completed standalone session",
+    importDescription: "The completed root and its completed child sessions are validated and committed as one group. Source records are retained; imported sessions never inherit Windows command permission.",
+    importHome: "Old DeepSeek Web Agent installation directory",
+    importRoot: "Completed root session ID",
+    importStopped: "I have stopped every process using the old installation",
+    importAction: "Import completed session",
+    importing: "Importing…",
+    imported: "Imported {imported}; already identical {idempotent}.",
+    importFailed: "Session import failed.",
+  },
+} as const;
+
 export const inject = ["remote"] as const;
 
 export const DEEPSEEK_WEB_SETTINGS_CLIENT_INJECT = [
   "slots",
+  "locale",
   "settingsScope",
   "remote.credentials",
   `remote.${DEEPSEEK_WEB_CONNECTION_NAMESPACE}`,
@@ -74,6 +194,8 @@ export interface DeepSeekWebSettingsDraft {
   readonly chromiumExtensionId: string;
   readonly firefoxExtensionOrigin: string;
   readonly port: string;
+  readonly webModelMode: "default" | "expert";
+  readonly thinkingEnabled: boolean;
   readonly makeDefaultForNewSessions: boolean;
   readonly windowsCommandsEnabled: boolean;
   readonly windowsApprovalPolicy: "ask" | "auto";
@@ -89,6 +211,7 @@ export interface DeepSeekWebClientSnapshot {
   readonly conflicted: boolean;
   readonly invalid: boolean;
   readonly loading: boolean;
+  readonly saving: boolean;
   readonly error: string | null;
 }
 
@@ -207,6 +330,8 @@ export class DeepSeekWebClientController {
       chromiumExtensionId: draft.chromiumExtensionId,
       firefoxExtensionOrigin: draft.firefoxExtensionOrigin,
       port: Number(draft.port),
+      webModelMode: draft.webModelMode,
+      thinkingEnabled: draft.thinkingEnabled,
       makeDefaultForNewSessions: draft.makeDefaultForNewSessions,
       windowsCommandsEnabled: draft.windowsCommandsEnabled,
       windowsApprovalPolicy: draft.windowsApprovalPolicy,
@@ -218,6 +343,7 @@ export class DeepSeekWebClientController {
       value: values[field],
     }));
     this.savingSettings = true;
+    this.publish();
     try {
       await this.options.settings.mutate(ops, this.draftRevision);
       this.savingSettings = false;
@@ -329,6 +455,7 @@ export class DeepSeekWebClientController {
       conflicted: this.settingsConflict,
       invalid: draft !== undefined && !validDraft(draft),
       loading: this.loading,
+      saving: this.savingSettings,
       error: this.error,
     };
   }
@@ -343,6 +470,8 @@ export class DeepSeekWebClientController {
       chromiumExtensionId: String(read("chromiumExtensionId")),
       firefoxExtensionOrigin: String(read("firefoxExtensionOrigin")),
       port: String(read("port")),
+      webModelMode: read("webModelMode") === "expert" ? "expert" : "default",
+      thinkingEnabled: read("thinkingEnabled") === true,
       makeDefaultForNewSessions: read("makeDefaultForNewSessions") === true,
       windowsCommandsEnabled: read("windowsCommandsEnabled") === true,
       windowsApprovalPolicy: read("windowsApprovalPolicy") === "auto" ? "auto" : "ask",
@@ -373,8 +502,18 @@ export class DeepSeekWebClientController {
   }
 }
 
-function DeepSeekWebSettingsCard({ controller }: { readonly controller: DeepSeekWebClientController }): React.ReactElement {
+function DeepSeekWebSettingsCard({
+  controller,
+  locale,
+}: {
+  readonly controller: DeepSeekWebClientController;
+  readonly locale: LocaleService;
+}): React.ReactElement | null {
   const snapshot = React.useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
+  React.useSyncExternalStore(locale.subscribe, locale.getSnapshot, locale.getSnapshot);
+  const t = locale.bind(DEEPSEEK_WEB_SETTINGS_LOCALE_NAMESPACE);
+  const [open, setOpen] = React.useState(false);
+  const saveStarted = React.useRef(false);
   const [pairingTokenValue, setPairingTokenValue] = React.useState<string | null>(null);
   const [importSourceHome, setImportSourceHome] = React.useState("");
   const [importRootSessionId, setImportRootSessionId] = React.useState("");
@@ -384,25 +523,53 @@ function DeepSeekWebSettingsCard({ controller }: { readonly controller: DeepSeek
   React.useEffect(() => {
     void controller.refresh();
   }, [controller]);
+  React.useEffect(() => {
+    if (snapshot.saving) {
+      saveStarted.current = true;
+      return;
+    }
+    if (!saveStarted.current) return;
+    saveStarted.current = false;
+    if (!snapshot.dirty && snapshot.error === null) setOpen(false);
+  }, [snapshot.dirty, snapshot.error, snapshot.saving]);
   const settings = snapshot.draft;
-  if (settings === undefined) {
-    return React.createElement("section", cardProps(), "DeepSeek Web settings are unavailable.");
-  }
+  if (settings === undefined) return null;
   const disabled = !snapshot.settings.writable;
   const field = (label: string, input: React.ReactElement): React.ReactElement =>
     React.createElement("label", { style: fieldStyle }, label, input);
   const update = (name: keyof DeepSeekWebOfficialSettings, value: unknown): void => controller.editSetting(name, value);
   const createToken = (replace: boolean): void => {
-    void (replace ? controller.rePair() : controller.pair()).then(setPairingTokenValue);
+    void (replace ? controller.rePair() : controller.pair()).then(setPairingTokenValue, () => undefined);
   };
+  const title = t("title");
+  const status = snapshot.connection === undefined
+    ? t("connectionUnavailable")
+    : formatText(t("connection"), { phase: connectionPhaseText(snapshot.connection.phase, t) }) +
+      (snapshot.connection.pendingReconfigure ? t("changePending") : "");
+  const header = React.createElement("button", {
+    type: "button",
+    style: cardHeaderStyle,
+    "aria-expanded": open,
+    "aria-label": `${t(open ? "collapse" : "expand")}: ${title}`,
+    onClick: () => setOpen(!open),
+  },
+  React.createElement("span", { style: { display: "grid", gap: "3px", textAlign: "left" } },
+    React.createElement("span", { style: { fontWeight: 650 } }, title),
+    React.createElement("span", { style: mutedTextStyle }, t("description")),
+    React.createElement("span", { style: statusTextStyle }, status)),
+  snapshot.dirty ? React.createElement("span", { style: pendingStyle }, t("unsaved")) : null,
+  React.createElement("span", {
+    "aria-hidden": true,
+    style: { transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 120ms ease" },
+  }, "⌄"));
+  if (!open) return React.createElement("li", cardProps(false), header);
   return React.createElement(
-    "section",
-    cardProps(),
-    React.createElement("h3", { style: { marginTop: 0 } }, "DeepSeek Web"),
-    React.createElement("p", null, snapshot.connection === undefined
-      ? "Connection status unavailable"
-      : `Connection: ${snapshot.connection.phase}${snapshot.connection.pendingReconfigure ? " (change pending)" : ""}`),
-    field("Browser", React.createElement("select", {
+    "li",
+    cardProps(true),
+    header,
+    React.createElement("div", { style: cardBodyStyle },
+    disabled ? React.createElement("p", { role: "status", style: warningStyle }, t("readOnly")) : null,
+    field(t("browser"), React.createElement("select", {
       value: settings.browser,
       disabled,
       onChange: (event: React.ChangeEvent<HTMLSelectElement>) => update("browser", event.currentTarget.value),
@@ -410,77 +577,78 @@ function DeepSeekWebSettingsCard({ controller }: { readonly controller: DeepSeek
     React.createElement("option", { value: "edge" }, "Edge"),
     React.createElement("option", { value: "firefox" }, "Firefox"))),
     settings.browser === "firefox"
-      ? field("Firefox extension origin", React.createElement("input", {
+      ? field(t("firefoxExtensionOrigin"), React.createElement("input", {
         value: settings.firefoxExtensionOrigin,
         disabled,
         placeholder: "moz-extension://…",
         onChange: (event: React.ChangeEvent<HTMLInputElement>) => update("firefoxExtensionOrigin", event.currentTarget.value),
       }))
-      : field("Chrome/Edge extension ID", React.createElement("input", {
+      : field(t("chromiumExtensionId"), React.createElement("input", {
         value: settings.chromiumExtensionId,
         disabled,
         onChange: (event: React.ChangeEvent<HTMLInputElement>) => update("chromiumExtensionId", event.currentTarget.value),
       })),
-    field("Loopback port", React.createElement("input", {
+    field(t("port"), React.createElement("input", {
       type: "number", min: 1, max: 65_535, value: settings.port, disabled,
       onChange: (event: React.ChangeEvent<HTMLInputElement>) => update("port", event.currentTarget.value),
     })),
-    field("Set DeepSeek Web as the default for future new sessions", React.createElement("input", {
+    field(t("modelMode"), React.createElement("select", {
+      value: settings.webModelMode,
+      disabled,
+      onChange: (event: React.ChangeEvent<HTMLSelectElement>) => update("webModelMode", event.currentTarget.value),
+    }, React.createElement("option", { value: "default" }, t("modelDefault")),
+    React.createElement("option", { value: "expert" }, t("modelExpert")))),
+    field(t("thinking"), React.createElement("input", {
+      type: "checkbox", checked: settings.thinkingEnabled, disabled,
+      onChange: (event: React.ChangeEvent<HTMLInputElement>) => update("thinkingEnabled", event.currentTarget.checked),
+    })),
+    field(t("makeDefault"), React.createElement("input", {
       type: "checkbox", checked: settings.makeDefaultForNewSessions, disabled,
       onChange: (event: React.ChangeEvent<HTMLInputElement>) => update("makeDefaultForNewSessions", event.currentTarget.checked),
     })),
-    React.createElement("h4", null, "Windows PowerShell 7"),
-    React.createElement("p", null, windowsStatusText(snapshot.connection)),
-    field("Enable native Windows commands for new sessions", React.createElement("input", {
+    React.createElement("h4", null, t("windowsTitle")),
+    React.createElement("p", null, windowsStatusText(snapshot.connection, t)),
+    field(t("windowsEnable"), React.createElement("input", {
       type: "checkbox", checked: settings.windowsCommandsEnabled, disabled,
       onChange: (event: React.ChangeEvent<HTMLInputElement>) => update("windowsCommandsEnabled", event.currentTarget.checked),
     })),
-    field("Default approval for new sessions", React.createElement("select", {
+    field(t("windowsApproval"), React.createElement("select", {
       value: settings.windowsApprovalPolicy,
       disabled: disabled || !settings.windowsCommandsEnabled,
       onChange: (event: React.ChangeEvent<HTMLSelectElement>) => update("windowsApprovalPolicy", event.currentTarget.value),
-    }, React.createElement("option", { value: "ask" }, "Ask for every command"),
-    React.createElement("option", { value: "auto" }, "Run automatically (explicit opt-in)"))),
-    React.createElement("p", null,
-      "Commands run as the current Windows user; cwd is not a sandbox."),
-    field("PowerShell 7 executable", React.createElement("input", {
+    }, React.createElement("option", { value: "ask" }, t("windowsAsk")),
+    React.createElement("option", { value: "auto" }, t("windowsAuto")))),
+    React.createElement("p", null, t("windowsWarning")),
+    field(t("powershellExecutable"), React.createElement("input", {
       value: settings.powerShellExecutable,
       disabled,
       placeholder: "pwsh or C:\\Program Files\\PowerShell\\7\\pwsh.exe",
       onChange: (event: React.ChangeEvent<HTMLInputElement>) => update("powerShellExecutable", event.currentTarget.value),
     })),
-    React.createElement("button", {
-      type: "button", disabled: disabled || !snapshot.dirty || snapshot.invalid || snapshot.conflicted,
-      onClick: () => { void controller.saveSettings().catch(() => undefined); },
-    }, "Save settings"),
-    React.createElement("button", {
-      type: "button", disabled: !snapshot.dirty, onClick: () => controller.discardSettings(),
-    }, "Discard"),
     snapshot.conflicted ? React.createElement("p", { role: "status" },
-      "Settings changed in another client. Discard this draft before editing again.") : null,
-    React.createElement("p", null, snapshot.credential.configured ? "Pairing token configured" : "No pairing token configured"),
-    React.createElement("button", { type: "button", disabled: !snapshot.credential.writable || snapshot.credential.configured, onClick: () => createToken(false) }, "Generate pairing token"),
-    React.createElement("button", { type: "button", disabled: !snapshot.credential.writable, onClick: () => createToken(true) }, "Re-pair"),
-    React.createElement("button", { type: "button", onClick: () => { void controller.reconnect(); } }, "Reconnect"),
+      t("conflict")) : null,
+    React.createElement("p", null, snapshot.credential.configured ? t("tokenConfigured") : t("tokenMissing")),
+    React.createElement("button", { type: "button", disabled: !snapshot.credential.writable || snapshot.credential.configured, onClick: () => createToken(false) }, t("generateToken")),
+    React.createElement("button", { type: "button", disabled: !snapshot.credential.writable, onClick: () => createToken(true) }, t("repair")),
+    React.createElement("button", { type: "button", onClick: () => { void controller.reconnect().catch(() => undefined); } }, t("reconnect")),
     pairingTokenValue === null ? null : React.createElement("div", null,
-      React.createElement("output", { "aria-label": "New pairing token" }, pairingTokenValue),
-      React.createElement("button", { type: "button", onClick: () => { void globalThis.navigator?.clipboard?.writeText(pairingTokenValue); } }, "Copy"),
-      React.createElement("p", null, "Copy this token now. It cannot be read back later.")),
-    React.createElement("h4", null, "Import completed standalone session"),
-    React.createElement("p", null,
-      "The completed root and its completed child sessions are validated and committed as one group. Source records are retained; imported sessions never inherit Windows command permission."),
-    field("Old DeepSeek Web Agent installation directory", React.createElement("input", {
+      React.createElement("output", { "aria-label": t("newTokenLabel") }, pairingTokenValue),
+      React.createElement("button", { type: "button", onClick: () => { void globalThis.navigator?.clipboard?.writeText(pairingTokenValue); } }, t("copy")),
+      React.createElement("p", { style: warningStyle }, t("tokenOnce"))),
+    React.createElement("h4", null, t("importTitle")),
+    React.createElement("p", null, t("importDescription")),
+    field(t("importHome"), React.createElement("input", {
       value: importSourceHome,
       disabled: importing,
       placeholder: "C:\\Users\\you\\AppData\\Local\\DeepSeekWebAgent",
       onChange: (event: React.ChangeEvent<HTMLInputElement>) => setImportSourceHome(event.currentTarget.value),
     })),
-    field("Completed root session ID", React.createElement("input", {
+    field(t("importRoot"), React.createElement("input", {
       value: importRootSessionId,
       disabled: importing,
       onChange: (event: React.ChangeEvent<HTMLInputElement>) => setImportRootSessionId(event.currentTarget.value),
     })),
-    field("I have stopped every process using the old installation", React.createElement("input", {
+    field(t("importStopped"), React.createElement("input", {
       type: "checkbox",
       checked: sourceProcessesStopped,
       disabled: importing,
@@ -497,14 +665,25 @@ function DeepSeekWebSettingsCard({ controller }: { readonly controller: DeepSeek
           rootSessionId: importRootSessionId.trim(),
           sourceProcessesStopped: true,
         }).then((receipt) => {
-          setImportStatus(`Imported ${receipt.imported}; already identical ${receipt.idempotent}.`);
+          setImportStatus(formatText(t("imported"), { imported: receipt.imported, idempotent: receipt.idempotent }));
         }, (error: unknown) => {
-          setImportStatus(error instanceof Error ? error.message : "Session import failed.");
+          setImportStatus(error instanceof Error ? error.message : t("importFailed"));
         }).finally(() => setImporting(false));
       },
-    }, importing ? "Importing…" : "Import completed session"),
+    }, importing ? t("importing") : t("importAction")),
     importStatus === null ? null : React.createElement("p", { role: "status" }, importStatus),
     snapshot.error === null ? null : React.createElement("p", { role: "alert" }, snapshot.error),
+    React.createElement("div", { style: cardFooterStyle },
+      React.createElement("button", {
+        type: "button", disabled: !snapshot.dirty || snapshot.saving,
+        onClick: () => controller.discardSettings(),
+      }, t("discard")),
+      React.createElement("button", {
+        type: "button",
+        disabled: disabled || !snapshot.dirty || snapshot.invalid || snapshot.conflicted || snapshot.saving,
+        onClick: () => { void controller.saveSettings().catch(() => undefined); },
+      }, snapshot.saving ? t("saving") : t("save"))),
+    ),
   );
 }
 
@@ -513,6 +692,10 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
   const unmountRemote = await client.remote.$mount(DEEPSEEK_WEB_CLIENT_REMOTE_CONTRIBUTION);
   const settingsFiber = client.inject(DEEPSEEK_WEB_SETTINGS_CLIENT_INJECT, (injectedCtx) => {
     const injected = injectedCtx as Context & ClientContext;
+    injected.effect(
+      () => injected.locale.register(DEEPSEEK_WEB_SETTINGS_LOCALE_NAMESPACE, settingsLocales),
+      "deepseek-web: settings dictionaries",
+    );
     injected.slots.inject("settings.plugin.item", () => {
       const settings = injected.settingsScope.bind<DeepSeekWebOfficialSettings>({
       namespace: DEEPSEEK_WEB_SETTINGS_NAMESPACE,
@@ -528,7 +711,7 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
       const unregister = injected.slots.register({
       name: "settings.plugin.item",
       key: DEEPSEEK_WEB_SETTINGS_NAMESPACE,
-    }, () => React.createElement(DeepSeekWebSettingsCard, { controller }));
+    }, () => React.createElement(DeepSeekWebSettingsCard, { controller, locale: injected.locale }));
       return () => {
         controller.dispose();
         if (typeof unregister === "function") unregister();
@@ -558,9 +741,13 @@ function decodeSettings(value: unknown): DeepSeekWebOfficialSettings | undefined
       typeof value.windowsCommandsEnabled !== "boolean" ||
       (value.windowsApprovalPolicy !== "ask" && value.windowsApprovalPolicy !== "auto")) return undefined;
   if (typeof value.powerShellExecutable !== "string") return undefined;
+  const webModelMode = value.webModelMode === undefined ? "default" : value.webModelMode;
+  const thinkingEnabled = value.thinkingEnabled === undefined ? false : value.thinkingEnabled;
+  if ((webModelMode !== "default" && webModelMode !== "expert") || typeof thinkingEnabled !== "boolean") return undefined;
   return {
     browser, chromiumExtensionId: value.chromiumExtensionId, firefoxExtensionOrigin: value.firefoxExtensionOrigin,
-    port: value.port as number, makeDefaultForNewSessions: value.makeDefaultForNewSessions,
+    port: value.port as number, webModelMode, thinkingEnabled,
+    makeDefaultForNewSessions: value.makeDefaultForNewSessions,
     windowsCommandsEnabled: value.windowsCommandsEnabled,
     windowsApprovalPolicy: value.windowsApprovalPolicy,
     powerShellExecutable: value.powerShellExecutable,
@@ -644,12 +831,27 @@ function validWindowsStatus(value: unknown): value is DeepSeekWebConnectionStatu
     Object.keys(value).every((key) => key === "kind" || key === "code" || key === "message");
 }
 
-function windowsStatusText(connection: DeepSeekWebConnectionStatus | undefined): string {
+function windowsStatusText(connection: DeepSeekWebConnectionStatus | undefined, t: Translate): string {
   const status = connection?.windows;
-  if (status === undefined) return "PowerShell status unavailable.";
-  if (status.kind === "disabled") return "Native Windows commands are disabled for new sessions.";
-  if (status.kind === "available") return `PowerShell ${status.major} ready: ${status.executable}`;
+  if (status === undefined) return t("windowsUnavailable");
+  if (status.kind === "disabled") return t("windowsDisabled");
+  if (status.kind === "available") {
+    return formatText(t("windowsReady"), { major: status.major, executable: status.executable });
+  }
   return status.message;
+}
+
+function connectionPhaseText(phase: DeepSeekWebConnectionStatus["phase"], t: Translate): string {
+  if (phase === "unconfigured") return t("phaseUnconfigured");
+  if (phase === "waiting_for_browser") return t("phaseWaiting");
+  if (phase === "connected") return t("phaseConnected");
+  if (phase === "busy") return t("phaseBusy");
+  return t("phaseError");
+}
+
+function formatText(template: string, values: Readonly<Record<string, string | number>>): string {
+  return template.replace(/\{([^}]+)\}/gu, (whole, key: string) =>
+    Object.hasOwn(values, key) ? String(values[key]) : whole);
 }
 
 function pairingToken(randomBytes: (length: number) => Uint8Array): string {
@@ -681,16 +883,42 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function cardProps(): Record<string, unknown> {
+function cardProps(open: boolean): Record<string, unknown> {
   return {
     "aria-label": "DeepSeek Web", "data-dsh-plugin-card": DEEPSEEK_WEB_SETTINGS_NAMESPACE,
-    style: { border: "1px solid var(--dsw-alias-border-l2)", borderRadius: "12px", padding: "16px" },
+    style: {
+      border: "1px solid var(--dsw-alias-border-l2)",
+      borderRadius: "12px",
+      overflow: "hidden",
+      background: open ? "var(--dsw-alias-bg-base)" : "transparent",
+      listStyle: "none",
+    },
   };
 }
 
 const fieldStyle = { display: "grid", gap: "4px", marginBlock: "12px" } as const;
+const cardHeaderStyle = {
+  alignItems: "center", background: "transparent", border: 0, cursor: "pointer", display: "grid",
+  gap: "12px", gridTemplateColumns: "minmax(0, 1fr) auto auto", padding: "16px", textAlign: "left", width: "100%",
+} as const;
+const cardBodyStyle = { borderTop: "1px solid var(--dsw-alias-border-l2)", padding: "4px 16px 16px" } as const;
+const cardFooterStyle = { display: "flex", gap: "8px", justifyContent: "flex-end", marginTop: "16px" } as const;
+const mutedTextStyle = { color: "var(--dsw-alias-label-secondary)", fontSize: "0.875rem" } as const;
+const statusTextStyle = { color: "var(--dsw-alias-label-tertiary)", fontSize: "0.8125rem" } as const;
+const pendingStyle = { color: "var(--dsw-alias-status-warning)", fontSize: "0.8125rem" } as const;
+const warningStyle = { color: "var(--dsw-alias-label-secondary)" } as const;
+
+type Translate = (key: string) => string;
+
+interface LocaleService {
+  bind(namespace: string): Translate;
+  getSnapshot(): unknown;
+  subscribe(listener: () => void): () => void;
+  register(namespace: string, dictionaries: typeof settingsLocales): () => void;
+}
 
 interface ClientContext {
+  readonly locale: LocaleService;
   readonly slots: {
     inject(name: string, register: () => unknown): void;
     register(options: { readonly name: string; readonly key: string }, component: unknown): unknown;

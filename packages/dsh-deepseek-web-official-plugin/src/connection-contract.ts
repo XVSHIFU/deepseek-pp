@@ -7,12 +7,16 @@ export const DEEPSEEK_WEB_MODEL = "current-web-session" as const;
 export const DEEPSEEK_WEB_CONNECTION_NAMESPACE = "deepseekWebConnection" as const;
 
 export type BrowserKind = "chrome" | "edge" | "firefox";
+export type DeepSeekWebModelMode = "default" | "expert";
 
 export interface DeepSeekWebOfficialSettings {
   readonly browser: BrowserKind;
   readonly chromiumExtensionId: string;
   readonly firefoxExtensionOrigin: string;
   readonly port: number;
+  /** Defaults for future DeepSeek Web session selections; absent legacy values decode deterministically. */
+  readonly webModelMode?: DeepSeekWebModelMode;
+  readonly thinkingEnabled?: boolean;
   readonly makeDefaultForNewSessions: boolean;
   readonly windowsCommandsEnabled: boolean;
   readonly windowsApprovalPolicy: "ask" | "auto";
