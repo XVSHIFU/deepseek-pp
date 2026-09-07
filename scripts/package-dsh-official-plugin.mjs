@@ -132,6 +132,9 @@ async function packPlugin(source, destination, run) {
   }
   for (const dependency of Object.keys(pkg.dependencies ?? {})) {
     if (dependency.startsWith("@deepseek-pp/")) fail("OFFICIAL_PACKAGE_PRIVATE_RUNTIME_DEPENDENCY");
+    if (dependency.startsWith("@deepseek-ai/") && dependency !== "@deepseek-ai/schemastery") {
+      fail("OFFICIAL_PACKAGE_HOST_SINGLETON_DEPENDENCY");
+    }
   }
   if (pkg.dependencies?.ws !== "8.21.0" || pkg.dependencies?.koffi !== "3.2.1") {
     fail("OFFICIAL_PACKAGE_RUNTIME_DEPENDENCY_INVALID");

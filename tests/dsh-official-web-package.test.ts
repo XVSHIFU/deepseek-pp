@@ -38,6 +38,22 @@ afterEach(async () => {
 });
 
 describe("official DSH plugin candidate package", () => {
+  it("keeps official Host singleton packages in peer dependencies", async () => {
+    const plugin = JSON.parse(await readFile(join(
+      process.cwd(), "packages", "dsh-deepseek-web-official-plugin", "package.json",
+    ), "utf8"));
+    expect(Object.keys(plugin.dependencies).filter((name) =>
+      name.startsWith("@deepseek-ai/") && name !== "@deepseek-ai/schemastery",
+    )).toEqual([]);
+    expect(Object.keys(plugin.peerDependencies)).toEqual(expect.arrayContaining([
+      "@deepseek-ai/cordis",
+      "@deepseek-ai/dsh-agent",
+      "@deepseek-ai/dsh-session",
+      "@deepseek-ai/dsh-tools",
+      "@deepseek-ai/dsh-tool-pwsh",
+    ]));
+  });
+
   it("packages one self-contained plugin, fixed budget archives and matching browser builds", async () => {
     const fixture = await createFixture();
     const receipt = await packageOfficialPlugin({
