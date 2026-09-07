@@ -9,7 +9,13 @@ import {
   type MessageContent,
 } from "@deepseek-pp/web-model-protocol";
 
-import { DEEPSEEK_WEB_MODEL, DEEPSEEK_WEB_PROVIDER } from "./constants.ts";
+import {
+  DEEPSEEK_WEB_EXPERT_MODEL,
+  DEEPSEEK_WEB_MODEL,
+  DEEPSEEK_WEB_PROVIDER,
+  DEEPSEEK_WEB_REASONING_OFF,
+  DEEPSEEK_WEB_REASONING_ON,
+} from "./constants.ts";
 
 export interface RequestIdentityFactory {
   (): string;
@@ -57,9 +63,9 @@ export function serializeGenerateRequest(
     input: { messages },
     tools,
     options: {
-      thinking_enabled: false,
+      thinking_enabled: options.reasoningEffort === DEEPSEEK_WEB_REASONING_ON,
       search_enabled: false,
-      model_type: "default" as const,
+      model_type: options.model === DEEPSEEK_WEB_EXPERT_MODEL ? "expert" as const : "default" as const,
     },
   };
   assertJsonStructure(body);
@@ -71,8 +77,8 @@ function assertRoute(options: GenerateOptions): void {
   if (options.provider !== DEEPSEEK_WEB_PROVIDER) {
     throw new LlmError("The DeepSeek Web adapter does not own this provider route.", "NO_ADAPTER");
   }
-  if (options.model !== DEEPSEEK_WEB_MODEL) {
-    throw new LlmError("The DeepSeek Web adapter only exposes the current browser session.", "UNKNOWN_MODEL");
+  if (options.model !== DEEPSEEK_WEB_MODEL && options.model !== DEEPSEEK_WEB_EXPERT_MODEL) {
+    throw new LlmError("The DeepSeek Web adapter does not expose this browser-session mode.", "UNKNOWN_MODEL");
   }
 }
 
@@ -86,8 +92,9 @@ function assertSupportedGenerationOptions(options: GenerateOptions): void {
   if (options.temperature !== undefined || unsupportedMaxTokens || options.stop !== undefined) {
     throw unsupportedOption("DeepSeek Web Protocol v1 does not support per-request generation controls.");
   }
-  if (options.reasoningEffort !== undefined) {
-    throw unsupportedOption("DeepSeek Web Protocol v1 does not accept a reasoning effort.");
+  if (options.reasoningEffort !== undefined && options.reasoningEffort !== DEEPSEEK_WEB_REASONING_OFF &&
+      options.reasoningEffort !== DEEPSEEK_WEB_REASONING_ON) {
+    throw unsupportedOption("DeepSeek Web accepts only the off and on thinking selections.");
   }
 }
 

@@ -5,6 +5,7 @@ import { Context } from "@deepseek-ai/cordis";
 import {
   LOCAL_REQUEST_BUDGET_EXCEEDED_CODE,
   LlmRuntime,
+  ReasoningEffortId,
   createUserMessage,
   type GenerateOptions,
   type StreamChunk,
@@ -21,6 +22,7 @@ import {
 import type { ModelEvent } from "@deepseek-pp/web-model-protocol";
 import * as DeepSeekWebPlugin from "@deepseek-pp/dsh-llm-deepseek-web";
 import {
+  DEEPSEEK_WEB_EXPERT_MODEL,
   DEEPSEEK_WEB_MODEL,
   DEEPSEEK_WEB_PROVIDER,
   DeepSeekWebAdapter,
@@ -34,7 +36,7 @@ afterEach(() => {
 });
 
 describe("DeepSeek Web DSH adapter", () => {
-  it("advertises one browser-backed provider/model with no retries", async () => {
+  it("advertises default and expert browser modes with independent thinking and no retries", async () => {
     const adapter = new DeepSeekWebAdapter({ broker: new FakeBroker([]) });
 
     expect(adapter.providerInfo(DEEPSEEK_WEB_PROVIDER)).toEqual({
@@ -51,9 +53,22 @@ describe("DeepSeek Web DSH adapter", () => {
         id: "current-web-session",
         inputModalities: ["text"],
       }),
+      expect.objectContaining({
+        provider: "deepseek-web",
+        id: "current-web-session-expert",
+        inputModalities: ["text"],
+      }),
     ]);
     await expect(adapter.resolveModel(DEEPSEEK_WEB_PROVIDER, DEEPSEEK_WEB_MODEL)).resolves.toMatchObject({
       context: { contextWindow: 128_000 },
+      reasoning: {
+        efforts: [{ id: "off" }, { id: "on" }],
+        defaultEffort: "off",
+      },
+    });
+    await expect(adapter.resolveModel(DEEPSEEK_WEB_PROVIDER, DEEPSEEK_WEB_EXPERT_MODEL)).resolves.toMatchObject({
+      id: "current-web-session-expert",
+      reasoning: { defaultEffort: "off" },
     });
     await expect(adapter.listModels("other")).rejects.toMatchObject({ code: "NO_ADAPTER" });
     await expect(adapter.resolveModel("other", DEEPSEEK_WEB_MODEL)).rejects.toMatchObject({ code: "NO_ADAPTER" });
@@ -108,6 +123,19 @@ describe("DeepSeek Web DSH adapter", () => {
     ];
     for (const candidate of changed) expect(serialize(candidate).request_digest).not.toBe(original.request_digest);
 
+    const expertThinking = serialize({
+      ...base,
+      model: DEEPSEEK_WEB_EXPERT_MODEL,
+      reasoningEffort: ReasoningEffortId("on"),
+    });
+    expect(expertThinking.model).toEqual({ provider: "deepseek-web", model_id: "current-web-session" });
+    expect(expertThinking.options).toEqual({
+      thinking_enabled: true,
+      search_enabled: false,
+      model_type: "expert",
+    });
+    expect(expertThinking.request_digest).not.toBe(original.request_digest);
+
     const reordered = generateOptions({
       system: base.system,
       tools: [{
@@ -145,6 +173,32 @@ describe("DeepSeek Web DSH adapter", () => {
     ]);
     expect(broker.requests).toHaveLength(1);
     expect(JSON.stringify(chunks)).not.toContain("not durable");
+  });
+
+  it("sends thinking only to the ephemeral sink and never to durable stream chunks", async () => {
+    const reasoning: unknown[] = [];
+    const broker = new FakeBroker([
+      { type: "reasoning_delta", text: "private thought", retention: "ephemeral" },
+      { type: "text_delta", text: "answer" },
+      { type: "completed", finish_reason: "stop" },
+    ]);
+    const adapter = new DeepSeekWebAdapter({
+      broker,
+      createRequestId: () => "request-reasoning",
+      onReasoningEvent: (event) => reasoning.push(event),
+    });
+    const chunks = await collect(adapter.stream(generateOptions({
+      model: DEEPSEEK_WEB_EXPERT_MODEL,
+      reasoningEffort: ReasoningEffortId("on"),
+    })));
+
+    expect(reasoning).toEqual([
+      { phase: "start", sessionId: "session-a", requestId: "request-reasoning" },
+      { phase: "delta", sessionId: "session-a", requestId: "request-reasoning", text: "private thought" },
+      { phase: "end", sessionId: "session-a", requestId: "request-reasoning" },
+    ]);
+    expect(JSON.stringify(chunks)).not.toContain("private thought");
+    expect(chunks.at(-1)).toEqual({ type: "finish", reason: { kind: "stop" } });
   });
 
   it("closes a pure text block before usage and the terminal finish", async () => {
@@ -406,7 +460,7 @@ describe("DeepSeek Web DSH adapter", () => {
       { ...base, temperature: 0.2 },
       { ...base, maxTokens: 100 },
       { ...base, stop: ["stop"] },
-      { ...base, reasoningEffort: "off" as GenerateOptions["reasoningEffort"] },
+      { ...base, reasoningEffort: ReasoningEffortId("high") },
       { ...base, messages: [{ ...base.messages[0]!, content: [{ type: "reasoning", text: "stored thought" }] }] },
       { ...base, messages: [{ ...base.messages[0]!, content: [{
         type: "image",

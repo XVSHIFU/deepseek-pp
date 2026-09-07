@@ -1,12 +1,14 @@
 // src/index.ts
 import { credentialRef } from "@deepseek-ai/dsh-credentials";
 import { dshHomePath } from "@deepseek-ai/dsh-home-paths";
+import { ReasoningEffortId as ReasoningEffortId2 } from "@deepseek-ai/dsh-llm";
 
 // ../dsh-llm-deepseek-web/src/adapter.ts
 import {
   LlmAdapter,
   LlmError as LlmError3,
   LOCAL_REQUEST_BUDGET_EXCEEDED_CODE,
+  ReasoningEffortId,
   ToolCallId,
   resolveRetryPolicy
 } from "@deepseek-ai/dsh-llm";
@@ -1928,6 +1930,9 @@ function preStartRemoteError(frame) {
 // ../dsh-llm-deepseek-web/src/constants.ts
 var DEEPSEEK_WEB_PROVIDER = "deepseek-web";
 var DEEPSEEK_WEB_MODEL = "current-web-session";
+var DEEPSEEK_WEB_EXPERT_MODEL = "current-web-session-expert";
+var DEEPSEEK_WEB_REASONING_OFF = "off";
+var DEEPSEEK_WEB_REASONING_ON = "on";
 var DEEPSEEK_WEB_CONTEXT_WINDOW = 128e3;
 
 // ../dsh-llm-deepseek-web/src/request.ts
@@ -1961,9 +1966,9 @@ function serializeGenerateRequest(options, serialization = {}) {
     input: { messages },
     tools,
     options: {
-      thinking_enabled: false,
+      thinking_enabled: options.reasoningEffort === DEEPSEEK_WEB_REASONING_ON,
       search_enabled: false,
-      model_type: "default"
+      model_type: options.model === DEEPSEEK_WEB_EXPERT_MODEL ? "expert" : "default"
     }
   };
   assertJsonStructure(body);
@@ -1974,8 +1979,8 @@ function assertRoute(options) {
   if (options.provider !== DEEPSEEK_WEB_PROVIDER) {
     throw new LlmError("The DeepSeek Web adapter does not own this provider route.", "NO_ADAPTER");
   }
-  if (options.model !== DEEPSEEK_WEB_MODEL) {
-    throw new LlmError("The DeepSeek Web adapter only exposes the current browser session.", "UNKNOWN_MODEL");
+  if (options.model !== DEEPSEEK_WEB_MODEL && options.model !== DEEPSEEK_WEB_EXPERT_MODEL) {
+    throw new LlmError("The DeepSeek Web adapter does not expose this browser-session mode.", "UNKNOWN_MODEL");
   }
 }
 function assertSupportedGenerationOptions(options) {
@@ -1983,8 +1988,8 @@ function assertSupportedGenerationOptions(options) {
   if (options.temperature !== void 0 || unsupportedMaxTokens || options.stop !== void 0) {
     throw unsupportedOption("DeepSeek Web Protocol v1 does not support per-request generation controls.");
   }
-  if (options.reasoningEffort !== void 0) {
-    throw unsupportedOption("DeepSeek Web Protocol v1 does not accept a reasoning effort.");
+  if (options.reasoningEffort !== void 0 && options.reasoningEffort !== DEEPSEEK_WEB_REASONING_OFF && options.reasoningEffort !== DEEPSEEK_WEB_REASONING_ON) {
+    throw unsupportedOption("DeepSeek Web accepts only the off and on thinking selections.");
   }
 }
 function serializeMessage(message) {
@@ -2150,12 +2155,14 @@ var DeepSeekWebAdapter = class extends LlmAdapter {
   broker;
   createRequestId;
   abortSettleTimeoutMs;
+  onReasoningEvent;
   cleanupState = "ready";
   scheduler = new GenerationScheduler();
   constructor(options) {
     super();
     this.broker = options.broker;
     this.createRequestId = options.createRequestId;
+    this.onReasoningEvent = options.onReasoningEvent;
     const timeout = options.abortSettleTimeoutMs ?? 15e3;
     if (!Number.isFinite(timeout) || timeout <= 0 || timeout > 6e5) {
       throw new Error("abortSettleTimeoutMs must be a positive finite number no greater than 600000");
@@ -2175,16 +2182,26 @@ var DeepSeekWebAdapter = class extends LlmAdapter {
     if (provider !== DEEPSEEK_WEB_PROVIDER) {
       return Promise.reject(new LlmError3("The DeepSeek Web adapter does not own this provider route.", "NO_ADAPTER"));
     }
-    return Promise.resolve([modelInfo(provider)]);
+    return Promise.resolve([modelInfo(provider, DEEPSEEK_WEB_MODEL), modelInfo(provider, DEEPSEEK_WEB_EXPERT_MODEL)]);
   }
   resolveModel(provider, model) {
     if (provider !== DEEPSEEK_WEB_PROVIDER) {
       return Promise.reject(new LlmError3("The DeepSeek Web adapter does not own this provider route.", "NO_ADAPTER"));
     }
-    if (model !== DEEPSEEK_WEB_MODEL) {
-      return Promise.reject(new LlmError3("The DeepSeek Web adapter only exposes the current browser session.", "UNKNOWN_MODEL"));
+    if (model !== DEEPSEEK_WEB_MODEL && model !== DEEPSEEK_WEB_EXPERT_MODEL) {
+      return Promise.reject(new LlmError3("The DeepSeek Web adapter does not expose this browser-session mode.", "UNKNOWN_MODEL"));
     }
-    return Promise.resolve({ ...modelInfo(provider), context: { contextWindow: DEEPSEEK_WEB_CONTEXT_WINDOW } });
+    return Promise.resolve({
+      ...modelInfo(provider, model),
+      context: { contextWindow: DEEPSEEK_WEB_CONTEXT_WINDOW },
+      reasoning: {
+        efforts: [
+          { id: ReasoningEffortId(DEEPSEEK_WEB_REASONING_OFF), name: "Thinking off" },
+          { id: ReasoningEffortId(DEEPSEEK_WEB_REASONING_ON), name: "Thinking on" }
+        ],
+        defaultEffort: ReasoningEffortId(DEEPSEEK_WEB_REASONING_OFF)
+      }
+    });
   }
   async *stream(options) {
     const release = await this.scheduler.acquire(options.signal);
@@ -2215,6 +2232,12 @@ var DeepSeekWebAdapter = class extends LlmAdapter {
       throw normalizeAdapterError(error, options.signal);
     }
     let terminal = false;
+    const reasoningVisible = request.options.thinking_enabled;
+    if (reasoningVisible) this.publishReasoning({
+      phase: "start",
+      sessionId: request.session_id,
+      requestId: request.request_id
+    });
     let textIndex;
     let text = "";
     let nextIndex = 0;
@@ -2289,6 +2312,12 @@ var DeepSeekWebAdapter = class extends LlmAdapter {
             break;
           case "reasoning_delta":
             if (usageSeen) throw protocolFailure();
+            if (reasoningVisible) this.publishReasoning({
+              phase: "delta",
+              sessionId: request.session_id,
+              requestId: request.request_id,
+              text: event.text
+            });
             break;
           case "tool_call": {
             if (usageSeen) throw protocolFailure();
@@ -2350,6 +2379,11 @@ var DeepSeekWebAdapter = class extends LlmAdapter {
       if (error instanceof BrokerError && error.externalOutcome === "not_started") cancellationAllowed = false;
       throw normalizeAdapterError(error, options.signal);
     } finally {
+      if (reasoningVisible) this.publishReasoning({
+        phase: "end",
+        sessionId: request.session_id,
+        requestId: request.request_id
+      });
       options.signal?.removeEventListener("abort", handleAbort);
       if (!iteratorDone && !iteratorCleanupHandled) {
         const cancellationResult = !terminal && cancellationAllowed ? requestCancellation() : cancellation ?? Promise.resolve();
@@ -2360,6 +2394,12 @@ var DeepSeekWebAdapter = class extends LlmAdapter {
           this.trackCleanup(cleanup);
         }
       }
+    }
+  }
+  publishReasoning(event) {
+    try {
+      this.onReasoningEvent?.(event);
+    } catch {
     }
   }
   async settleAfterAbort(iterator, pending, cancellation) {
@@ -2401,12 +2441,13 @@ var DeepSeekWebAdapter = class extends LlmAdapter {
     );
   }
 };
-function modelInfo(provider) {
+function modelInfo(provider, model) {
+  const expert = model === DEEPSEEK_WEB_EXPERT_MODEL;
   return {
     provider,
-    id: DEEPSEEK_WEB_MODEL,
-    name: "Current DeepSeek Web Session",
-    description: "Uses the authenticated DeepSeek++ browser broker; no local model or model API credential.",
+    id: model,
+    name: expert ? "DeepSeek Web (Expert)" : "DeepSeek Web (Default)",
+    description: expert ? "Uses Expert mode in the authenticated DeepSeek++ browser session." : "Uses Default mode in the authenticated DeepSeek++ browser session.",
     inputModalities: ["text"]
   };
 }
@@ -2574,6 +2615,9 @@ var DEEPSEEK_WEB_SETTINGS_NAMESPACE = "deepseek-web";
 var DEEPSEEK_WEB_PAIRING_TOKEN_REF = "DSH_WEB_PAIRING_TOKEN";
 var DEEPSEEK_WEB_PROVIDER2 = "deepseek-web";
 var DEEPSEEK_WEB_MODEL2 = "current-web-session";
+var DEEPSEEK_WEB_EXPERT_MODEL2 = "current-web-session-expert";
+var DEEPSEEK_WEB_REASONING_OFF2 = "off";
+var DEEPSEEK_WEB_REASONING_ON2 = "on";
 var DEEPSEEK_WEB_CONNECTION_NAMESPACE = "deepseekWebConnection";
 var DEEPSEEK_WEB_REMOTE_CONTRIBUTION = Object.freeze({
   package: "@deepseek-pp/dsh-deepseek-web-official-plugin",
@@ -2855,8 +2899,8 @@ var remoteInitializers = [];
 markRemote("status");
 markRemote("reconnect");
 function markRemote(method) {
-  const decorate2 = Remote;
-  decorate2(DeepSeekWebConnectionRemote.prototype[method], {
+  const decorate3 = Remote;
+  decorate3(DeepSeekWebConnectionRemote.prototype[method], {
     kind: "method",
     name: method,
     static: false,
@@ -2867,13 +2911,77 @@ function markRemote(method) {
   });
 }
 
-// src/session-import-remote.ts
+// src/reasoning-remote.ts
 import { Remote as Remote2, TypertRemoteService as TypertRemoteService2 } from "@deepseek-ai/dsh-typert-protocol";
-var DeepSeekWebSessionImportRemote = class extends TypertRemoteService2 {
+var MAX_PENDING_FRAMES = 128;
+var MAX_DELTA_TEXT = 16384;
+var DeepSeekWebReasoningFeed = class {
+  subscribers = /* @__PURE__ */ new Set();
+  publish(event) {
+    const frame = event.phase === "delta" ? { ...event, text: event.text.slice(0, MAX_DELTA_TEXT) } : { ...event };
+    for (const subscriber of this.subscribers) subscriber(frame);
+  }
+  async *follow(signal) {
+    const queue = [];
+    let wake;
+    const notify = (frame) => {
+      if (queue.length >= MAX_PENDING_FRAMES) {
+        if (frame.phase !== "end") return;
+        queue.shift();
+      }
+      queue.push(frame);
+      wake?.();
+      wake = void 0;
+    };
+    const aborted = () => {
+      wake?.();
+      wake = void 0;
+    };
+    this.subscribers.add(notify);
+    signal.addEventListener("abort", aborted, { once: true });
+    try {
+      while (!signal.aborted) {
+        if (queue.length === 0) await new Promise((resolve) => {
+          wake = resolve;
+        });
+        while (queue.length > 0) yield queue.shift();
+      }
+    } finally {
+      signal.removeEventListener("abort", aborted);
+      this.subscribers.delete(notify);
+    }
+  }
+};
+var DeepSeekWebReasoningRemote = class extends TypertRemoteService2 {
+  constructor(ctx, feed) {
+    super(ctx, "deepseekWebReasoningRemote");
+    this.feed = feed;
+    for (const initialize of remoteInitializers2) initialize.call(this);
+  }
+  feed;
+  follow(signal) {
+    return this.feed.follow(signal);
+  }
+};
+var remoteInitializers2 = [];
+var decorate = Remote2({ mode: "stream" });
+decorate(DeepSeekWebReasoningRemote.prototype.follow, {
+  kind: "method",
+  name: "follow",
+  static: false,
+  private: false,
+  addInitializer(initializer) {
+    remoteInitializers2.push(initializer);
+  }
+});
+
+// src/session-import-remote.ts
+import { Remote as Remote3, TypertRemoteService as TypertRemoteService3 } from "@deepseek-ai/dsh-typert-protocol";
+var DeepSeekWebSessionImportRemote = class extends TypertRemoteService3 {
   constructor(ctx, importer) {
     super(ctx, "deepseekWebSessionImportRemote");
     this.importer = importer;
-    for (const initialize of remoteInitializers2) initialize.call(this);
+    for (const initialize of remoteInitializers3) initialize.call(this);
   }
   importer;
   async importCompleted(request) {
@@ -2883,15 +2991,15 @@ var DeepSeekWebSessionImportRemote = class extends TypertRemoteService2 {
     return this.importer.importCompleted(request);
   }
 };
-var remoteInitializers2 = [];
-var decorate = Remote2;
-decorate(DeepSeekWebSessionImportRemote.prototype.importCompleted, {
+var remoteInitializers3 = [];
+var decorate2 = Remote3;
+decorate2(DeepSeekWebSessionImportRemote.prototype.importCompleted, {
   kind: "method",
   name: "importCompleted",
   static: false,
   private: false,
   addInitializer(initializer) {
-    remoteInitializers2.push(initializer);
+    remoteInitializers3.push(initializer);
   }
 });
 function isRecord2(value) {
@@ -3471,6 +3579,44 @@ var ManagedDeepSeekWebBroker = class {
   }
 };
 
+// src/reasoning-contract.ts
+var DEEPSEEK_WEB_REASONING_NAMESPACE = "deepseekWebReasoning";
+var FRAME_CODEC = Object.freeze({
+  mode: "strict",
+  typeSymbol: "@deepseek-pp/dsh-deepseek-web-official-plugin/reasoning-contract#DeepSeekWebReasoningFrame",
+  schema: Object.freeze({ parse: decodeReasoningFrame })
+});
+var DEEPSEEK_WEB_REASONING_REMOTE_CONTRIBUTION = Object.freeze({
+  package: "@deepseek-pp/dsh-deepseek-web-official-plugin",
+  descriptors: Object.freeze([Object.freeze({
+    id: "@deepseek-pp/dsh-deepseek-web-official-plugin#deepseekWebReasoningRemote/follow",
+    service: "deepseekWebReasoningRemote",
+    namespace: DEEPSEEK_WEB_REASONING_NAMESPACE,
+    method: "follow",
+    mode: "stream",
+    invocation: Object.freeze({ kind: "direct" }),
+    parameters: Object.freeze([]),
+    cancellation: Object.freeze({ parameter: "signal" }),
+    result: FRAME_CODEC
+  })])
+});
+function decodeReasoningFrame(value) {
+  if (!isRecord3(value) || typeof value.sessionId !== "string" || typeof value.requestId !== "string" || value.sessionId.length === 0 || value.sessionId.length > 256 || value.requestId.length === 0 || value.requestId.length > 256) throw new Error("Invalid DeepSeek Web reasoning frame");
+  if (value.phase === "delta") {
+    if (Object.keys(value).sort().join("\0") !== ["phase", "requestId", "sessionId", "text"].join("\0") || typeof value.text !== "string" || value.text.length > 16384) {
+      throw new Error("Invalid DeepSeek Web reasoning frame");
+    }
+    return { phase: "delta", sessionId: value.sessionId, requestId: value.requestId, text: value.text };
+  }
+  if (value.phase !== "start" && value.phase !== "end" || Object.keys(value).sort().join("\0") !== ["phase", "requestId", "sessionId"].join("\0")) {
+    throw new Error("Invalid DeepSeek Web reasoning frame");
+  }
+  return { phase: value.phase, sessionId: value.sessionId, requestId: value.requestId };
+}
+function isRecord3(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 // src/index.ts
 var name = "deepseek-web-official";
 var inject = ["settings", "credentials", "agentDefaultModel", "llm", "tools", "subprocess", "shell", "deepseekWebSessionImport"];
@@ -3508,8 +3654,12 @@ async function apply(ctx) {
     }
   });
   const unprovide = ctx.provide("deepseekWebBroker", connection.broker);
-  registerDeepSeekWebAdapter(ctx, connection.broker);
+  const reasoningFeed = new DeepSeekWebReasoningFeed();
+  registerDeepSeekWebAdapter(ctx, connection.broker, {
+    onReasoningEvent: (event) => reasoningFeed.publish(event)
+  });
   new DeepSeekWebConnectionRemote(ctx, connection);
+  new DeepSeekWebReasoningRemote(ctx, reasoningFeed);
   new DeepSeekWebSessionImportRemote(ctx, ctx.deepseekWebSessionImport);
   const stopWatchingSettings = settings.watch(async (next, previous) => {
     if (connectionSettingsChanged(next, previous)) await connection.requestReconfigure("settings");
@@ -3517,7 +3667,7 @@ async function apply(ctx) {
       await applyPowerShellExecutable(ctx, next.powerShellExecutable, true);
     }
     if (windowsSettingsChanged(next, previous)) await windowsPolicy.update(windowsConfig(next));
-    if (next.makeDefaultForNewSessions && !previous.makeDefaultForNewSessions) {
+    if (next.makeDefaultForNewSessions && !previous.makeDefaultForNewSessions || webModelDefaultsChanged(next, previous)) {
       await applyRequestedDefault(ctx, next, () => settings.update({ makeDefaultForNewSessions: false }));
     }
   });
@@ -3591,6 +3741,9 @@ function connectionSettingsChanged(left, right) {
 function windowsSettingsChanged(left, right) {
   return left.windowsCommandsEnabled !== right.windowsCommandsEnabled || left.windowsApprovalPolicy !== right.windowsApprovalPolicy || left.powerShellExecutable !== right.powerShellExecutable;
 }
+function webModelDefaultsChanged(left, right) {
+  return (left.webModelMode ?? "default") !== (right.webModelMode ?? "default") || (left.thinkingEnabled ?? false) !== (right.thinkingEnabled ?? false);
+}
 async function applyPowerShellExecutable(ctx, input, clearWhenEmpty) {
   if (process.platform !== "win32") return;
   const executable = input.trim();
@@ -3613,23 +3766,38 @@ function projectWindowsStatus(status) {
   return { kind: "disabled" };
 }
 async function applyRequestedDefault(ctx, settings, consume) {
-  if (!settings.makeDefaultForNewSessions) return;
   const authority = ctx.get("agentDefaultModel");
-  if (authority === void 0) throw new Error("DEEPSEEK_WEB_DEFAULT_MODEL_AUTHORITY_UNAVAILABLE");
-  await authority.saveSelection({
+  if (authority === void 0) {
+    if (!settings.makeDefaultForNewSessions) return;
+    throw new Error("DEEPSEEK_WEB_DEFAULT_MODEL_AUTHORITY_UNAVAILABLE");
+  }
+  const selected = {
     provider: DEEPSEEK_WEB_PROVIDER2,
-    model: DEEPSEEK_WEB_MODEL2
-  });
-  await consume?.();
+    model: (settings.webModelMode ?? "default") === "expert" ? DEEPSEEK_WEB_EXPERT_MODEL2 : DEEPSEEK_WEB_MODEL2,
+    reasoningEffort: ReasoningEffortId2(
+      settings.thinkingEnabled ?? false ? DEEPSEEK_WEB_REASONING_ON2 : DEEPSEEK_WEB_REASONING_OFF2
+    )
+  };
+  if (!settings.makeDefaultForNewSessions) {
+    const current = authority.currentSelection();
+    if (current.provider !== DEEPSEEK_WEB_PROVIDER2) return;
+    if (current.model === selected.model && current.reasoningEffort === selected.reasoningEffort) return;
+  }
+  await authority.saveSelection(selected);
+  if (settings.makeDefaultForNewSessions) await consume?.();
 }
 export {
   DEEPSEEK_WEB_PAIRING_TOKEN_REF,
   DEEPSEEK_WEB_PROVIDER3 as DEEPSEEK_WEB_PROVIDER,
+  DEEPSEEK_WEB_REASONING_NAMESPACE,
+  DEEPSEEK_WEB_REASONING_REMOTE_CONTRIBUTION,
   DEEPSEEK_WEB_SETTINGS_NAMESPACE,
   DEFAULT_DEEPSEEK_WEB_BROKER_PORT,
   DeepSeekWebConnectionController,
   DeepSeekWebConnectionRemote,
   DeepSeekWebOfficialSettings,
+  DeepSeekWebReasoningFeed,
+  DeepSeekWebReasoningRemote,
   JsonWindowsSessionPolicyStore,
   ManagedDeepSeekWebBroker,
   POWERSHELL_7_REQUIRED,
@@ -3642,6 +3810,7 @@ export {
   apply,
   applyRequestedDefault,
   createDeepSeekWebModelHost,
+  decodeReasoningFrame,
   extensionOrigin,
   inject,
   installWindowsPowerShellPolicy,

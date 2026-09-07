@@ -1,6 +1,6 @@
 # T8 网页模型控制、工具可靠性与设置体验计划
 
-状态：`in_progress`（2026-09-07 启动；基线 `89ab502bc637f79cea51d48d55c6d4b552b786d9`）
+状态：`automated_validation_complete`（2026-09-07 启动；基线 `89ab502bc637f79cea51d48d55c6d4b552b786d9`；真实网页验收待新候选安装）
 
 T8 在已完成的官方 DeepSeek++ Harness 增量插件上继续，保留 `89ab502` 的品牌与 README 安装说明。阶段范围只包括官方设置卡片体验、Mode A 工具调用可靠性、网页默认/专家模式与独立深度思考、定向验证及新的本地候选。不得修改 Harness 核心、引入 API fallback、重构 Koffi/WinAPI 安装事务、覆盖 `.release/deepseek-web-official-395cf37`，也不包含图片输入、上传或引用链。
 
@@ -51,3 +51,12 @@ T8 在已完成的官方 DeepSeek++ Harness 增量插件上继续，保留 `89ab
 - 新候选继续命名 DeepSeek++ Harness，保留旧候选和配对兼容，短升级说明区分外层分发清单与真正需要加载的浏览器扩展目录。不得 push、PR、tag、Release、商店上传或替换现有 GitHub Release。
 
 最终交付包括：本地提交列表、计划逐项结果、工具问题的证实根因与修复机制、实际测试命令/结果、新候选/安装路径、真实网页验收完成情况与任何剩余缺口。
+
+## 6. 实施记录（2026-09-07）
+
+- T8.1 已完成：设置卡片使用公开 locale、slot、settings scope 与 Remote，支持中英文、初始折叠、草稿跨折叠保留、保存成功后折叠、失败保持展开；一次性令牌在本次页面内可复制，保存后的明文不能回读。
+- T8.2 已完成自动验证：事件级证据确认截图中的方括号调用只是模型文本，既有流式 XML parser 没有收到完整正式标签。Mode A prompt 现明确只有完整 XML 标签执行；仅在首轮完成、历史链已验证、没有正式调用且文本是明确畸形意图时，在同一 deadline、取消信号、页面链与冻结选项下追加一次纠正。纠正仍畸形返回 `TOOL_CALL_INVALID`；已调用、断线、取消、超时、ambiguous 或历史未验证均不重放。普通说明、围栏代码、未知工具标记继续只作为文本。
+- T8.3 已完成自动验证：默认/专家模式和独立思考通过官方 model route / reasoning effort 进入已有 `model_type` 与 `thinking_enabled` 字段；旧设置确定性回落为默认模式且关闭思考。全局设置只在明确选择“设为新会话默认”或当前默认已是本 provider 时更新默认模型，不覆盖其他 provider。思考内容经有界 Remote 流进入浏览器内存中的会话 dock，释放时清空，不写 session event、settings、日志或下一轮上下文。
+- 定向验证通过：根 compile、prompt freeze、设置 UI、插件/配置、adapter/digest、Harness bridge/tool-wire、fake e2e 及 readonly/file-edit/command acceptance。全量测试共 2537 项，首次并行运行 2503 passed、1 skipped、33 failed；其中行为预期已按新合同修正并逐项通过，其余四组为并行资源争用，单文件复跑全部通过。
+- Chrome、Edge、Firefox 在不含连续 `+` 的临时源码快照中构建通过；Manifest policy 与 177 个文本产物 UTF-8/ASCII 检查通过。WXT 0.20.26 会把原仓库绝对路径中的 `+++++` 当成正则而拒绝直接构建。sidepanel raw 门槛报告 384075/384043（超 32 字节），但同一环境对未包含 T8.2/T8.3 工作区改动的 `HEAD` 快照得到完全相同结果，证明不是本阶段增量；gzip 117316/117568 仍在预算内，因此不在 T8 中放宽或改写既有预算。
+- T8.4 的新不可变候选在产品提交后生成并记录；T8.5 仍需把该候选安装到隔离的官方 `web` profile 并加载其扩展后，才能进行真实网页四组合与工具验收。旧 `.release/deepseek-web-official-395cf37`、用户现有扩展目录、配对和 DeepSeek 会话均未修改。

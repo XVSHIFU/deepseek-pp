@@ -16,6 +16,11 @@ import {
   type CompletedSessionImportReceipt,
   type CompletedSessionImportRequest,
 } from "./session-import-contract.ts";
+import {
+  DEEPSEEK_WEB_REASONING_NAMESPACE,
+  DEEPSEEK_WEB_REASONING_REMOTE_CONTRIBUTION,
+  type DeepSeekWebReasoningFrame,
+} from "./reasoning-contract.ts";
 
 const DEEPSEEK_WEB_SETTINGS_LOCALE_NAMESPACE = "settings.deepseek-web";
 
@@ -76,6 +81,8 @@ const settingsLocales = {
     importing: "正在导入…",
     imported: "已导入 {imported} 个；已有相同记录 {idempotent} 个。",
     importFailed: "会话导入失败。",
+    reasoningWorking: "思考中…",
+    reasoningDone: "已思考",
   },
   en: {
     title: "DeepSeek Web model",
@@ -133,6 +140,8 @@ const settingsLocales = {
     importing: "Importing…",
     imported: "Imported {imported}; already identical {idempotent}.",
     importFailed: "Session import failed.",
+    reasoningWorking: "Thinking…",
+    reasoningDone: "Thought process",
   },
 } as const;
 
@@ -144,6 +153,7 @@ export const DEEPSEEK_WEB_SETTINGS_CLIENT_INJECT = [
   "settingsScope",
   "remote.credentials",
   `remote.${DEEPSEEK_WEB_CONNECTION_NAMESPACE}`,
+  `remote.${DEEPSEEK_WEB_REASONING_NAMESPACE}`,
   `remote.${DEEPSEEK_WEB_SESSION_IMPORT_NAMESPACE}`,
 ] as const;
 
@@ -152,6 +162,7 @@ export const DEEPSEEK_WEB_CLIENT_REMOTE_CONTRIBUTION = Object.freeze({
   package: DEEPSEEK_WEB_REMOTE_CONTRIBUTION.package,
   descriptors: Object.freeze([
     ...DEEPSEEK_WEB_REMOTE_CONTRIBUTION.descriptors,
+    ...DEEPSEEK_WEB_REASONING_REMOTE_CONTRIBUTION.descriptors,
     ...DEEPSEEK_WEB_SESSION_IMPORT_REMOTE_CONTRIBUTION.descriptors,
   ]),
 });
@@ -502,6 +513,101 @@ export class DeepSeekWebClientController {
   }
 }
 
+interface LiveReasoning {
+  readonly requestId: string;
+  readonly text: string;
+  readonly active: boolean;
+}
+
+interface ReasoningSnapshot {
+  readonly sessions: ReadonlyMap<string, LiveReasoning>;
+  readonly revision: number;
+}
+
+/** Browser-memory-only reasoning projection. It never writes settings or session events. */
+export class DeepSeekWebReasoningStore {
+  private readonly listeners = new Set<() => void>();
+  private snapshot: ReasoningSnapshot = { sessions: new Map(), revision: 0 };
+  private readonly abort = new AbortController();
+  private started = false;
+
+  getSnapshot = (): ReasoningSnapshot => this.snapshot;
+
+  subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  };
+
+  async start(remote: { follow(signal: AbortSignal): AsyncIterable<DeepSeekWebReasoningFrame> }): Promise<void> {
+    if (this.started) return;
+    this.started = true;
+    try {
+      for await (const frame of remote.follow(this.abort.signal)) this.accept(frame);
+    } catch {
+      if (!this.abort.signal.aborted) this.clear();
+    }
+  }
+
+  dispose(): void {
+    this.abort.abort();
+    this.clear();
+    this.listeners.clear();
+  }
+
+  private accept(frame: DeepSeekWebReasoningFrame): void {
+    const sessions = new Map(this.snapshot.sessions);
+    if (frame.phase === "start") {
+      sessions.set(frame.sessionId, { requestId: frame.requestId, text: "", active: true });
+    } else {
+      const current = sessions.get(frame.sessionId);
+      if (current === undefined || current.requestId !== frame.requestId) return;
+      if (frame.phase === "delta") {
+        const joined = current.text + frame.text;
+        sessions.set(frame.sessionId, {
+          ...current,
+          text: joined.length <= 131_072 ? joined : `…${joined.slice(-131_071)}`,
+        });
+      } else if (current.text === "") {
+        sessions.delete(frame.sessionId);
+      } else {
+        sessions.set(frame.sessionId, { ...current, active: false });
+      }
+    }
+    this.snapshot = { sessions, revision: this.snapshot.revision + 1 };
+    for (const listener of this.listeners) listener();
+  }
+
+  private clear(): void {
+    if (this.snapshot.sessions.size === 0) return;
+    this.snapshot = { sessions: new Map(), revision: this.snapshot.revision + 1 };
+    for (const listener of this.listeners) listener();
+  }
+}
+
+function DeepSeekWebReasoningDock({
+  sessionId,
+  store,
+  locale,
+}: {
+  readonly sessionId: string;
+  readonly store: DeepSeekWebReasoningStore;
+  readonly locale: LocaleService;
+}): React.ReactElement | null {
+  const snapshot = React.useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+  React.useSyncExternalStore(locale.subscribe, locale.getSnapshot, locale.getSnapshot);
+  const reasoning = snapshot.sessions.get(sessionId);
+  if (reasoning === undefined || reasoning.text === "") return null;
+  const t = locale.bind(DEEPSEEK_WEB_SETTINGS_LOCALE_NAMESPACE);
+  return React.createElement("details", {
+    key: reasoning.requestId,
+    open: reasoning.active || undefined,
+    style: reasoningDockStyle,
+  },
+  React.createElement("summary", { style: { cursor: "pointer" } },
+    t(reasoning.active ? "reasoningWorking" : "reasoningDone")),
+  React.createElement("div", { style: reasoningTextStyle }, reasoning.text));
+}
+
 function DeepSeekWebSettingsCard({
   controller,
   locale,
@@ -696,6 +802,17 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
       () => injected.locale.register(DEEPSEEK_WEB_SETTINGS_LOCALE_NAMESPACE, settingsLocales),
       "deepseek-web: settings dictionaries",
     );
+    const reasoningStore = new DeepSeekWebReasoningStore();
+    injected.effect(() => {
+      void reasoningStore.start(injected.remote[DEEPSEEK_WEB_REASONING_NAMESPACE]);
+      return () => reasoningStore.dispose();
+    }, "deepseek-web: ephemeral reasoning stream");
+    injected.slots.inject("conversation.input.dock", () => injected.slots.register({
+      name: "conversation.input.dock",
+      id: "deepseek-web-reasoning",
+      order: -10,
+      inject: (sessionId: string) => ({ sessionId, store: reasoningStore, locale: injected.locale }),
+    }, DeepSeekWebReasoningDock));
     injected.slots.inject("settings.plugin.item", () => {
       const settings = injected.settingsScope.bind<DeepSeekWebOfficialSettings>({
       namespace: DEEPSEEK_WEB_SETTINGS_NAMESPACE,
@@ -907,6 +1024,12 @@ const mutedTextStyle = { color: "var(--dsw-alias-label-secondary)", fontSize: "0
 const statusTextStyle = { color: "var(--dsw-alias-label-tertiary)", fontSize: "0.8125rem" } as const;
 const pendingStyle = { color: "var(--dsw-alias-status-warning)", fontSize: "0.8125rem" } as const;
 const warningStyle = { color: "var(--dsw-alias-label-secondary)" } as const;
+const reasoningDockStyle = {
+  border: "1px solid var(--dsw-alias-border-l2)", borderRadius: "10px", padding: "8px 12px",
+} as const;
+const reasoningTextStyle = {
+  maxHeight: "180px", overflow: "auto", paddingTop: "8px", whiteSpace: "pre-wrap", wordBreak: "break-word",
+} as const;
 
 type Translate = (key: string) => string;
 
@@ -921,7 +1044,13 @@ interface ClientContext {
   readonly locale: LocaleService;
   readonly slots: {
     inject(name: string, register: () => unknown): void;
-    register(options: { readonly name: string; readonly key: string }, component: unknown): unknown;
+    register(options: {
+      readonly name: string;
+      readonly key?: string;
+      readonly id?: string;
+      readonly order?: number;
+      readonly inject?: (scope: string) => unknown;
+    }, component: unknown): unknown;
   };
   readonly settingsScope: {
     bind<T>(spec: { readonly namespace: string; readonly decode?: (value: unknown) => T | undefined }): ClientSettingsScope<T>;
@@ -931,6 +1060,9 @@ interface ClientContext {
     readonly deepseekWebConnection: {
       status(): Promise<RemoteResult<DeepSeekWebConnectionStatus>>;
       reconnect(): Promise<RemoteResult<DeepSeekWebReconnectReceipt>>;
+    };
+    readonly deepseekWebReasoning: {
+      follow(signal: AbortSignal): AsyncIterable<DeepSeekWebReasoningFrame>;
     };
     readonly deepseekWebSessionImport: {
       importCompleted(request: CompletedSessionImportRequest): Promise<RemoteResult<CompletedSessionImportReceipt>>;

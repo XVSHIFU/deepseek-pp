@@ -4,6 +4,9 @@ export const DEEPSEEK_WEB_SETTINGS_NAMESPACE = "deepseek-web" as const;
 export const DEEPSEEK_WEB_PAIRING_TOKEN_REF = "DSH_WEB_PAIRING_TOKEN" as const;
 export const DEEPSEEK_WEB_PROVIDER = "deepseek-web" as const;
 export const DEEPSEEK_WEB_MODEL = "current-web-session" as const;
+export const DEEPSEEK_WEB_EXPERT_MODEL = "current-web-session-expert" as const;
+export const DEEPSEEK_WEB_REASONING_OFF = "off" as const;
+export const DEEPSEEK_WEB_REASONING_ON = "on" as const;
 export const DEEPSEEK_WEB_CONNECTION_NAMESPACE = "deepseekWebConnection" as const;
 
 export type BrowserKind = "chrome" | "edge" | "firefox";

@@ -196,6 +196,7 @@ export class DeepSeekWebModelTurnAdapter implements WebModelTurnPort {
       const toolNames = new Set(descriptors.map((descriptor) => descriptor.invocationName));
       const toolCallIds = new Set<string>();
       let lastVisibleText = '';
+      let malformedToolIntent = false;
 
       const emitEvent = <T extends ModelEvent>(event: T, callback: (value: T) => void): void => {
         throwIfAborted();
@@ -223,14 +224,22 @@ export class DeepSeekWebModelTurnAdapter implements WebModelTurnPort {
         });
       };
 
-      const consumeParsed = (parsed: ReturnType<typeof toolParser.append>): void => {
-        if (parsed.failed.length > 0 || parsed.streamed.length > 0) raiseFault('tool');
+      const consumeParsed = (
+        parsed: ReturnType<typeof toolParser.append>,
+        correctionTurn = false,
+      ): void => {
+        if (parsed.failed.length > 0 || parsed.streamed.length > 0) {
+          if (correctionTurn) raiseFault('tool');
+          malformedToolIntent = true;
+        }
         for (const call of parsed.completed) {
           const toolCallId = call.id;
           const invocationName = call.invocationName;
           if (call.parseError || !toolCallId || !invocationName || !isJsonObject(call.payload) ||
               !toolNames.has(invocationName) || toolCallIds.has(toolCallId)) {
-            raiseFault('tool');
+            if (correctionTurn) raiseFault('tool');
+            malformedToolIntent = true;
+            continue;
           }
           toolCallIds.add(toolCallId as string);
           const event = {
@@ -340,52 +349,143 @@ export class DeepSeekWebModelTurnAdapter implements WebModelTurnPort {
         return this.terminal(request.request_id, ambiguous('consumer_callback_outcome_unknown'));
       }
 
-      const responseMessageId = safeNormalizeMessageId(
-        this.client,
-        result.responseMessageId,
-        'response_message_id',
-      );
-      if (responseMessageId === null) {
+      if (malformedToolIntent && (emittedToolCall || descriptors.length === 0)) {
+        return this.terminal(request.request_id, failedToolCall());
+      }
+      const correctionRequired = !emittedToolCall && descriptors.length > 0 &&
+        (malformedToolIntent || isStandaloneMalformedToolMarker(lastVisibleText, toolNames));
+      if (safeNormalizeMessageId(this.client, result.responseMessageId, 'response_message_id') === null) {
         return this.terminal(request.request_id, ambiguous('response_message_id_missing'));
       }
-      const requestMessageId = safeNormalizeMessageId(
-        this.client,
-        result.requestMessageId,
-        'request_message_id',
-      );
-      if (requestMessageId === null) {
+      if (safeNormalizeMessageId(this.client, result.requestMessageId, 'request_message_id') === null) {
         return this.terminal(request.request_id, ambiguous('request_message_id_missing'));
       }
-
-      let history;
-      try {
-        history = await this.client.readHistorySnapshot(
-          binding.chatSessionId,
-          responseMessageId,
-          clientHeaders,
-          { signal: turnSignal.signal },
-        );
-      } catch {
-        return this.terminal(request.request_id, ambiguous('deepseek_chain_unverified'));
-      }
+      const firstVerified = await readVerifiedTurn(
+        this.client, binding.chatSessionId, result, clientHeaders, turnSignal.signal,
+      );
       if (turnSignal.signal.aborted) {
         return this.terminal(request.request_id, terminalForAbort(turnSignal.signal, true));
       }
-      if (!history) return this.terminal(request.request_id, ambiguous('deepseek_chain_unverified'));
+      if (!firstVerified) return this.terminal(request.request_id, ambiguous('deepseek_chain_unverified'));
 
-      const verified: VerifiedWebPageTurn = {
-        chatSessionId: history.chatSessionId,
-        requestMessageId,
-        responseMessageId,
-        nextParentMessageId: history.parentMessageId ?? -1,
-        assistantMessageId: history.assistantMessageId ?? -1,
-        assistantParentMessageId: history.assistantParentMessageId ?? -1,
-        requestParentMessageId: history.requestParentMessageId,
-        messageCount: history.messageCount,
-        verifiedAt: history.verifiedAt,
-      };
+      if (correctionRequired) {
+        let correctionPowHeaders: Record<string, string>;
+        try {
+          correctionPowHeaders = await this.client.createPowHeaders(clientHeaders, { signal: turnSignal.signal });
+        } catch {
+          return this.terminal(request.request_id, turnSignal.signal.aborted
+            ? terminalForAbort(turnSignal.signal, true)
+            : failedToolCall());
+        }
+        const correctionParser = createStreamingToolCallParser(descriptors, { strictToolCalls: true });
+        const correctionText = createStreamingToolTextAccumulator(descriptors);
+        let correctionVisibleText = '';
+        const emitCorrectionText = (fullText: string): void => {
+          if (!fullText.startsWith(correctionVisibleText)) raiseFault('callback');
+          const delta = fullText.slice(correctionVisibleText.length);
+          correctionVisibleText = fullText;
+          forEachConservativeTextChunk(delta, (text) => emitEvent(
+            { type: 'text_delta', text }, callbacks.onTextDelta,
+          ));
+        };
+        const correctionCallbacks: StreamCallbacks = {
+          retainAssistantText: false,
+          onTextChunk(text) {
+            throwIfAborted();
+            try {
+              budget.consumeInbound(text);
+            } catch {
+              raiseFault('budget');
+            }
+            try {
+              emitCorrectionText(correctionText.append(text));
+              consumeParsed(correctionParser.append(text), true);
+            } catch (error) {
+              if (error === TURN_FAULT || turnSignal.signal.aborted) throw error;
+              raiseFault('tool');
+            }
+          },
+          ...(request.options.thinking_enabled
+            ? {
+              onReasoningChunk(reasoning: string) {
+                throwIfAborted();
+                try {
+                  budget.consumeInbound(reasoning);
+                } catch {
+                  raiseFault('budget');
+                }
+                forEachConservativeTextChunk(reasoning, (text) => emitEvent(
+                  { type: 'reasoning_delta', text, retention: 'ephemeral' },
+                  callbacks.onReasoningDelta!,
+                ));
+              },
+            }
+            : {}),
+        };
+        let correctionDispatched = false;
+        let correctedResult: ModelTurn;
+        try {
+          correctedResult = await this.client.submitPromptStreaming({
+            chatSessionId: binding.chatSessionId,
+            parentMessageId: firstVerified.responseMessageId,
+            modelType: request.options.model_type,
+            prompt: serializeToolCorrectionPrompt(descriptors),
+            refFileIds: [],
+            thinkingEnabled: request.options.thinking_enabled,
+            searchEnabled: request.options.search_enabled,
+            clientHeaders,
+            powHeaders: correctionPowHeaders,
+          }, correctionCallbacks, {
+            signal: turnSignal.signal,
+            onDispatch: () => { correctionDispatched = true; },
+          });
+        } catch {
+          if (fault === 'budget') return this.terminal(request.request_id, failedBudget());
+          if (fault === 'tool') return this.terminal(request.request_id, failedToolCall());
+          if (fault === 'callback') {
+            return this.terminal(request.request_id, ambiguous('consumer_callback_outcome_unknown'));
+          }
+          if (turnSignal.signal.aborted) {
+            return this.terminal(request.request_id, terminalForAbort(turnSignal.signal, true));
+          }
+          return this.terminal(request.request_id, correctionDispatched
+            ? ambiguous('deepseek_turn_outcome_unknown')
+            : failedToolCall());
+        }
+        if (!correctionDispatched) return this.terminal(request.request_id, failedToolCall());
+        if (turnSignal.signal.aborted) {
+          return this.terminal(request.request_id, terminalForAbort(turnSignal.signal, true));
+        }
+        if (!correctedResult.finished) {
+          return this.terminal(request.request_id, ambiguous('deepseek_stream_incomplete'));
+        }
+        try {
+          consumeParsed(correctionParser.flush(), true);
+          throwIfAborted();
+          emitCorrectionText(correctionText.flush());
+        } catch {
+          if (fault === 'budget') return this.terminal(request.request_id, failedBudget());
+          if (fault === 'tool') return this.terminal(request.request_id, failedToolCall());
+          return this.terminal(request.request_id, ambiguous('consumer_callback_outcome_unknown'));
+        }
+        if (!emittedToolCall) return this.terminal(request.request_id, failedToolCall());
+        const correctedVerified = await readVerifiedTurn(
+          this.client, binding.chatSessionId, correctedResult, clientHeaders, turnSignal.signal,
+        );
+        if (turnSignal.signal.aborted) {
+          return this.terminal(request.request_id, terminalForAbort(turnSignal.signal, true));
+        }
+        if (!correctedVerified) return this.terminal(request.request_id, ambiguous('deepseek_chain_unverified'));
+        try {
+          this.sessions.completeCorrection(request.request_id, firstVerified, correctedVerified);
+        } catch {
+          return this.terminal(request.request_id, ambiguous('deepseek_chain_unverified'));
+        }
+        return completed('tool_calls');
+      }
+
       try {
-        this.sessions.complete(request.request_id, verified);
+        this.sessions.complete(request.request_id, firstVerified);
       } catch {
         return this.terminal(request.request_id, ambiguous('deepseek_chain_unverified'));
       }
@@ -512,10 +612,64 @@ export function serializeWebModelTurnPrompt(
     transcript,
     '</harness_messages_json>',
     toolSchemas
-      ? `Available harness tools follow. Emit a direct XML tool tag only when a tool is required:\n\n${toolSchemas}`
+      ? [
+        'Available harness tools follow. Emit a complete direct XML tool tag only when a tool is required.',
+        'A bracket label such as [调用 tool_name], a prose description, or fenced code does not execute a tool.',
+        toolSchemas,
+      ].join('\n\n')
       : 'No harness tools are available for this turn.',
     'Continue with the next assistant response only.',
   ].join('\n\n');
+}
+
+function serializeToolCorrectionPrompt(descriptors: readonly ToolDescriptor[]): string {
+  return [
+    'Your previous response clearly attempted a harness tool call, but it did not contain one valid executable tool tag.',
+    'Correct it once now. Return exactly one complete direct XML tool tag using an advertised name and a JSON object body.',
+    'Do not return bracket labels, prose, Markdown, or a fenced example. Only the XML tag executes the tool.',
+    renderToolSchemas(descriptors, 'en'),
+  ].join('\n\n');
+}
+
+function isStandaloneMalformedToolMarker(text: string, toolNames: ReadonlySet<string>): boolean {
+  const lines = text.trim().split(/\r?\n/u).map((line) => line.trim()).filter(Boolean);
+  if (lines.length === 0) return false;
+  return lines.every((line) => {
+    const match = /^\[(?:调用|call)\s+([A-Za-z_][A-Za-z0-9_.:-]*)\]$/iu.exec(line);
+    return match !== null && toolNames.has(match[1]!);
+  });
+}
+
+async function readVerifiedTurn(
+  client: DeepSeekAutomationClient,
+  chatSessionId: string,
+  result: ModelTurn,
+  clientHeaders: Record<string, string>,
+  signal: AbortSignal,
+): Promise<VerifiedWebPageTurn | null> {
+  const responseMessageId = safeNormalizeMessageId(client, result.responseMessageId, 'response_message_id');
+  if (responseMessageId === null) return null;
+  const requestMessageId = safeNormalizeMessageId(client, result.requestMessageId, 'request_message_id');
+  if (requestMessageId === null) return null;
+  try {
+    const history = await client.readHistorySnapshot(
+      chatSessionId, responseMessageId, clientHeaders, { signal },
+    );
+    if (!history) return null;
+    return {
+      chatSessionId: history.chatSessionId,
+      requestMessageId,
+      responseMessageId,
+      nextParentMessageId: history.parentMessageId ?? -1,
+      assistantMessageId: history.assistantMessageId ?? -1,
+      assistantParentMessageId: history.assistantParentMessageId ?? -1,
+      requestParentMessageId: history.requestParentMessageId,
+      messageCount: history.messageCount,
+      verifiedAt: history.verifiedAt,
+    };
+  } catch {
+    return null;
+  }
 }
 
 class TurnBudget {

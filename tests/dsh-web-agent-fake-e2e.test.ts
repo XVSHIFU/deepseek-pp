@@ -86,7 +86,7 @@ describe("DeepSeek Web Agent fake-browser process E2E", () => {
         type: "request/header",
         data: expect.objectContaining({
           header: expect.objectContaining({
-            config: { provider: "deepseek-web", model: "current-web-session" },
+            config: { provider: "deepseek-web", model: "current-web-session", reasoningEffort: "off" },
           }),
         }),
       }),
@@ -136,9 +136,11 @@ describe("DeepSeek Web Agent fake-browser process E2E", () => {
       stdout: result.stdout,
       stderr: result.stderr,
     });
-    expect(durableAndWire).not.toMatch(/reasoning|authorization|cookie|api[_-]?key|pairing[_-]?token/i);
+    expect(durableAndWire).not.toMatch(/authorization|cookie|api[_-]?key|pairing[_-]?token/i);
+    expect(durableAndWire).not.toMatch(/"type":"reasoning(?:-delta)?"|private thought/i);
     expect(durableAndWire).not.toContain("fixture-only-");
-    expect(result.persistedRaw).not.toMatch(/reasoning|authorization|cookie|api[_-]?key|pairing[_-]?token/i);
+    expect(result.persistedRaw).not.toMatch(/authorization|cookie|api[_-]?key|pairing[_-]?token/i);
+    expect(result.persistedRaw).not.toMatch(/"type":"reasoning(?:-delta)?"|private thought/i);
     expect(result.portReleased).toBe(true);
     expect(result.tempRootRemoved).toBe(true);
   }, 60_000);

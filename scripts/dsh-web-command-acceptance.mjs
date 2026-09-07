@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import { composeEntries, loadOverlayPatches } from "@deepseek-ai/dsh-app-boot";
 
 import { RealWebSmokeError, assertExplicitOptIn, decodeSessionLog, parseProfileDump, validateProfileRows } from "./dsh-web-real-smoke.mjs";
-import { prepareToolFixture, runToolAcceptance, sameJson } from "./dsh-web-readonly-acceptance.mjs";
+import { isExpectedWebConfig, prepareToolFixture, runToolAcceptance, sameJson } from "./dsh-web-readonly-acceptance.mjs";
 
 const BUNDLE = resolve(import.meta.dirname, "../packages/dsh-web-agent-bundle");
 const PROVIDER = "deepseek-web", MODEL = "current-web-session";
@@ -44,7 +44,7 @@ export function createCommandTask(fixture) {
 export function verifyCommandSession(raw, expected) {
   const invalid = () => { throw new RealWebSmokeError("REAL_WEB_TOOL_EVIDENCE_INVALID"); };
   if (!raw.endsWith("\n")) invalid();
-  if (/reasoning|authorization|cookie|api[_-]?key|pairing[_-]?token/iu.test(raw)
+  if (/authorization|cookie|api[_-]?key|pairing[_-]?token|"type"\s*:\s*"reasoning(?:-delta)?"/iu.test(raw)
     || expected.forbiddenExact.some((value) => value !== "" && raw.includes(value))) {
     throw new RealWebSmokeError("REAL_WEB_SESSION_SENSITIVE_DATA");
   }
@@ -60,7 +60,7 @@ export function verifyCommandSession(raw, expected) {
     || calls.length !== 1 || results.length !== 1 || ofType("turn/start").length !== 1 || ofType("turn/end").length !== 1
     || headers.length < 1 || contexts.length < 1 || expected.task.includes(expected.nonce)
     || !sameJson(users[0].data.content, [{ type: "text", text: expected.task }])) invalid();
-  if (headers.some((event) => !sameJson(event.data.header?.config, { provider: PROVIDER, model: MODEL }))
+  if (headers.some((event) => !isExpectedWebConfig(event.data.header?.config, PROVIDER, MODEL))
     || contexts.some((event) => event.data.provider !== PROVIDER || event.data.model !== MODEL)) invalid();
   for (let index = 0; index < 2; index++) {
     if ([starts[index], ends[index], answers[index]].some((event) => event.data.turn !== 1 || event.data.step !== index + 1)

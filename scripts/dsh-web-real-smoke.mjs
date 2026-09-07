@@ -257,7 +257,7 @@ export async function readNewSessionEvidence(root, priorLogs, expected) {
   if (created.length !== 1) throw new RealWebSmokeError("REAL_WEB_SESSION_EVIDENCE_INVALID");
   const raw = await readFile(join(root, created[0]), "utf8");
   if (!raw.endsWith("\n")) throw new RealWebSmokeError("REAL_WEB_SESSION_EVIDENCE_INVALID");
-  if (/reasoning|authorization|cookie|api[_-]?key|pairing[_-]?token/iu.test(raw) ||
+  if (/authorization|cookie|api[_-]?key|pairing[_-]?token|"type"\s*:\s*"reasoning(?:-delta)?"/iu.test(raw) ||
       expected.forbiddenExact.some((value) => value !== "" && raw.includes(value))) {
     throw new RealWebSmokeError("REAL_WEB_SESSION_SENSITIVE_DATA");
   }

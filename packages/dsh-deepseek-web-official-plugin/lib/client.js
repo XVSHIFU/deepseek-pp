@@ -38,6 +38,7 @@ window.__ModuleLoader__.load({
       DEEPSEEK_WEB_CLIENT_REMOTE_CONTRIBUTION: () => DEEPSEEK_WEB_CLIENT_REMOTE_CONTRIBUTION,
       DEEPSEEK_WEB_SETTINGS_CLIENT_INJECT: () => DEEPSEEK_WEB_SETTINGS_CLIENT_INJECT,
       DeepSeekWebClientController: () => DeepSeekWebClientController,
+      DeepSeekWebReasoningStore: () => DeepSeekWebReasoningStore,
       apply: () => apply,
       inject: () => inject
     });
@@ -104,6 +105,44 @@ window.__ModuleLoader__.load({
       })])
     });
 
+    // src/reasoning-contract.ts
+    var DEEPSEEK_WEB_REASONING_NAMESPACE = "deepseekWebReasoning";
+    var FRAME_CODEC = Object.freeze({
+      mode: "strict",
+      typeSymbol: "@deepseek-pp/dsh-deepseek-web-official-plugin/reasoning-contract#DeepSeekWebReasoningFrame",
+      schema: Object.freeze({ parse: decodeReasoningFrame })
+    });
+    var DEEPSEEK_WEB_REASONING_REMOTE_CONTRIBUTION = Object.freeze({
+      package: "@deepseek-pp/dsh-deepseek-web-official-plugin",
+      descriptors: Object.freeze([Object.freeze({
+        id: "@deepseek-pp/dsh-deepseek-web-official-plugin#deepseekWebReasoningRemote/follow",
+        service: "deepseekWebReasoningRemote",
+        namespace: DEEPSEEK_WEB_REASONING_NAMESPACE,
+        method: "follow",
+        mode: "stream",
+        invocation: Object.freeze({ kind: "direct" }),
+        parameters: Object.freeze([]),
+        cancellation: Object.freeze({ parameter: "signal" }),
+        result: FRAME_CODEC
+      })])
+    });
+    function decodeReasoningFrame(value) {
+      if (!isRecord(value) || typeof value.sessionId !== "string" || typeof value.requestId !== "string" || value.sessionId.length === 0 || value.sessionId.length > 256 || value.requestId.length === 0 || value.requestId.length > 256) throw new Error("Invalid DeepSeek Web reasoning frame");
+      if (value.phase === "delta") {
+        if (Object.keys(value).sort().join("\0") !== ["phase", "requestId", "sessionId", "text"].join("\0") || typeof value.text !== "string" || value.text.length > 16384) {
+          throw new Error("Invalid DeepSeek Web reasoning frame");
+        }
+        return { phase: "delta", sessionId: value.sessionId, requestId: value.requestId, text: value.text };
+      }
+      if (value.phase !== "start" && value.phase !== "end" || Object.keys(value).sort().join("\0") !== ["phase", "requestId", "sessionId"].join("\0")) {
+        throw new Error("Invalid DeepSeek Web reasoning frame");
+      }
+      return { phase: value.phase, sessionId: value.sessionId, requestId: value.requestId };
+    }
+    function isRecord(value) {
+      return typeof value === "object" && value !== null && !Array.isArray(value);
+    }
+
     // src/client.ts
     var DEEPSEEK_WEB_SETTINGS_LOCALE_NAMESPACE = "settings.deepseek-web";
     var settingsLocales = {
@@ -162,7 +201,9 @@ window.__ModuleLoader__.load({
         importAction: "\u5BFC\u5165\u5DF2\u5B8C\u6210\u4F1A\u8BDD",
         importing: "\u6B63\u5728\u5BFC\u5165\u2026",
         imported: "\u5DF2\u5BFC\u5165 {imported} \u4E2A\uFF1B\u5DF2\u6709\u76F8\u540C\u8BB0\u5F55 {idempotent} \u4E2A\u3002",
-        importFailed: "\u4F1A\u8BDD\u5BFC\u5165\u5931\u8D25\u3002"
+        importFailed: "\u4F1A\u8BDD\u5BFC\u5165\u5931\u8D25\u3002",
+        reasoningWorking: "\u601D\u8003\u4E2D\u2026",
+        reasoningDone: "\u5DF2\u601D\u8003"
       },
       en: {
         title: "DeepSeek Web model",
@@ -219,7 +260,9 @@ window.__ModuleLoader__.load({
         importAction: "Import completed session",
         importing: "Importing\u2026",
         imported: "Imported {imported}; already identical {idempotent}.",
-        importFailed: "Session import failed."
+        importFailed: "Session import failed.",
+        reasoningWorking: "Thinking\u2026",
+        reasoningDone: "Thought process"
       }
     };
     var inject = ["remote"];
@@ -229,12 +272,14 @@ window.__ModuleLoader__.load({
       "settingsScope",
       "remote.credentials",
       `remote.${DEEPSEEK_WEB_CONNECTION_NAMESPACE}`,
+      `remote.${DEEPSEEK_WEB_REASONING_NAMESPACE}`,
       `remote.${DEEPSEEK_WEB_SESSION_IMPORT_NAMESPACE}`
     ];
     var DEEPSEEK_WEB_CLIENT_REMOTE_CONTRIBUTION = Object.freeze({
       package: DEEPSEEK_WEB_REMOTE_CONTRIBUTION.package,
       descriptors: Object.freeze([
         ...DEEPSEEK_WEB_REMOTE_CONTRIBUTION.descriptors,
+        ...DEEPSEEK_WEB_REASONING_REMOTE_CONTRIBUTION.descriptors,
         ...DEEPSEEK_WEB_SESSION_IMPORT_REMOTE_CONTRIBUTION.descriptors
       ])
     });
@@ -492,6 +537,83 @@ window.__ModuleLoader__.load({
         throw new Error(message, error instanceof Error ? { cause: error } : void 0);
       }
     };
+    var DeepSeekWebReasoningStore = class {
+      listeners = /* @__PURE__ */ new Set();
+      snapshot = { sessions: /* @__PURE__ */ new Map(), revision: 0 };
+      abort = new AbortController();
+      started = false;
+      getSnapshot = () => this.snapshot;
+      subscribe = (listener) => {
+        this.listeners.add(listener);
+        return () => this.listeners.delete(listener);
+      };
+      async start(remote) {
+        if (this.started) return;
+        this.started = true;
+        try {
+          for await (const frame of remote.follow(this.abort.signal)) this.accept(frame);
+        } catch {
+          if (!this.abort.signal.aborted) this.clear();
+        }
+      }
+      dispose() {
+        this.abort.abort();
+        this.clear();
+        this.listeners.clear();
+      }
+      accept(frame) {
+        const sessions = new Map(this.snapshot.sessions);
+        if (frame.phase === "start") {
+          sessions.set(frame.sessionId, { requestId: frame.requestId, text: "", active: true });
+        } else {
+          const current = sessions.get(frame.sessionId);
+          if (current === void 0 || current.requestId !== frame.requestId) return;
+          if (frame.phase === "delta") {
+            const joined = current.text + frame.text;
+            sessions.set(frame.sessionId, {
+              ...current,
+              text: joined.length <= 131072 ? joined : `\u2026${joined.slice(-131071)}`
+            });
+          } else if (current.text === "") {
+            sessions.delete(frame.sessionId);
+          } else {
+            sessions.set(frame.sessionId, { ...current, active: false });
+          }
+        }
+        this.snapshot = { sessions, revision: this.snapshot.revision + 1 };
+        for (const listener of this.listeners) listener();
+      }
+      clear() {
+        if (this.snapshot.sessions.size === 0) return;
+        this.snapshot = { sessions: /* @__PURE__ */ new Map(), revision: this.snapshot.revision + 1 };
+        for (const listener of this.listeners) listener();
+      }
+    };
+    function DeepSeekWebReasoningDock({
+      sessionId,
+      store,
+      locale
+    }) {
+      const snapshot = import_react.default.useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+      import_react.default.useSyncExternalStore(locale.subscribe, locale.getSnapshot, locale.getSnapshot);
+      const reasoning = snapshot.sessions.get(sessionId);
+      if (reasoning === void 0 || reasoning.text === "") return null;
+      const t = locale.bind(DEEPSEEK_WEB_SETTINGS_LOCALE_NAMESPACE);
+      return import_react.default.createElement(
+        "details",
+        {
+          key: reasoning.requestId,
+          open: reasoning.active || void 0,
+          style: reasoningDockStyle
+        },
+        import_react.default.createElement(
+          "summary",
+          { style: { cursor: "pointer" } },
+          t(reasoning.active ? "reasoningWorking" : "reasoningDone")
+        ),
+        import_react.default.createElement("div", { style: reasoningTextStyle }, reasoning.text)
+      );
+    }
     function DeepSeekWebSettingsCard({
       controller,
       locale
@@ -722,6 +844,17 @@ window.__ModuleLoader__.load({
           () => injected.locale.register(DEEPSEEK_WEB_SETTINGS_LOCALE_NAMESPACE, settingsLocales),
           "deepseek-web: settings dictionaries"
         );
+        const reasoningStore = new DeepSeekWebReasoningStore();
+        injected.effect(() => {
+          void reasoningStore.start(injected.remote[DEEPSEEK_WEB_REASONING_NAMESPACE]);
+          return () => reasoningStore.dispose();
+        }, "deepseek-web: ephemeral reasoning stream");
+        injected.slots.inject("conversation.input.dock", () => injected.slots.register({
+          name: "conversation.input.dock",
+          id: "deepseek-web-reasoning",
+          order: -10,
+          inject: (sessionId) => ({ sessionId, store: reasoningStore, locale: injected.locale })
+        }, DeepSeekWebReasoningDock));
         injected.slots.inject("settings.plugin.item", () => {
           const settings = injected.settingsScope.bind({
             namespace: DEEPSEEK_WEB_SETTINGS_NAMESPACE,
@@ -757,7 +890,7 @@ window.__ModuleLoader__.load({
       };
     }
     function decodeSettings(value) {
-      if (!isRecord(value)) return void 0;
+      if (!isRecord2(value)) return void 0;
       const browser = value.browser;
       if (browser !== "chrome" && browser !== "edge" && browser !== "firefox") return void 0;
       if (typeof value.chromiumExtensionId !== "string" || typeof value.firefoxExtensionOrigin !== "string" || !Number.isSafeInteger(value.port) || typeof value.makeDefaultForNewSessions !== "boolean" || typeof value.windowsCommandsEnabled !== "boolean" || value.windowsApprovalPolicy !== "ask" && value.windowsApprovalPolicy !== "auto") return void 0;
@@ -779,7 +912,7 @@ window.__ModuleLoader__.load({
       };
     }
     function parseConnectionStatus(value) {
-      if (!isRecord(value)) throw new Error("Invalid DeepSeek Web connection status");
+      if (!isRecord2(value)) throw new Error("Invalid DeepSeek Web connection status");
       const allowed = /* @__PURE__ */ new Set(["phase", "configured", "tokenConfigured", "originConfigured", "busy", "pendingReconfigure", "browser", "port", "windows", "errorCode"]);
       if (Object.keys(value).some((key) => !allowed.has(key))) throw new Error("Invalid DeepSeek Web connection status");
       const phase = value.phase;
@@ -799,7 +932,7 @@ window.__ModuleLoader__.load({
       };
     }
     function parseReconnectReceipt(value) {
-      if (!isRecord(value) || typeof value.accepted !== "boolean" || typeof value.deferred !== "boolean" || value.reason !== void 0 && value.reason !== "busy" && value.reason !== "unconfigured") {
+      if (!isRecord2(value) || typeof value.accepted !== "boolean" || typeof value.deferred !== "boolean" || value.reason !== void 0 && value.reason !== "busy" && value.reason !== "unconfigured") {
         throw new Error("Invalid DeepSeek Web reconnect receipt");
       }
       return {
@@ -831,7 +964,7 @@ window.__ModuleLoader__.load({
       return field === "port" ? Number(value) : value;
     }
     function validWindowsStatus(value) {
-      if (!isRecord(value)) return false;
+      if (!isRecord2(value)) return false;
       if (value.kind === "disabled") return Object.keys(value).length === 1;
       if (value.kind === "available") {
         return Object.keys(value).every((key) => key === "kind" || key === "executable" || key === "major") && typeof value.executable === "string" && Number.isSafeInteger(value.major) && Number(value.major) >= 7;
@@ -880,7 +1013,7 @@ window.__ModuleLoader__.load({
       globalThis.crypto.getRandomValues(bytes);
       return bytes;
     }
-    function isRecord(value) {
+    function isRecord2(value) {
       return typeof value === "object" && value !== null && !Array.isArray(value);
     }
     function cardProps(open) {
@@ -915,6 +1048,18 @@ window.__ModuleLoader__.load({
     var statusTextStyle = { color: "var(--dsw-alias-label-tertiary)", fontSize: "0.8125rem" };
     var pendingStyle = { color: "var(--dsw-alias-status-warning)", fontSize: "0.8125rem" };
     var warningStyle = { color: "var(--dsw-alias-label-secondary)" };
+    var reasoningDockStyle = {
+      border: "1px solid var(--dsw-alias-border-l2)",
+      borderRadius: "10px",
+      padding: "8px 12px"
+    };
+    var reasoningTextStyle = {
+      maxHeight: "180px",
+      overflow: "auto",
+      paddingTop: "8px",
+      whiteSpace: "pre-wrap",
+      wordBreak: "break-word"
+    };
     return module.exports;
   }
 });

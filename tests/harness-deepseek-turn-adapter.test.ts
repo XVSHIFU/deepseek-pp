@@ -819,7 +819,7 @@ describe('DeepSeekWebModelTurnAdapter', () => {
     expect(sessions.getSession('session-1')?.quarantined).toBe(true);
   });
 
-  it('fails a completed stream containing an incomplete tool call without history verification', async () => {
+  it('fails after one bounded correction when an incomplete tool call remains malformed', async () => {
     const client = fakeClient();
     const streamer: TestStreamer = vi.fn(async (_input, callbacks: StreamCallbacks) => {
       callbacks.onTextChunk?.('<local_agent_read>{"path":"README.md"}', '');
@@ -836,7 +836,97 @@ describe('DeepSeekWebModelTurnAdapter', () => {
         external_outcome: 'started',
       },
     });
-    expect(client.readHistorySnapshot).not.toHaveBeenCalled();
+    expect(streamer).toHaveBeenCalledTimes(2);
+    expect(client.readHistorySnapshot).toHaveBeenCalledTimes(1);
+  });
+
+  it('corrects one standalone bracket marker into a formal tool call on the verified page chain', async () => {
+    const parents: Array<number | null> = [];
+    const client = fakeClient({
+      readHistorySnapshot: vi.fn(async (_chat, expected) => history(expected, {
+        messageCount: expected === 13 ? 4 : 2,
+      })),
+    });
+    const streamer: TestStreamer = vi.fn(async (input, callbacks) => {
+      parents.push(input.parentMessageId);
+      if (parents.length === 1) {
+        callbacks.onTextChunk?.('[调用 local_agent_read]', '');
+        return turn();
+      }
+      callbacks.onTextChunk?.(
+        '<local_agent_read>{"path":"README.md"}</local_agent_read>',
+        '',
+      );
+      return turn({ requestMessageId: 12, responseMessageId: 13 });
+    });
+    const { adapter, sessions } = adapterWith(streamer, client);
+    const collected = collectCallbacks();
+
+    expect(await adapter.generate(request(), collected.callbacks)).toEqual({
+      type: 'completed', finish_reason: 'tool_calls',
+    });
+    expect(streamer).toHaveBeenCalledTimes(2);
+    expect(parents).toEqual([null, 11]);
+    expect(collected.tools).toHaveLength(1);
+    expect(collected.tools[0]).toMatchObject({
+      name: 'local_agent_read', arguments: { path: 'README.md' },
+    });
+    expect(sessions.getSession('session-1')).toEqual({
+      chatSessionId: 'chat-1', parentMessageId: 13, messageCount: 4, quarantined: false,
+    });
+  });
+
+  it.each([
+    'The user wrote [调用 local_agent_read] in ordinary prose.',
+    '```text\n[调用 local_agent_read]\n```',
+    '[调用 unknown_tool]',
+  ])('keeps ordinary or unadvertised marker text as text without correction: %s', async (text) => {
+    const streamer: TestStreamer = vi.fn(async (_input, callbacks) => {
+      callbacks.onTextChunk?.(text, '');
+      return turn();
+    });
+    const { adapter } = adapterWith(streamer);
+    const collected = collectCallbacks();
+
+    expect(await adapter.generate(request(), collected.callbacks)).toEqual({
+      type: 'completed', finish_reason: 'stop',
+    });
+    expect(streamer).toHaveBeenCalledOnce();
+    expect(collected.text.map((event) => event.text).join('')).toBe(text);
+    expect(collected.tools).toHaveLength(0);
+  });
+
+  it('does not issue a corrective turn when the first malformed response chain is unverified', async () => {
+    const client = fakeClient({ readHistorySnapshot: vi.fn(async () => null) });
+    const streamer: TestStreamer = vi.fn(async (_input, callbacks) => {
+      callbacks.onTextChunk?.('[调用 local_agent_read]', '');
+      return turn();
+    });
+    const { adapter } = adapterWith(streamer, client);
+
+    expect(await adapter.generate(request(), collectCallbacks().callbacks)).toEqual({
+      type: 'ambiguous', reason: 'deepseek_chain_unverified',
+    });
+    expect(streamer).toHaveBeenCalledOnce();
+  });
+
+  it('never attempts a third webpage turn after a corrective dispatch becomes ambiguous', async () => {
+    let attempts = 0;
+    const streamer: TestStreamer = vi.fn(async (_input, callbacks, context) => {
+      attempts += 1;
+      if (attempts === 1) {
+        callbacks.onTextChunk?.('[调用 local_agent_read]', '');
+        return turn();
+      }
+      context.onDispatch?.();
+      throw new Error('browser disconnected');
+    });
+    const { adapter } = adapterWith(streamer);
+
+    expect(await adapter.generate(request(), collectCallbacks().callbacks)).toEqual({
+      type: 'ambiguous', reason: 'deepseek_turn_outcome_unknown',
+    });
+    expect(streamer).toHaveBeenCalledTimes(2);
   });
 
   it('splits multi-byte Unicode into independently valid full model.event frames', async () => {

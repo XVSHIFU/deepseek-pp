@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   DEEPSEEK_WEB_SETTINGS_CLIENT_INJECT,
+  DeepSeekWebReasoningStore,
   apply,
 } from "../packages/dsh-deepseek-web-official-plugin/src/client.ts";
 
@@ -61,6 +62,11 @@ describe("DeepSeek Web settings card", () => {
           reconnect: async () => ({ ok: true, value: {
             accepted: true, deferred: false, status: connectionValue(),
           } }),
+        },
+        deepseekWebReasoning: {
+          async *follow(signal: AbortSignal) {
+            await new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true }));
+          },
         },
         deepseekWebSessionImport: {
           importCompleted: async () => ({ ok: true, value: {
@@ -131,6 +137,22 @@ describe("DeepSeek Web settings card", () => {
     failSave = false;
     await click(button(container, "保存设置"));
     expect(button(container, "展开: DeepSeek 网页模型").getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("keeps reasoning only in bounded browser memory and clears it on disposal", async () => {
+    const store = new DeepSeekWebReasoningStore();
+    await store.start({
+      async *follow() {
+        yield { phase: "start" as const, sessionId: "session-a", requestId: "request-a" };
+        yield { phase: "delta" as const, sessionId: "session-a", requestId: "request-a", text: "live thought" };
+        yield { phase: "end" as const, sessionId: "session-a", requestId: "request-a" };
+      },
+    });
+    expect(store.getSnapshot().sessions.get("session-a")).toEqual({
+      requestId: "request-a", text: "live thought", active: false,
+    });
+    store.dispose();
+    expect(store.getSnapshot().sessions.size).toBe(0);
   });
 });
 

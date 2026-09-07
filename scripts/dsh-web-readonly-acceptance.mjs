@@ -43,7 +43,7 @@ export function validateReadOnlyProfileDump(text) {
 export function verifyReadOnlySession(raw, expected) {
   const invalid = () => { throw new RealWebSmokeError("REAL_WEB_TOOL_EVIDENCE_INVALID"); };
   if (!raw.endsWith("\n")) invalid();
-  if (/reasoning|authorization|cookie|api[_-]?key|pairing[_-]?token/iu.test(raw) ||
+  if (/authorization|cookie|api[_-]?key|pairing[_-]?token|"type"\s*:\s*"reasoning(?:-delta)?"/iu.test(raw) ||
       expected.forbiddenExact.some((value) => value !== "" && raw.includes(value))) {
     throw new RealWebSmokeError("REAL_WEB_SESSION_SENSITIVE_DATA");
   }
@@ -61,7 +61,7 @@ export function verifyReadOnlySession(raw, expected) {
       requestHeaders.length < 1 || contexts.length < 1) invalid();
   if (!sameJson(users[0].data.content, [{ type: "text", text: expected.task }]) ||
       expected.task.includes(expected.nonce) || JSON.stringify(answers[0]).includes(expected.nonce)) invalid();
-  if (requestHeaders.some((event) => !sameJson(event.data.header?.config, { provider: PROVIDER, model: MODEL })) ||
+  if (requestHeaders.some((event) => !isExpectedWebConfig(event.data.header?.config)) ||
       contexts.some((event) => event.data.provider !== PROVIDER || event.data.model !== MODEL)) invalid();
   for (let index = 0; index < 2; index++) {
     if ([starts[index], ends[index], answers[index]].some((event) => event.data.turn !== 1 || event.data.step !== index + 1) ||
@@ -189,6 +189,14 @@ export function sameJson(left, right) {
   if (!left || !right || typeof left !== "object" || typeof right !== "object" || Array.isArray(left) !== Array.isArray(right)) return false;
   const keys = Object.keys(left);
   return keys.length === Object.keys(right).length && keys.every((key) => Object.hasOwn(right, key) && sameJson(left[key], right[key]));
+}
+
+/** Accept the legacy omitted effort and the explicit non-thinking default. */
+export function isExpectedWebConfig(value, provider = PROVIDER, model = MODEL) {
+  if (!value || typeof value !== "object" || Array.isArray(value) ||
+      value.provider !== provider || value.model !== model ||
+      (value.reasoningEffort !== undefined && value.reasoningEffort !== "off")) return false;
+  return Object.keys(value).every((key) => key === "provider" || key === "model" || key === "reasoningEffort");
 }
 
 export async function main(args, options = {}) {

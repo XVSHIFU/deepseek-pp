@@ -18,6 +18,8 @@ import {
 } from "../packages/dsh-deepseek-web-official-plugin/src/connection-remote.ts";
 import { DEEPSEEK_WEB_REMOTE_CONTRIBUTION } from "../packages/dsh-deepseek-web-official-plugin/src/connection-contract.ts";
 import { DEEPSEEK_WEB_SESSION_IMPORT_REMOTE_CONTRIBUTION } from "../packages/dsh-deepseek-web-official-plugin/src/session-import-contract.ts";
+import { DEEPSEEK_WEB_REASONING_REMOTE_CONTRIBUTION } from "../packages/dsh-deepseek-web-official-plugin/src/reasoning-contract.ts";
+import { DeepSeekWebReasoningFeed } from "../packages/dsh-deepseek-web-official-plugin/src/reasoning-remote.ts";
 import {
   apply as applyClient,
   DEEPSEEK_WEB_CLIENT_REMOTE_CONTRIBUTION,
@@ -399,6 +401,11 @@ describe("official DeepSeek Web settings and connection", () => {
             accepted: true, deferred: false, status: connectionView(),
           } }),
         },
+        deepseekWebReasoning: {
+          async *follow(signal: AbortSignal) {
+            await new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true }));
+          },
+        },
         deepseekWebSessionImport: {
           importCompleted: async () => ({ ok: true, value: {
             transactionId: "fixture", rootSessionId: "root", sessionIds: ["root"], imported: 1, idempotent: 0,
@@ -423,6 +430,7 @@ describe("official DeepSeek Web settings and connection", () => {
     expect(injectClient).toHaveBeenCalledWith(DEEPSEEK_WEB_SETTINGS_CLIENT_INJECT, expect.any(Function));
     expect(DEEPSEEK_WEB_CLIENT_REMOTE_CONTRIBUTION.descriptors).toEqual([
       ...DEEPSEEK_WEB_REMOTE_CONTRIBUTION.descriptors,
+      ...DEEPSEEK_WEB_REASONING_REMOTE_CONTRIBUTION.descriptors,
       ...DEEPSEEK_WEB_SESSION_IMPORT_REMOTE_CONTRIBUTION.descriptors,
     ]);
     const importParameter = DEEPSEEK_WEB_SESSION_IMPORT_REMOTE_CONTRIBUTION.descriptors[0]!.parameters[0]!;
@@ -448,6 +456,30 @@ describe("official DeepSeek Web settings and connection", () => {
     await dispose();
     expect(unmount).toHaveBeenCalledOnce();
     expect(injectedDispose).toHaveBeenCalledOnce();
+  });
+
+  it("fans live reasoning out without retaining a replay baseline", async () => {
+    const feed = new DeepSeekWebReasoningFeed();
+    const abort = new AbortController();
+    const iterator = feed.follow(abort.signal)[Symbol.asyncIterator]();
+    const first = iterator.next();
+    feed.publish({ phase: "start", sessionId: "session-a", requestId: "request-a" });
+    await expect(first).resolves.toEqual({
+      done: false,
+      value: { phase: "start", sessionId: "session-a", requestId: "request-a" },
+    });
+    abort.abort();
+    await iterator.return?.();
+
+    const freshAbort = new AbortController();
+    const fresh = feed.follow(freshAbort.signal)[Symbol.asyncIterator]();
+    const pending = fresh.next();
+    let settled = false;
+    void pending.then(() => { settled = true; });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    freshAbort.abort();
+    await pending;
   });
 
   it("exports only redacted live state and refuses reconnect while the broker is busy", async () => {
@@ -492,10 +524,13 @@ describe("official DeepSeek Web settings and connection", () => {
   });
 
   it("changes the future-session default only through the official authority after explicit opt-in", async () => {
-    const saveSelection = vi.fn(async () => undefined);
+    let current = { provider: "other", model: "other" } as {
+      provider: string; model: string; reasoningEffort?: ReturnType<typeof import("@deepseek-ai/dsh-llm").ReasoningEffortId>;
+    };
+    const saveSelection = vi.fn(async (next: typeof current) => { current = next; });
     const ctx = new Context();
     contexts.push(ctx);
-    ctx.provide("agentDefaultModel", { saveSelection } as never);
+    ctx.provide("agentDefaultModel", { currentSelection: () => current, saveSelection } as never);
     const base = {
       browser: "chrome",
       chromiumExtensionId: "",
@@ -515,9 +550,33 @@ describe("official DeepSeek Web settings and connection", () => {
     expect(saveSelection).toHaveBeenCalledWith({
       provider: "deepseek-web",
       model: "current-web-session",
+      reasoningEffort: "off",
     });
     await applyRequestedDefault(ctx, { ...base, makeDefaultForNewSessions: false }, consume);
     expect(saveSelection).toHaveBeenCalledOnce();
+
+    await applyRequestedDefault(ctx, {
+      ...base,
+      webModelMode: "expert",
+      thinkingEnabled: true,
+      makeDefaultForNewSessions: false,
+    }, consume);
+    expect(saveSelection).toHaveBeenLastCalledWith({
+      provider: "deepseek-web",
+      model: "current-web-session-expert",
+      reasoningEffort: "on",
+    });
+    expect(saveSelection).toHaveBeenCalledTimes(2);
+    expect(consume).toHaveBeenCalledOnce();
+
+    current = { provider: "other", model: "other" };
+    await applyRequestedDefault(ctx, {
+      ...base,
+      webModelMode: "default",
+      thinkingEnabled: true,
+      makeDefaultForNewSessions: false,
+    }, consume);
+    expect(saveSelection).toHaveBeenCalledTimes(2);
   });
 });
 

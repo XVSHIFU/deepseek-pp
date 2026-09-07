@@ -93,6 +93,7 @@ describe.skipIf(process.platform !== "win32")("official web Profile with the Dee
     expect(changedCatalog.value?.default).toEqual({
       provider: "deepseek-web",
       model: "current-web-session",
+      reasoningEffort: "off",
     });
 
     const reconnected = await fixture.reconnect();

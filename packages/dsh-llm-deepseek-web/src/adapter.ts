@@ -2,6 +2,7 @@ import {
   LlmAdapter,
   LlmError,
   LOCAL_REQUEST_BUDGET_EXCEEDED_CODE,
+  ReasoningEffortId,
   ToolCallId,
   resolveRetryPolicy,
   type GenerateOptions,
@@ -20,8 +21,11 @@ import type { ModelEvent, ModelTerminalEvent } from "@deepseek-pp/web-model-prot
 
 import {
   DEEPSEEK_WEB_CONTEXT_WINDOW,
+  DEEPSEEK_WEB_EXPERT_MODEL,
   DEEPSEEK_WEB_MODEL,
   DEEPSEEK_WEB_PROVIDER,
+  DEEPSEEK_WEB_REASONING_OFF,
+  DEEPSEEK_WEB_REASONING_ON,
 } from "./constants.ts";
 import { canonicalJson, serializeGenerateRequest, type RequestIdentityFactory } from "./request.ts";
 import { GenerationScheduler } from "./generation-scheduler.ts";
@@ -36,12 +40,20 @@ export interface DeepSeekWebAdapterOptions {
   readonly broker: DeepSeekWebBroker;
   readonly createRequestId?: RequestIdentityFactory;
   readonly abortSettleTimeoutMs?: number;
+  /** UI-only live reasoning sink. Events never enter StreamChunk or session persistence. */
+  readonly onReasoningEvent?: (event: DeepSeekWebReasoningEvent) => void;
 }
+
+export type DeepSeekWebReasoningEvent =
+  | { readonly phase: "start"; readonly sessionId: string; readonly requestId: string }
+  | { readonly phase: "delta"; readonly sessionId: string; readonly requestId: string; readonly text: string }
+  | { readonly phase: "end"; readonly sessionId: string; readonly requestId: string };
 
 export class DeepSeekWebAdapter extends LlmAdapter {
   private readonly broker: DeepSeekWebBroker;
   private readonly createRequestId: RequestIdentityFactory | undefined;
   private readonly abortSettleTimeoutMs: number;
+  private readonly onReasoningEvent: ((event: DeepSeekWebReasoningEvent) => void) | undefined;
   private cleanupState: "ready" | "pending" | "failed" = "ready";
   private readonly scheduler = new GenerationScheduler();
 
@@ -49,6 +61,7 @@ export class DeepSeekWebAdapter extends LlmAdapter {
     super();
     this.broker = options.broker;
     this.createRequestId = options.createRequestId;
+    this.onReasoningEvent = options.onReasoningEvent;
     const timeout = options.abortSettleTimeoutMs ?? 15_000;
     if (!Number.isFinite(timeout) || timeout <= 0 || timeout > 600_000) {
       throw new Error("abortSettleTimeoutMs must be a positive finite number no greater than 600000");
@@ -72,17 +85,27 @@ export class DeepSeekWebAdapter extends LlmAdapter {
     if (provider !== DEEPSEEK_WEB_PROVIDER) {
       return Promise.reject(new LlmError("The DeepSeek Web adapter does not own this provider route.", "NO_ADAPTER"));
     }
-    return Promise.resolve([modelInfo(provider)]);
+    return Promise.resolve([modelInfo(provider, DEEPSEEK_WEB_MODEL), modelInfo(provider, DEEPSEEK_WEB_EXPERT_MODEL)]);
   }
 
   override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
     if (provider !== DEEPSEEK_WEB_PROVIDER) {
       return Promise.reject(new LlmError("The DeepSeek Web adapter does not own this provider route.", "NO_ADAPTER"));
     }
-    if (model !== DEEPSEEK_WEB_MODEL) {
-      return Promise.reject(new LlmError("The DeepSeek Web adapter only exposes the current browser session.", "UNKNOWN_MODEL"));
+    if (model !== DEEPSEEK_WEB_MODEL && model !== DEEPSEEK_WEB_EXPERT_MODEL) {
+      return Promise.reject(new LlmError("The DeepSeek Web adapter does not expose this browser-session mode.", "UNKNOWN_MODEL"));
     }
-    return Promise.resolve({ ...modelInfo(provider), context: { contextWindow: DEEPSEEK_WEB_CONTEXT_WINDOW } });
+    return Promise.resolve({
+      ...modelInfo(provider, model),
+      context: { contextWindow: DEEPSEEK_WEB_CONTEXT_WINDOW },
+      reasoning: {
+        efforts: [
+          { id: ReasoningEffortId(DEEPSEEK_WEB_REASONING_OFF), name: "Thinking off" },
+          { id: ReasoningEffortId(DEEPSEEK_WEB_REASONING_ON), name: "Thinking on" },
+        ],
+        defaultEffort: ReasoningEffortId(DEEPSEEK_WEB_REASONING_OFF),
+      },
+    });
   }
 
   async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
@@ -112,6 +135,10 @@ export class DeepSeekWebAdapter extends LlmAdapter {
     }
 
     let terminal = false;
+    const reasoningVisible = request.options.thinking_enabled;
+    if (reasoningVisible) this.publishReasoning({
+      phase: "start", sessionId: request.session_id, requestId: request.request_id,
+    });
     let textIndex: number | undefined;
     let text = "";
     let nextIndex = 0;
@@ -188,6 +215,9 @@ export class DeepSeekWebAdapter extends LlmAdapter {
             break;
           case "reasoning_delta":
             if (usageSeen) throw protocolFailure();
+            if (reasoningVisible) this.publishReasoning({
+              phase: "delta", sessionId: request.session_id, requestId: request.request_id, text: event.text,
+            });
             break;
           case "tool_call": {
             if (usageSeen) throw protocolFailure();
@@ -249,6 +279,9 @@ export class DeepSeekWebAdapter extends LlmAdapter {
       if (error instanceof BrokerError && error.externalOutcome === "not_started") cancellationAllowed = false;
       throw normalizeAdapterError(error, options.signal);
     } finally {
+      if (reasoningVisible) this.publishReasoning({
+        phase: "end", sessionId: request.session_id, requestId: request.request_id,
+      });
       options.signal?.removeEventListener("abort", handleAbort);
       if (!iteratorDone && !iteratorCleanupHandled) {
         const cancellationResult = !terminal && cancellationAllowed
@@ -261,6 +294,14 @@ export class DeepSeekWebAdapter extends LlmAdapter {
           this.trackCleanup(cleanup);
         }
       }
+    }
+  }
+
+  private publishReasoning(event: DeepSeekWebReasoningEvent): void {
+    try {
+      this.onReasoningEvent?.(event);
+    } catch {
+      // The ephemeral presentation path must never affect the model request.
     }
   }
 
@@ -306,12 +347,15 @@ export class DeepSeekWebAdapter extends LlmAdapter {
   }
 }
 
-function modelInfo(provider: string): LlmModelInfo {
+function modelInfo(provider: string, model: typeof DEEPSEEK_WEB_MODEL | typeof DEEPSEEK_WEB_EXPERT_MODEL): LlmModelInfo {
+  const expert = model === DEEPSEEK_WEB_EXPERT_MODEL;
   return {
     provider,
-    id: DEEPSEEK_WEB_MODEL,
-    name: "Current DeepSeek Web Session",
-    description: "Uses the authenticated DeepSeek++ browser broker; no local model or model API credential.",
+    id: model,
+    name: expert ? "DeepSeek Web (Expert)" : "DeepSeek Web (Default)",
+    description: expert
+      ? "Uses Expert mode in the authenticated DeepSeek++ browser session."
+      : "Uses Default mode in the authenticated DeepSeek++ browser session.",
     inputModalities: ["text"],
   };
 }

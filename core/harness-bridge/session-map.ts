@@ -212,6 +212,36 @@ export class WebModelSessionMap {
     this.finishRequest(request, 'completed');
   }
 
+  /** Complete one Harness request that used one bounded corrective webpage turn. */
+  completeCorrection(
+    requestId: string,
+    first: VerifiedWebPageTurn,
+    corrected: VerifiedWebPageTurn,
+  ): void {
+    const request = this.requireDispatchedRequest(requestId);
+    const current = this.sessions.get(request.sessionId);
+    if (!current || current.quarantined ||
+        !validTurn(first, current.chatSessionId) || !validTurn(corrected, current.chatSessionId) ||
+        first.requestParentMessageId !== request.parentMessageIdAtDispatch ||
+        first.requestParentMessageId !== current.parentMessageId ||
+        first.messageCount !== current.messageCount + 2 ||
+        corrected.requestParentMessageId !== first.responseMessageId ||
+        corrected.messageCount !== current.messageCount + 4 ||
+        corrected.requestMessageId === first.responseMessageId ||
+        corrected.responseMessageId === first.responseMessageId) {
+      throw new WebModelSessionMapError('CHAIN_UNVERIFIED');
+    }
+    request.requestMessageId = corrected.requestMessageId;
+    request.responseMessageId = corrected.responseMessageId;
+    this.sessions.set(request.sessionId, Object.freeze({
+      chatSessionId: current.chatSessionId,
+      parentMessageId: corrected.responseMessageId,
+      messageCount: corrected.messageCount,
+      quarantined: false,
+    }));
+    this.finishRequest(request, 'completed');
+  }
+
   markTerminal(requestId: string, phase: Exclude<WebModelTerminalPhase, 'completed'>): void {
     const request = this.requireActiveRequest(requestId);
     if (request.phase === 'dispatched' || request.phase === 'streaming') {
@@ -297,6 +327,15 @@ function boundedLimit(value: number | undefined, fallback: number): number {
 
 function isSafeMessageId(value: number): boolean {
   return Number.isSafeInteger(value) && value >= 0 && value <= 0xffff_ffff;
+}
+
+function validTurn(turn: VerifiedWebPageTurn, chatSessionId: string): boolean {
+  return isSafeMessageId(turn.requestMessageId) && isSafeMessageId(turn.responseMessageId) &&
+    turn.chatSessionId === chatSessionId && turn.nextParentMessageId === turn.responseMessageId &&
+    turn.assistantMessageId === turn.responseMessageId &&
+    turn.assistantParentMessageId === turn.requestMessageId &&
+    turn.requestMessageId !== turn.responseMessageId && Number.isSafeInteger(turn.messageCount) &&
+    Number.isSafeInteger(turn.verifiedAt) && turn.verifiedAt >= 0;
 }
 
 function freezeRequestSnapshot(request: MutableRequestRecord): WebModelRequestSnapshot {

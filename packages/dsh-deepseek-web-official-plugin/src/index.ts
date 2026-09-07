@@ -1,6 +1,7 @@
 import type { Context } from "@deepseek-ai/cordis";
 import { credentialRef } from "@deepseek-ai/dsh-credentials";
 import { dshHomePath } from "@deepseek-ai/dsh-home-paths";
+import { ReasoningEffortId } from "@deepseek-ai/dsh-llm";
 import type {} from "@deepseek-ai/dsh-settings";
 import { registerDeepSeekWebAdapter } from "@deepseek-pp/dsh-llm-deepseek-web";
 import type { DeepSeekWebBroker } from "@deepseek-pp/dsh-web-model-transport";
@@ -13,14 +14,18 @@ import {
   validateOfficialSettings,
 } from "./config.ts";
 import {
+  DEEPSEEK_WEB_EXPERT_MODEL,
   DEEPSEEK_WEB_MODEL,
   DEEPSEEK_WEB_PROVIDER,
+  DEEPSEEK_WEB_REASONING_OFF,
+  DEEPSEEK_WEB_REASONING_ON,
 } from "./connection-contract.ts";
 import {
   DeepSeekWebConnectionController,
   createDeepSeekWebModelHost,
 } from "./connection-controller.ts";
 import { DeepSeekWebConnectionRemote } from "./connection-remote.ts";
+import { DeepSeekWebReasoningFeed, DeepSeekWebReasoningRemote } from "./reasoning-remote.ts";
 import { DeepSeekWebSessionImportRemote } from "./session-import-remote.ts";
 import {
   installWindowsPowerShellPolicy,
@@ -32,6 +37,8 @@ export * from "./config.ts";
 export * from "./connection-controller.ts";
 export * from "./connection-remote.ts";
 export * from "./managed-broker.ts";
+export * from "./reasoning-contract.ts";
+export * from "./reasoning-remote.ts";
 export * from "./windows-powershell.ts";
 
 export const name = "deepseek-web-official";
@@ -81,8 +88,12 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
   // Keep the final plugin tarball independent from private workspace package
   // installation. The Host bundle embeds the adapter/transport/protocol and
   // registers the adapter in the same Cordis lifecycle as its broker.
-  registerDeepSeekWebAdapter(ctx, connection.broker);
+  const reasoningFeed = new DeepSeekWebReasoningFeed();
+  registerDeepSeekWebAdapter(ctx, connection.broker, {
+    onReasoningEvent: (event) => reasoningFeed.publish(event),
+  });
   new DeepSeekWebConnectionRemote(ctx, connection);
+  new DeepSeekWebReasoningRemote(ctx, reasoningFeed);
   new DeepSeekWebSessionImportRemote(ctx, ctx.deepseekWebSessionImport);
   const stopWatchingSettings = settings.watch(async (next, previous) => {
     if (connectionSettingsChanged(next, previous)) await connection.requestReconfigure("settings");
@@ -90,7 +101,8 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
       await applyPowerShellExecutable(ctx, next.powerShellExecutable, true);
     }
     if (windowsSettingsChanged(next, previous)) await windowsPolicy.update(windowsConfig(next));
-    if (next.makeDefaultForNewSessions && !previous.makeDefaultForNewSessions) {
+    if ((next.makeDefaultForNewSessions && !previous.makeDefaultForNewSessions) ||
+        webModelDefaultsChanged(next, previous)) {
       await applyRequestedDefault(ctx, next, () => settings.update({ makeDefaultForNewSessions: false }));
     }
   });
@@ -173,6 +185,11 @@ function windowsSettingsChanged(left: DeepSeekWebSettingsValue, right: DeepSeekW
     left.powerShellExecutable !== right.powerShellExecutable;
 }
 
+function webModelDefaultsChanged(left: DeepSeekWebSettingsValue, right: DeepSeekWebSettingsValue): boolean {
+  return (left.webModelMode ?? "default") !== (right.webModelMode ?? "default") ||
+    (left.thinkingEnabled ?? false) !== (right.thinkingEnabled ?? false);
+}
+
 async function applyPowerShellExecutable(ctx: Context, input: string, clearWhenEmpty: boolean): Promise<void> {
   if (process.platform !== "win32") return;
   const executable = input.trim();
@@ -202,12 +219,23 @@ export async function applyRequestedDefault(
   settings: DeepSeekWebSettingsValue,
   consume?: () => Promise<void>,
 ): Promise<void> {
-  if (!settings.makeDefaultForNewSessions) return;
   const authority = ctx.get("agentDefaultModel");
-  if (authority === undefined) throw new Error("DEEPSEEK_WEB_DEFAULT_MODEL_AUTHORITY_UNAVAILABLE");
-  await authority.saveSelection({
+  if (authority === undefined) {
+    if (!settings.makeDefaultForNewSessions) return;
+    throw new Error("DEEPSEEK_WEB_DEFAULT_MODEL_AUTHORITY_UNAVAILABLE");
+  }
+  const selected = {
     provider: DEEPSEEK_WEB_PROVIDER,
-    model: DEEPSEEK_WEB_MODEL,
-  });
-  await consume?.();
+    model: (settings.webModelMode ?? "default") === "expert" ? DEEPSEEK_WEB_EXPERT_MODEL : DEEPSEEK_WEB_MODEL,
+    reasoningEffort: ReasoningEffortId(
+      (settings.thinkingEnabled ?? false) ? DEEPSEEK_WEB_REASONING_ON : DEEPSEEK_WEB_REASONING_OFF,
+    ),
+  } as const;
+  if (!settings.makeDefaultForNewSessions) {
+    const current = authority.currentSelection();
+    if (current.provider !== DEEPSEEK_WEB_PROVIDER) return;
+    if (current.model === selected.model && current.reasoningEffort === selected.reasoningEffort) return;
+  }
+  await authority.saveSelection(selected);
+  if (settings.makeDefaultForNewSessions) await consume?.();
 }

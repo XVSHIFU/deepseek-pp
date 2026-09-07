@@ -3,7 +3,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { RealWebSmokeError, decodeSessionLog, parseProfileDump, validateProfileRows } from "./dsh-web-real-smoke.mjs";
-import { prepareToolFixture, runToolAcceptance, sameFile, sameJson } from "./dsh-web-readonly-acceptance.mjs";
+import { isExpectedWebConfig, prepareToolFixture, runToolAcceptance, sameFile, sameJson } from "./dsh-web-readonly-acceptance.mjs";
 
 const PROVIDER = "deepseek-web", MODEL = "current-web-session";
 const PATCH = resolve(import.meta.dirname, "../packages/dsh-web-agent-bundle/cordis.workspace-files.patch.yml");
@@ -37,7 +37,7 @@ export function createFileEditTask(fixture) {
 export function verifyFileEditSession(raw, expected) {
   const invalid = () => { throw new RealWebSmokeError("REAL_WEB_TOOL_EVIDENCE_INVALID"); };
   if (!raw.endsWith("\n")) invalid();
-  if (/reasoning|authorization|cookie|api[_-]?key|pairing[_-]?token/iu.test(raw) ||
+  if (/authorization|cookie|api[_-]?key|pairing[_-]?token|"type"\s*:\s*"reasoning(?:-delta)?"/iu.test(raw) ||
       expected.forbiddenExact.some((value) => value !== "" && raw.includes(value))) {
     throw new RealWebSmokeError("REAL_WEB_SESSION_SENSITIVE_DATA");
   }
@@ -53,7 +53,7 @@ export function verifyFileEditSession(raw, expected) {
       requestHeaders.length < 1 || contexts.length < 1) invalid();
   if (!sameJson(users[0].data.content, [{ type: "text", text: expected.task }]) || expected.task.includes(expected.nonce) ||
       JSON.stringify(answers[0]).includes(expected.nonce)) invalid();
-  if (requestHeaders.some((event) => !sameJson(event.data.header?.config, { provider: PROVIDER, model: MODEL })) ||
+  if (requestHeaders.some((event) => !isExpectedWebConfig(event.data.header?.config, PROVIDER, MODEL)) ||
       contexts.some((event) => event.data.provider !== PROVIDER || event.data.model !== MODEL)) invalid();
   for (let index = 0; index < 3; index++) {
     if ([starts[index], ends[index], answers[index]].some((event) => event.data.turn !== 1 || event.data.step !== index + 1) ||

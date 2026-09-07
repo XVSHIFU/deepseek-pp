@@ -104,7 +104,7 @@ function browserFixture(replies: readonly (readonly string[])[]) {
 }
 
 async function browserTurn(chunks: readonly string[], input = request()) {
-  const fixture = browserFixture([chunks]);
+  const fixture = browserFixture([chunks, chunks]);
   const events: ModelEvent[] = [];
   const terminal = await fixture.adapter.generate(input, {
     onAccepted() {},
@@ -222,7 +222,8 @@ describe('Harness tool wire production mapping', () => {
       type: 'failed', error: { code: 'TOOL_CALL_INVALID', retryable: false, external_outcome: 'started' },
     });
     expect(result.events.filter((event) => event.type === 'tool_call')).toEqual([]);
-    expect(result.client.readHistorySnapshot).not.toHaveBeenCalled();
+    expect(result.client.readHistorySnapshot).toHaveBeenCalledTimes(1);
+    expect(result.client.submitPromptStreaming).toHaveBeenCalledTimes(2);
   });
 
   it('rejects a duplicate parser-generated call ID within one request', async () => {

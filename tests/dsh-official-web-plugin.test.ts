@@ -70,6 +70,7 @@ describe("official DeepSeek Web incremental plugin", () => {
     let loaded: ClientRegistration | undefined;
     runInNewContext(bundle, {
       window: { __ModuleLoader__: { load(value: ClientRegistration) { loaded = value; } } },
+      AbortController,
       setInterval,
       clearInterval,
     });
@@ -105,6 +106,11 @@ describe("official DeepSeek Web incremental plugin", () => {
           status: async () => ({ ok: true, value: undefined }),
           reconnect: async () => ({ ok: true, value: undefined }),
         },
+        deepseekWebReasoning: {
+          async *follow(signal: AbortSignal) {
+            await new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true }));
+          },
+        },
         deepseekWebSessionImport: {
           importCompleted: async () => ({ ok: true, value: {
             transactionId: "fixture",
@@ -126,11 +132,12 @@ describe("official DeepSeek Web incremental plugin", () => {
       },
       slots: {
         inject(name: string, register: () => unknown) {
-          expect(name).toBe("settings.plugin.item");
-          slotCleanup = register() as () => void;
+          expect(["settings.plugin.item", "conversation.input.dock"]).toContain(name);
+          const cleanup = register() as (() => void) | undefined;
+          if (name === "settings.plugin.item") slotCleanup = cleanup;
         },
-        register(options: { key?: string }, component: () => unknown) {
-          card = { key: options.key, component };
+        register(options: { name?: string; key?: string }, component: () => unknown) {
+          if (options.name === "settings.plugin.item") card = { key: options.key, component };
           return () => undefined;
         },
       },
@@ -142,6 +149,7 @@ describe("official DeepSeek Web incremental plugin", () => {
         "settingsScope",
         "remote.credentials",
         "remote.deepseekWebConnection",
+        "remote.deepseekWebReasoning",
         "remote.deepseekWebSessionImport",
       ]);
       callback(clientContext);
