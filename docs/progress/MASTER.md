@@ -155,15 +155,19 @@
 | Task | 当前状态 | 当前证据 / 下一退出条件 |
 |:--|:--|:--|
 | T7.1 官方插件纵切片 | `verified` | 独立增量包经真实 `dsh plugin --profile web add` 安装；官方 bundles/default 保留，未配对 Web 200、设置卡和模型注册均通过 |
-| T7.2 配置与连接 | `not_started` | 待 T7.1 公共接口冻结后开始 |
-| T7.3 PowerShell 7 与审批 | `not_started` | 待 T7.1 公共接口冻结后开始 |
-| T7.4 能力兼容 | `not_started` | 待 T7.2/T7.3/T7.5 汇合 |
-| T7.5 旧会话导入 | `not_started` | 待 T7.1 公共接口冻结后开始 |
-| T7.6 包与真实验收 | `not_started` | 待 T7.2–T7.5 完成 |
+| T7.2 配置与连接 | `verified` | 官方 settings/credential/Remote Gateway 实际持久化、重连、重启恢复；默认模型 opt-in 成功后一次性消费，不覆盖后续用户选择 |
+| T7.3 PowerShell 7 与审批 | `verified` | 只组合锁版官方 pwsh/tool/subprocess/approval；默认关闭、真实 Gateway rejected/allowed-once/rejected、显式 auto、超时/取消/树清理通过 |
+| T7.4 能力兼容 | `verified` | 真实 standard preset 经公开 Gateway 完成 Skill、前台 subagent、write、`/compact`、冷重启恢复；全部请求只走 deepseek-web/current-web-session |
+| T7.5 旧会话导入 | `blocked / current_gap` | 官方 persistence 无根+子多会话原子 CAS/事务，且导入必须与 Windows disabled/tombstone 原子提交；未把内存试验 target 接入产品 |
+| T7.6 包与真实验收 | `blocked` | 等待 T7.5 官方接口缺口；真实已登录浏览器仍需操作者明确授权，本轮 fake browser 不作 real 证据 |
 
 T7 只新增官方 DSH 增量插件；旧 `packages/dsh-web-agent-bundle` standalone policy（包括禁止 settings/credentials 写入）不被悄悄放宽。用户现有 `%LOCALAPPDATA%\DeepSeekWebAgent` `0a66c3a`、配对和旧交付保持不变。当前实现顺序是先完成 T7.1，再按文件 ownership 并行 T7.2/T7.3/T7.5；不得用旧门禁或 fake 证据冒充新插件验收。
 
-**T7.1 退出结论（2026-09-07）**：新增 `@deepseek-pp/dsh-deepseek-web-official-plugin` 只向官方 `web` profile 追加 Host 与既有 DeepSeek Web adapter，官方 Harness 继续拥有 Agent loop、session、tools、approval、settings 与 UI。Host/Client namespace 固定为 `deepseek-web`，pairing token 只引用 credential key `DSH_WEB_PAIRING_TOKEN`；未配置时仍注册模型并返回 `WAITING_FOR_BROWSER`，普通官方 Web 可启动。`makeDefaultForNewSessions` 只是已冻结的 T7.2 配置合同，T7.1 未声称它已经生效；真实 DeepSeek 网页模型同样未在本切片调用。
+**T7.1 退出结论（2026-09-07）**：新增 `@deepseek-pp/dsh-deepseek-web-official-plugin` 只向官方 `web` profile 追加 Host 与既有 DeepSeek Web adapter，官方 Harness 继续拥有 Agent loop、session、tools、approval、settings 与 UI。Host/Client namespace 固定为 `deepseek-web`，pairing token 只引用 credential key `DSH_WEB_PAIRING_TOKEN`；未配置时仍注册模型并返回 `WAITING_FOR_BROWSER`，普通官方 Web 可启动。
+
+**T7.2–T7.4 退出结论（2026-09-07）**：隔离临时官方 `web` profile 经公开 Gateway 实际验证配置、credential、状态、重连、重启、standard preset、Skill、前台 subagent、write、官方审批和冷恢复。Windows 命令策略按不可变 session header 绑定并外置原子持久化；旧/seed/imported session 无记录即 disabled。官方 basic compaction 的本地 `maxTokens` 提示只在 `purpose=compaction` 时被接受但不发往协议，普通生成仍拒绝不受支持的控制项；上游压缩器继续负责摘要必须小于被替换历史的收敛校验。fake browser 只替代 DeepSeek 外部 I/O，不是实际网页推理证据。
+
+**T7.5 阻塞结论（2026-09-07）**：锁版官方 session API 没有多会话 CAS/事务，无法让 completed 根会话及必需子会话全有或全无地落盘；同时 Windows policy store 必须加入同一事务写 disabled/tombstone，否则同 ID、同 header 的残留 enabled policy 仍可能被导入会话继承。相关试验内核已从工作树移除，只保留本 current-gap 结论；在官方后端提供原子能力前不交付不安全的导入入口。
 
 **本轮工作（2026-09-06）**：用户授权收尾后，`web_stage_reconnect` 完成全质量子门禁及 Windows 测试夹具修正，`web_stage_surface` 完成最终候选三端构建与裸首装验证，`web_stage_terminal_fix` 完成简明用户文档和两处 Shell 测试兼容修正；编排修复裸首装依赖时机、执行真实网页验收并收口。旧候选、测试日志及 Ubuntu 配置保留。未替用户升级安装、替换扩展或更改配对；通过现有产品入口只新增了自有临时工作区的验收会话，没有读取或修改 `cc-learning` 文件。
 
@@ -204,6 +208,9 @@ Windows 启动器只临时用 `WSLENV` 的 `/u` 标记传递固定配对配置�
 
 | Date | Scope | Command | Result | Notes |
 |:--|:--|:--|:--|:--|
+| 2026-09-07 | T7.2–T7.4 final official profile integration | official plugin build；root compile；outer55s 五文件联合 Vitest；owned-process/temp cleanup | `verified; 60/60 passed` | 5 files / 60 tests，17.66s；实际隔离 DSH_HOME 安装和官方 Web/Gateway，覆盖 live settings、credential、连接/重连、一次性 default、standard preset、默认关闭 pwsh、Gateway 审批 rejected/allowed-once/rejected、Skill、前台 subagent、write、`/compact`、冷重启恢复及严格唯一 web route。0 owned Node、0 T7 temp 残留；外部模型为 fake browser，不记真实 DeepSeek 网页验收 |
+| 2026-09-07 | T7 official compaction compatibility | 先真实复现 official basic compaction 失败；定向 adapter 及最终 profile 回归 | `passed after fix; 26/26 + 1/1` | 原失败 durable `compaction/end` 精确为“Protocol v1 does not support per-request generation controls”；修复仅接受并省略 `purpose=compaction` 的本地 max-token hint，普通请求仍拒绝。adapter 26/26、2.63s；profile 1/1、14.44s，并成功冷恢复 checkpoint |
+| 2026-09-07 | T7.5 atomic import review | 官方 SessionPersistence 公共 API、Windows policy identity 与试验 kernel 审查 | `blocked / current_gap` | 官方只有逐会话 create/append/inspect，无根+子多会话 CAS/事务；导入还需与 disabled/tombstone 同事务，防止同 ID/同 header 残留权限复活。未接入设置页、未保留试验产品源码、未声称内存 target 是落盘证明；T7.6 因此前置和真实浏览器授权继续阻塞 |
 | 2026-09-07 | T7.1 official incremental plugin | package build；outer55s 联合 Vitest；root `tsc --noEmit`；独立审查 | `verified; 29/29 passed` | 新增测试 4/4，连同既有 adapter 回归共 29/29、6.36s；根类型检查与 `git diff --check` 通过。Client bundle 唯一运行时 external 为官方 shell 的 `react`，实际 lazy module 与 keyed settings card 可装载；独立审查的启动失败/Host 回滚清理问题已修复，最终无 blocker/high，T7.2 默认模型行为仍明确未实现 |
 | 2026-09-07 | T7.1 actual install and unpaired Web | 隔离 `DSH_HOME`；真实 `dsh plugin --profile web add --offline --workspace-root`、dump、`dsh web --no-open` 与认证 HTTP | `passed actual install / unpaired Web` | profile 保留 `@deepseek-ai/dsh-base`、`@deepseek-ai/dsh-web-app` 和官方 `deepseek-official/deepseek-v4-flash` 默认，仅追加新插件；官方页面 HTTP 200，boot graph 含新 Client 与官方 settings shell，停止后端口可重绑。不是实际 DeepSeek 网页推理或 T7.6 独立包验收 |
 | 2026-09-07 | T7.1 environment correction | 默认 DSH home 的官方 plugin remove；随后重新读取 manifest | `corrected immediately` | 首次手工探针因不存在的预期工作目录使 PowerShell 未停止，误把 checkout link 加入默认 `web` profile；发现后立即用官方 remove 精确撤销，最终 manifest 只含原官方 base/web 两层。未触碰 `%LOCALAPPDATA%\DeepSeekWebAgent`、配对、用户项目、WSL 或旧 release；后续实测全部使用显式 `C:\temp` 隔离 home |
