@@ -1,4 +1,4 @@
-# DeepSeek++ · DeepSeek 网页模型 × 本机 Harness
+# DeepSeek++ Harness · DeepSeek 网页模型 × 本机 Agent
 
 在本机 **DeepSeek Harness 网页**里聊天、读写项目文件、执行命令，模型使用浏览器中已经登录的 **DeepSeek 网页版**。
 
@@ -6,7 +6,7 @@
 
 日常流程：**首次安装并配对 → 运行 `dsh web` → 在 Harness 网页里使用。**
 
-[首次安装](#首次安装) · [首次配对](#首次配对只做一次) · [日常使用](#日常使用) · [执行命令](#执行命令)
+[首次安装](#首次安装) · [首次配对](#首次配对只做一次) · [日常使用](#日常使用) · [模式与深度思考](#模式与深度思考) · [执行命令](#执行命令) · [升级](#升级)
 
 ## 能力
 
@@ -15,6 +15,8 @@
 - **网页模型接入**：让 Harness 使用已登录的 DeepSeek 网页会话进行推理。
 - **完整 Agent 工作流**：由 Harness 管理多轮对话、上下文、文件工具、Skills、子 Agent 和任务执行。
 - **图形化配置**：在 Harness 设置中填写扩展 ID、配对、查看连接状态和设置命令权限。
+- **模式与深度思考**：选择默认或专家模式，独立开启或关闭思考；既可设置新会话默认值，也可在会话中选择。
+- **中英文设置界面**：跟随 Harness 语言，支持折叠分组和浅色、深色主题。
 - **会话保存与继续**：重新打开 Harness 后继续已有对话，也可导入已结束的独立 DeepSeek Web Agent 会话。
 - **Windows / Linux 命令**：Windows 使用 PowerShell 7；Linux 使用官方 Bash 与沙箱机制。
 - **保留原有环境**：与 Harness 的其他模型共存，也保留 DeepSeek++ 原有的浏览器内功能。
@@ -75,7 +77,9 @@ npm install --global @deepseek-ai/dsh@0.1.2-rc.1
 
 这两项是不同的软件：**浏览器扩展安装到浏览器，DSH 插件安装到本机 Harness。**
 
-从 [GitHub Releases 下载配套整包](https://github.com/XVSHIFU/deepseek-pp/releases/tag/web-harness-preview-20260907)，选择附件 `deepseek-web-harness-preview-395cf37.zip`，解压后进入其中的 `deepseek-web-official-395cf37` 文件夹。不要选择 GitHub 自动生成的 Source code。
+从 [GitHub Releases](https://github.com/XVSHIFU/deepseek-pp/releases) 选择配套整包；各版本包含的功能以该版本下载页说明为准。已经拿到本地交付包时，直接使用该包，不必再次下载。不要选择 GitHub 自动生成的 **Source code**。
+
+解压整包后，找到同时包含 **`extensions`、`plugin`、`vendor`** 的目录，以下称为“安装包目录”。如果外面还有一层 README 文件夹，继续进入其中的 `deepseek-web-official-…` 子文件夹。
 
 使用配套安装包时，解压到准备长期保留的目录。浏览器 ZIP 位于 `extensions/`，DSH 插件位于 `plugin/`，配套依赖位于 `vendor/`；无需执行下面的源码构建。
 
@@ -161,18 +165,18 @@ dsh plugin --profile web add ./vendor/harness-request-budget/*.tgz ./.release/ma
 
 这里要**解压两次**：先解压配套整包，再解压其中的浏览器扩展 ZIP。
 
-1. 打开解压后的 `deepseek-web-official-395cf37` 文件夹。
+1. 打开上述“安装包目录”，确认里面有 `extensions`、`plugin`、`vendor`。
 2. 进入 `extensions` → `chrome`（Edge 进入 `extensions` → `edge`）。
 3. 找到 `deepseek-plus-plus-1.14.0-chrome.zip`（Edge 对应 `…-edge.zip`），右键选择“全部解压”。**不要直接选择 ZIP 文件。**
 4. 打开刚解压出来的文件夹，找到与 `_locales`、`assets` 等扩展资源放在一起的 `manifest.json`。如果外面还有一层文件夹，就继续进入。
 5. 在浏览器地址栏输入 `chrome://extensions`（Edge 是 `edge://extensions`），开启右上角“开发者模式”。
 6. 点击“加载已解压的扩展程序”，选择**第 4 步找到的文件夹**，不是 `manifest.json` 文件本身。
-7. 记下扩展卡片上的 **ID**，并确保只启用一份 DeepSeek++。Harness 版的名称标识为 **DeepSeek++ Harness**；旧安装包仍可能显示 DeepSeek++。
+7. 记下扩展卡片上的 **ID**，并确保只启用一份 DeepSeek++。本扩展名称为 **DeepSeek++ Harness**，不要与原版 DeepSeek++ 混用。
 
 目录对应关系：
 
 ```text
-deepseek-web-official-395cf37/          ← 配套整包，不要选这里
+deepseek-web-official-…/                ← 安装包目录，不要选这里
 ├─ manifest.json                       ← 安装包清单，不是浏览器扩展清单
 ├─ plugin/                             ← 本机 Harness 插件
 ├─ vendor/                             ← 配套依赖
@@ -201,13 +205,15 @@ deepseek-web-official-395cf37/          ← 配套整包，不要选这里
 
    保持终端运行，在自动打开的 Harness 网页中继续配置。
 
-2. 在 **设置 → 插件 → DeepSeek Web** 中选择浏览器，填写扩展 ID；Firefox 填完整 `moz-extension://…` 地址。端口保留 **43123**。
-3. 勾选 **Set DeepSeek Web as the default for future new sessions**（新会话默认使用网页模型），点击 **Save settings**。
-4. 点击 **Generate pairing token**，再点 **Copy**。
-5. 打开 **DeepSeek++ → 设置 → 本机 Harness**：开启桥接，端口填 **43123**，粘贴令牌，点击“保存”。
+2. 在 **设置 → 插件** 中找到 **DeepSeek 网页模型**，点击标题或箭头展开。在“连接”区域选择浏览器，填写刚才记下的扩展 ID；Firefox 填完整 `moz-extension://…` 地址。端口保留 **43123**。
+3. 在“网页模型”区域选择“默认模式”，先关闭思考，勾选 **将 DeepSeek 网页模型设为以后新会话的默认模型**，点击 **保存设置**。保存成功后卡片会收起，再点标题展开即可。
+4. 在“配对”区域点击 **生成配对令牌**，再点 **复制**。已有配对时不必重新生成。
+5. 在浏览器工具栏点击 **DeepSeek++ Harness** 图标，进入扩展的 **设置 → 本机 Harness**：开启桥接，端口填 **43123**，粘贴令牌，点击“保存”。注意：这里是浏览器扩展的设置，不是 Harness 网页的设置。
 6. 显示“**已连接**”后，在 Harness 中新建会话即可开始使用。
 
 配对令牌只在生成时显示，请妥善保管。扩展 ID 和令牌会保存，不需要每天重新填写。
+
+如果 Harness 使用英文，卡片名为 **DeepSeek Web model**，对应按钮为 **Save settings / Generate pairing token / Copy**。设置语言跟随 Harness，无需单独配置。
 
 ## 日常使用
 
@@ -225,11 +231,22 @@ dsh web
 
 用完在终端按 `Ctrl+C` 停止服务，下次仍用 `dsh web` 打开。浏览器和 DeepSeek 网页需要保持可用，才能继续使用网页模型。
 
+## 模式与深度思考
+
+**设置以后新会话的默认值：** 展开 **设置 → 插件 → DeepSeek 网页模型 → 网页模型**，选择“默认模式”或“专家模式”，按需开启“为新会话启用思考”，保存设置。要让新会话使用这里的选择，请同时启用“将 DeepSeek 网页模型设为以后新会话的默认模型”。
+
+**调整当前会话：** 使用 Harness 会话内的模型选择器，选择 **DeepSeek Web (Default)** 或 **DeepSeek Web (Expert)**；思考选项为 **Thinking off / Thinking on**。等待当前回复结束后再调整，选择作用于后续回合，不改变其他会话。
+
+- 默认模式与专家模式都可以独立开启或关闭思考，并非“专家模式就是开启思考”。
+- 开启思考后，可展开会话中的“思考中…”或“已思考”区域；思考内容仅临时展示，刷新页面后不从历史恢复，最终回答和工具结果照常保留。
+- 以 Harness 中的选择为准，不需要到 DeepSeek 网页上手动切换模式。
+- 此连接用于文字对话和本机工具任务，不提供图片上传或识图入口。
+
 ## 执行命令
 
 ### Windows：PowerShell 7
 
-在 Harness 的 **DeepSeek Web** 设置中启用原生命令，选择 **Ask for every command**（逐条确认），确认 PowerShell 7 路径后保存，**再新建会话**。
+展开 **设置 → 插件 → DeepSeek 网页模型 → Windows PowerShell 7**，开启 **为新会话启用原生 Windows 命令**，批准方式选择 **每条命令都询问**。可执行文件填写 `pwsh`，或 PowerShell 7 的完整路径；保存设置后，**再新建会话**。
 
 例如发送“执行 `Get-Location`，告诉我当前目录”，检查网页中的命令批准请求后选择“允许一次”。
 
@@ -240,6 +257,33 @@ dsh web
 使用官方 Harness 的 `workspace-write + ask` 默认设置：普通命令在工作区文件沙箱中执行，需要扩大文件权限时请求批准。
 
 执行命令需要可用的 Bubblewrap 或 Landlock 后端。文件沙箱不等于网络隔离。
+
+## 升级
+
+浏览器扩展和 Harness 插件使用同一个配套包，不要只更新其中一项。
+
+1. 在运行 Harness 的终端按 `Ctrl+C` 停止服务，保留旧安装包以便回退。
+2. 进入新“安装包目录”，执行对应系统的更新命令：
+
+   Windows（PowerShell 7）：
+
+   ```powershell
+   $vendor = @(Get-ChildItem -LiteralPath ./vendor -Filter '*.tgz' | Select-Object -ExpandProperty FullName)
+   $plugin = @(Get-ChildItem -LiteralPath ./plugin -Filter '*.tgz' | Select-Object -ExpandProperty FullName)
+   dsh plugin --profile web add $vendor $plugin --force --allow-build=koffi
+   ```
+
+   Linux（Bash）：
+
+   ```bash
+   dsh plugin --profile web add ./vendor/*.tgz ./plugin/*.tgz --force --allow-build=koffi
+   ```
+
+   等命令成功退出后再继续；首次安装和升级都可能需要联网。
+
+3. 解压新包中的浏览器扩展 ZIP。**先备份原来加载的扩展文件夹**，再将新扩展文件复制到原文件夹内并覆盖同名文件；让浏览器继续使用原路径，不要先卸载扩展。
+4. 在 `chrome://extensions` 或 `edge://extensions` 点击该扩展的“重新加载”，然后刷新已经登录的 DeepSeek 网页。Firefox 重新临时加载后，如扩展地址变化，需在 Harness 中更新并配对。
+5. 回到项目目录运行 `dsh web`。原路径与扩展 ID 没变时，已有配对可继续使用；在设置中确认“已连接”。
 
 ## 数据与权限
 

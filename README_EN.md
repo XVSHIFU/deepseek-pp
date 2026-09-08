@@ -1,4 +1,4 @@
-# DeepSeek++ · DeepSeek Web × Local Harness
+# DeepSeek++ Harness · DeepSeek Web × Local Agent
 
 Use the signed-in DeepSeek website as the model for your local DeepSeek Harness. Chat, read and edit project files, and run commands from the Harness web interface, without a model API key.
 
@@ -13,6 +13,8 @@ This project adds a browser connection to DeepSeek++ and a companion DSH plugin:
 - Use the logged-in DeepSeek web session for model inference.
 - Keep Harness in charge of conversations, context, tools, Skills, subagents, and task execution.
 - Pair the extension and configure permissions from the Harness settings UI.
+- Choose Default or Expert independently of Thinking on/off, with defaults for new sessions and per-session selection.
+- Use collapsible settings that follow the Harness language and light/dark theme.
 - Save and continue conversations, or import completed standalone DeepSeek Web Agent sessions.
 - Use PowerShell 7 on Windows without WSL, and official Bash/sandbox behavior on Linux.
 - Keep other Harness model providers and the original DeepSeek++ browser features available.
@@ -31,11 +33,13 @@ npm install --global @deepseek-ai/dsh@0.1.2-rc.1
 
 Follow the [Windows / Linux installation instructions](README.md#首次安装) to install prerequisites, load the browser extension, and install the DSH plugin with its companion dependencies. Browser extension builds and Harness plugin builds are separate steps; when using a matching prebuilt package, source compilation is unnecessary.
 
-Download the companion archive `deepseek-web-harness-preview-395cf37.zip` from [GitHub Releases](https://github.com/XVSHIFU/deepseek-pp/releases/tag/web-harness-preview-20260907), rather than the generated Source code archives. Extract it and open the enclosed `deepseek-web-official-395cf37` directory for the package-based installation steps.
+Choose a companion archive from [GitHub Releases](https://github.com/XVSHIFU/deepseek-pp/releases), checking that version's feature description, or use the local delivery archive you received. Do not choose the generated Source code archives. Extract it and locate the directory containing `extensions`, `plugin`, and `vendor`; if a README surrounds a `deepseek-web-official-…` subdirectory, enter that subdirectory for installation commands.
 
 Then [pair them in the settings UI](README.md#首次配对只做一次). The extension ID and pairing token are saved for daily use.
 
-For Chrome / Edge, extract the companion archive first, then extract the browser ZIP inside `extensions/chrome/` or `extensions/edge/`. In the browser's **Load unpacked** dialog, choose the extracted browser folder containing `manifest.json` alongside `_locales/` and `assets/`. Do not choose the companion archive's top-level folder: its `manifest.json` is a package inventory, not a browser extension manifest. The Harness fork is named **DeepSeek++ Harness**; older packages may still show DeepSeek++.
+For Chrome / Edge, extract the companion archive first, then extract the browser ZIP inside `extensions/chrome/` or `extensions/edge/`. In the browser's **Load unpacked** dialog, choose the extracted browser folder containing `manifest.json` alongside `_locales/` and `assets/`. Do not choose the companion archive's top-level folder: its `manifest.json` is a package inventory, not a browser extension manifest. Enable only **DeepSeek++ Harness**, not both it and the original extension.
+
+In Harness, expand **Settings → Plugins → DeepSeek Web model**. Enter the extension ID under **Connection**, select **Set DeepSeek Web as the default for future new sessions**, then **Save settings**. Reopen the card, select **Generate pairing token → Copy** under **Pairing**, and paste it into the browser extension's **Settings → Local Harness** with port `43123`. Save there and check that the connection is established. Existing pairing does not need to be regenerated.
 
 ## Daily use
 
@@ -46,6 +50,34 @@ dsh web
 ```
 
 Create or continue a conversation in the Harness web interface. Stop the service with `Ctrl+C` in its terminal.
+
+## Model mode and thinking
+
+Under **Settings → Plugins → DeepSeek Web model → Web model**, select **Default** or **Expert** and independently enable or disable thinking. Select the option to make this provider the default for future sessions and save.
+
+For an existing session, use the Harness model selector: **DeepSeek Web (Default)** or **DeepSeek Web (Expert)**, with **Thinking off / Thinking on**. Change selections between replies; they apply to subsequent turns without changing other sessions. No manual mode change on the DeepSeek website is needed.
+
+Thinking appears in a collapsible live panel. It is not stored in session history or restored after a page reload; final answers and tool results are retained. This connection supports text and local tools, not image uploads or vision.
+
+## Upgrade
+
+Stop Harness with `Ctrl+C` and keep the previous package. From the new package directory, update the companion dependencies and plugin together:
+
+Windows (PowerShell 7):
+
+```powershell
+$vendor = @(Get-ChildItem -LiteralPath ./vendor -Filter '*.tgz' | Select-Object -ExpandProperty FullName)
+$plugin = @(Get-ChildItem -LiteralPath ./plugin -Filter '*.tgz' | Select-Object -ExpandProperty FullName)
+dsh plugin --profile web add $vendor $plugin --force --allow-build=koffi
+```
+
+Linux (Bash):
+
+```bash
+dsh plugin --profile web add ./vendor/*.tgz ./plugin/*.tgz --force --allow-build=koffi
+```
+
+After the command succeeds, back up the currently loaded extension folder and copy the new browser ZIP's extracted files into that same folder. Reload the extension and refresh the signed-in DeepSeek page, then run `dsh web` again. Keeping the original Chrome/Edge extension path preserves its ID and pairing. Firefox temporary loading may change the origin and require pairing again. Installation and upgrades may need internet access.
 
 ## Commands and data
 
