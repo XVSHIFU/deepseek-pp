@@ -49,3 +49,12 @@ tests/streaming-tool-text.test.ts
 - Windows 真实 Chrome + 官方 Harness：3 次文件工具调用及结果、中文终答、连续追问和 31.08 秒长回答完成；人工样本文件未改变。
 - 本轮整理不改变运行时代码；验证文档命令语法、整包文件清单、来源散列及压缩后内容。不冒称重新执行 Linux 新机、完整模式矩阵或全仓 ci:quality。
 - 原始测试日志留在本机隔离目录，不进入源码和分发包。
+
+## 最终本地附件
+
+- 完整 ZIP：27,105,238 字节，SHA-256 `488e49083213a4387c2aedf082bb368b4b5dcc07145f4f7922e1f5c7d641d4da`。
+- Manifest SHA-256：`fa973acdb625762c4920f3ac5311d6eeb29a46ca9e593eb1403f1c94afd3d506`。
+- README 来源提交：`0c2037a950f833fa6f55699cf8764376f2c794a5`；本记录的补充不改变附件。
+- 11 个 payload 文件均列入 manifest，加上 manifest 与 SHA256SUMS 共 13 个文件；ZIP 解压内容与目录逐文件散列一致，内部校验清单全部通过。
+- 两份 README 的 7 段 PowerShell 示例通过 PowerShell Parser；14 段 Bash/sh 示例通过 Git Bash `bash -n`。只检查语法，没有执行环境安装命令；本机已测试的相同运行时组件不重复构建。
+- 旧完整包与 `a636469` 增量包均保留，新增包只包含明确列出的文件；未 push、tag、PR 或上传。

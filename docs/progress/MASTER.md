@@ -1,5 +1,11 @@
 # Web Model Broker × Local DSH — Active Progress
 
+## 2026-09-08 r2 README 与完整包整理（待推送）
+
+- 按用户要求只做推送准备。双语 README 补齐 Windows / WSL 安装分工、扩展文件夹位置、工作区与网页模型选择、连接提示和原位更新；保留能力、安装命令、友情链接与许可，不加入开发日志。
+- 新完整包 `.release/deepseek-web-harness-20260908-r2.zip` 合并 `a636469` 已验证扩展 / Harness 插件、原配套 vendor 和 `0c2037a` 双语 README。共 13 文件、27,105,238 字节，SHA-256 `488e49083213a4387c2aedf082bb368b4b5dcc07145f4f7922e1f5c7d641d4da`；组件来源、ZIP 内容和内部校验值逐项通过。旧包不改写。
+- README 示例语法检查：PowerShell 7 段、Bash/sh 14 段通过；本轮不修改运行时，不重复构建或扩大实测结论。推送范围及发布草稿见 `docs/delivery/github-push-20260908-r2.md` 和 `github-release-20260908-r2.md`。已 fetch 核对远端无独有提交，尚未 push、创建 tag 或上传；README 的 r2 下载目标需在用户批准后与 Release 附件一起上线。
+
 ## 2026-09-08 普通请求十秒中断与工具结果边界修复
 
 - **真实网页补验通过（15:05–15:07）：** 用户安装 `C:\temp\deepseek-pp-fix-a636469\chrome-mv3` 并配对，在隔离官方 Harness `web` profile 中选择人工样本工作区；编排通过 Chrome 的官方 Harness 网页发送任务。运行组件来自增量候选 `a636469`，模型为 DeepSeek Web Default / Thinking off，Windows 命令关闭，无 Shell Local 前置条件。首次请求在 142ms 内以 `DEEPSEEK_AUTH_REQUIRED` 失败、零工具调用；刷新已登录的 DeepSeek 页面后，手动重新发送未执行的只读任务成功，没有自动重放 ambiguous 请求。
