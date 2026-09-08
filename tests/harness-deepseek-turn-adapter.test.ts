@@ -998,7 +998,7 @@ describe('DeepSeekWebModelTurnAdapter', () => {
     const collected = collectCallbacks(true);
     const result = await adapter.generate(request({ options: { model_type: 'expert', thinking_enabled: true, search_enabled: false } }), collected.callbacks, {
       signal: controller.signal,
-      negotiatedCapabilities: { reasoning: true },
+      negotiatedCapabilities: { reasoning: true, structured_tool_calls: true, cancel: true, query: true },
     });
     expect(result.type).toBe('ambiguous');
     expect(streamer).toHaveBeenCalledTimes(2);
