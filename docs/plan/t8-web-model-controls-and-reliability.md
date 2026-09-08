@@ -4,6 +4,8 @@
 
 > 2026-09-08 独立复核补充：上述为实施交付状态；审查结论为 `accepted_with_followups`，工具纠正仍有两项 P2 待补，见 [复核与交付清单](../delivery/t8-review-and-files.md)。既有四组合/读写/命令证据有效，但不代表全部工具输出边界已闭合。
 
+> 后续授权补修：两项 P2 已由 `657019e` / `2f4f289` 完成；120/120 相关回归、compile、prompt freeze 及三端构建/产物校验通过。新扩展更新与原 T8 Harness 插件配套，未改写旧候选或将旧网页证据当作新扩展实测。
+
 T8 在已完成的官方 DeepSeek++ Harness 增量插件上继续，保留 `89ab502` 的品牌与 README 安装说明。阶段范围只包括官方设置卡片体验、Mode A 工具调用可靠性、网页默认/专家模式与独立深度思考、定向验证及新的本地候选。不得修改 Harness 核心、引入 API fallback、重构 Koffi/WinAPI 安装事务、覆盖 `.release/deepseek-web-official-395cf37`，也不包含图片输入、上传或引用链。
 
 ## 1. 设置界面统一

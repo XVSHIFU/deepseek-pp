@@ -4,7 +4,7 @@
 
 ## 结论
 
-已验证的模式、读写文件和 PowerShell 路径可继续使用；**工具可靠性仍有两项待补，不将 T8 判为无保留的全部完成**。本次是代码抽查、离线回归和既有真实证据复验，不是新一轮浏览器实测，也不是 Linux 新机安装验收。
+原复核结论：已验证的模式、读写文件和 PowerShell 路径可继续使用，但工具可靠性存在下述两项待补。**2026-09-08 用户授权后，两项已在 `657019e` / `2f4f289` 修复并通过自动回归。** 原 `d8e3c80` 候选及 ZIP 不改写；新扩展更新包为 `.release/deepseek-web-tool-correction-2f4f289/`，配套 Harness 插件不变。本次修补未重新进行浏览器实测或 Linux 新机安装验收。
 
 ## 复核结果
 
@@ -16,12 +16,16 @@
 - 未发现端口 50301 的监听。没有启动 Harness 服务或浏览器请求。
 - 上一次全仓并行失败、已有 sidepanel raw 预算超限及本轮未重新运行 Linux 实测，不因本次定向通过而被改记为通过。
 
-## 待补项（P2）
+## 原待补项（P2，后续已修复）
 
 1. **带参数的方括号工具意图仍可能正常结束而未执行。** `core/harness-bridge/deepseek-turn-adapter.ts` 的 `isStandaloneMalformedToolMarker` 要求每个非空行完全等于 `[调用 工具名]`。只读提取实际函数并运行：`[调用 read]` 返回 true；`[调用 read] {"path":"README.md"}` 和下一行 JSON 参数的形式均返回 false。此类无 XML 正式调用的回复没有触发纠正，随后仍走 `completed/stop`。当前测试只覆盖无参数单独标签，未覆盖用户此前报告的带参数形态。
 2. **纠正提示强制要求调用，偏离已批准的正常回答出口。** `serializeToolCorrectionPrompt` 要求 exactly one XML tool tag，而纠正结束 `!emittedToolCall` 一律报 `TOOL_CALL_INVALID`。计划要求“需要工具则正确调用，否则正常回答”。应补充不需要工具时的正常终答路径，继续禁止将原文直接执行，也不得重放已经发出的调用。
 
-补修范围应限于上述识别/纠正边界和对应回归，禁止把任意正文、教程或代码块放宽为自动执行。发现项交回实施者前需要明确后续执行安排；本轮未自行改写产品或触发新开发。
+后续修补仅扩展纯方括号标签及可选 JSON 对象参数的识别；参数不会被转换为执行载荷，正式调用仍由原 XML parser 发出。纠正后可正常回答；第二次畸形或空回复明确失败，正常终答仍须验证网页历史链。已发出的工具调用、取消和 ambiguous 不重放。新增回归含同行/换行/嵌套 JSON、多标签、跨 chunk、正文/围栏/缩进代码/引用、正常终答、历史验证和取消。
+
+修补验证：五个相关测试文件 **120/120**，根 compile、Mode B prompt freeze **7/7** 通过；三浏览器 zip/build、manifest policy 与 177 个文本产物 UTF-8/ASCII 校验通过。新测试起初遗漏完整能力协商 fixture，已补齐并最终通过编译与回归，不修改生产能力要求。构建快照为 `C:\temp\deepseek-tool-correction-20260908`，与提交源码一致；沿用原依赖及已有 Pyodide externalization 提示，未更换依赖。
+
+实际 DSH CLI 的 fake-browser readonly tool smoke（`node scripts/dsh-web-agent-tool-smoke.mjs`）通过 read/read-error 两场景：每场景两次模型请求、实际官方 read 工具、持久化与清理成功；这不是 DeepSeek 真实网页实测。新更新整包 SHA-256：`250e3062a92e9122dd9aa72689d15e9d8b506f70596586db36d7146103f94a85`。内层三浏览器 ZIP 与实际构建文件逐项一致，外层 ZIP 六个文件逐项一致；未发现本轮 Vitest/tool-smoke Node 残留。更新仅需替换原路径浏览器文件并重载、刷新，详见更新包的 `更新说明.md`。
 
 ## 文件整理
 

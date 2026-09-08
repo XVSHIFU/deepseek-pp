@@ -14,6 +14,7 @@
 
 ## 2026-09-08 T8 网页模型控制、工具可靠性与视觉一致性
 
+- **两项审查补修已完成（用户随后授权）：** `657019e` / `2f4f289` 修复带 JSON 参数的方括号意图识别、纠正后的正常回答出口，保留历史验证、单次纠正、取消/已有调用零重放。相关回归 120/120、compile、prompt freeze 7/7、三浏览器构建、manifest 与 UTF-8/ASCII 校验通过；只改变扩展，Harness 插件无改动。交付更新包 `.release/deepseek-web-tool-correction-2f4f289/`；旧候选与整包保留，未重新真实网页实测、未 push 或发布。此前两项待补状态由本记录取代。
 - **后续独立简短复核（2026-09-08）：有保留通过。** 95/95 定向测试、根 compile、候选严格校验及既有真实证据复验通过；但带 JSON 参数的方括号调用不触发纠正，以及纠正后没有正常回答出口两项 P2 尚未补齐，不认可“工具可靠性全部完成”的无保留结论。详见 `docs/delivery/t8-review-and-files.md`。本轮只整理 README 与便携安装文件，没有改运行时、重新实测网页、push 或发布。下文为实施者此前交付记录。
 - T8 已本地完成。T8.1–T8.3 在既有实现上由 `ca773f6` 完成官方风格 UI 改造、`d2e93c5` 补齐 reasoning 能力协商；设置页按“连接、网页模型、Windows 命令、配对、旧会话导入”分组，对齐 Harness token、控件状态、主次操作、中英文与浅/深主题。默认/专家、独立思考与不持久化 reasoning dock 均贯通；只对明确畸形工具意图执行一次、有历史链验证且禁止副作用重放的纠正回合保持不变。截图中的 `[调用 glob]` / `[调用 read]` 已确认只是没有进入权威 XML parser 的模型正文。
 - 根 compile、prompt freeze、定向 UI/adapter/digest/bridge/tool/acceptance 测试通过；全量测试首次并行运行 2503 passed、1 skipped、33 failed，行为预期修正后逐项通过，其余并行资源争用文件单独复跑全部通过。三浏览器构建、manifest policy 与 UTF-8/ASCII 产物检查通过。sidepanel raw 门槛超 32 字节，但同环境未含 T8.2/T8.3 改动的 `HEAD` 快照结果完全相同，未放宽既有预算。
