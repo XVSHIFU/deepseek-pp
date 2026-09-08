@@ -1834,6 +1834,7 @@ var DeepSeekWebModelHost = class {
 function negotiateCapabilities(offered) {
   return {
     ...offered.text === true ? { text: true } : {},
+    ...offered.reasoning === true ? { reasoning: true } : {},
     structured_tool_calls: true,
     ...offered.usage === true ? { usage: true } : {},
     cancel: true,

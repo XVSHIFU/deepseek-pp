@@ -1,7 +1,7 @@
 import { webcrypto } from 'node:crypto';
 import { afterEach, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
-import { createUserMessage, type GenerateOptions } from '@deepseek-ai/dsh-llm';
+import { createUserMessage, ReasoningEffortId, type GenerateOptions } from '@deepseek-ai/dsh-llm';
 
 import { DeepSeekWebModelHost, createPairingToken } from '../packages/dsh-web-model-transport/src/index';
 import { serializeGenerateRequest } from '../packages/dsh-llm-deepseek-web/src/request';
@@ -36,6 +36,7 @@ it.each(['ready', 'missing-auth', 'host-restarted'] as const)('runs the actual b
     submitPrompt: vi.fn(async () => ({ assistantText: 'ok', responseMessageId: 11, requestMessageId: 10, finished: true })),
     submitPromptStreaming: vi.fn(async (_input, callbacks, context) => {
       context.onDispatch?.();
+      if (mode === 'ready') callbacks.onReasoningChunk?.('private thought');
       callbacks.onTextChunk?.('ok', 'ok');
       return { assistantText: 'ok', responseMessageId: 11, requestMessageId: 10, finished: true };
     }),
@@ -103,6 +104,7 @@ it.each(['ready', 'missing-auth', 'host-restarted'] as const)('runs the actual b
   await vi.waitFor(() => expect(host.hasAuthenticatedPeer).toBe(true));
   const request = serializeGenerateRequest({
     provider: 'deepseek-web', model: 'current-web-session', sessionId: 'session-smoke' as GenerateOptions['sessionId'],
+    ...(mode === 'ready' ? { reasoningEffort: ReasoningEffortId('on') } : {}),
     tools: [], messages: [createUserMessage({
       source: { kind: 'user' }, content: [{ type: 'text', text: 'Reply exactly ok.' }],
     })],
@@ -118,7 +120,13 @@ it.each(['ready', 'missing-auth', 'host-restarted'] as const)('runs the actual b
   }
   try { for await (const event of host.generate(request)) events.push(event); }
   catch (error) { if (turnErrors.length > 0) throw turnErrors[0]; throw error; }
-  expect(events).toEqual([{ type: 'text_delta', text: 'ok' }, { type: 'completed', finish_reason: 'stop' }]);
+  expect(events).toEqual([
+    ...(mode === 'ready'
+      ? [{ type: 'reasoning_delta', text: 'private thought', retention: 'ephemeral' } as const]
+      : []),
+    { type: 'text_delta', text: 'ok' },
+    { type: 'completed', finish_reason: 'stop' },
+  ]);
   expect(loadedHeaders).toHaveBeenCalledOnce();
   expect(client.submitPromptStreaming).toHaveBeenCalledOnce();
   if (mode === 'host-restarted') {

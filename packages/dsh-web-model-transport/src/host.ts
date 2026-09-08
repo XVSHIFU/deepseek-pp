@@ -714,6 +714,7 @@ export class DeepSeekWebModelHost implements DeepSeekWebBroker {
 function negotiateCapabilities(offered: BridgeCapabilities): BridgeCapabilities {
   return {
     ...(offered.text === true ? { text: true as const } : {}),
+    ...(offered.reasoning === true ? { reasoning: true as const } : {}),
     structured_tool_calls: true,
     ...(offered.usage === true ? { usage: true as const } : {}),
     cancel: true,

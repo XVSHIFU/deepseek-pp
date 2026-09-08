@@ -15,7 +15,11 @@ import {
   type DeepSeekWebModelHostAddress,
   type DeepSeekWebModelHostOptions,
 } from "../packages/dsh-web-model-transport/src/index";
-import { generateRequest, helloRequest } from "./fixtures/harness-bridge/protocol-v1/frames";
+import {
+  generateRequest,
+  helloRequest,
+  helloWithReasoningRequest,
+} from "./fixtures/harness-bridge/protocol-v1/frames";
 import { afterEach, describe, expect, it } from "vitest";
 import WebSocket from "ws";
 
@@ -53,6 +57,24 @@ describe("DSH web model loopback host", () => {
     ];
     events.forEach((event, index) => sendEvent(browser, index + 1, event));
     await expect(result).resolves.toEqual(events);
+  });
+
+  it("negotiates reasoning only when the browser offers it", async () => {
+    const { address } = await startHost();
+    const browser = await connect(address);
+    const response = nextFrame(browser);
+    browser.send(encodeWebModelFrame({
+      ...helloWithReasoningRequest,
+      params: { ...helloWithReasoningRequest.params, pairing_token: TOKEN },
+    }));
+
+    await expect(response).resolves.toMatchObject({
+      result: {
+        type: "bridge.hello",
+        status: "ready",
+        capabilities: { reasoning: true },
+      },
+    });
   });
 
   it("reports waiting_for_browser when no socket is connected", async () => {

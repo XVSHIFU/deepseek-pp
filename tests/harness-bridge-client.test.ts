@@ -45,6 +45,32 @@ describe('Harness bridge browser client', () => {
     expect(JSON.stringify(fixture.client.state)).not.toContain(TOKEN);
   });
 
+  it('advertises reasoning by default for the production client configuration', () => {
+    const factory = new FakeWebSocketFactory();
+    const scheduler = new FakeScheduler();
+    const { capabilities: _explicitCapabilities, ...config } = validConfig();
+    const client = new HarnessBridgeClient(config, dependencies(factory, scheduler));
+
+    client.start();
+    const socket = factory.sockets[0]!;
+    socket.open();
+    const hello = socket.sentFrame(0) as any;
+
+    expect(hello.params.capabilities).toEqual({
+      text: true,
+      reasoning: true,
+      structured_tool_calls: true,
+      usage: true,
+      cancel: true,
+      query: true,
+    });
+    socket.message(helloResponse(hello));
+    expect(client.state).toMatchObject({
+      phase: 'ready',
+      capabilities: { reasoning: true },
+    });
+  });
+
   it('negotiates capabilities and validates generate, cancel, query, responses, and events in both directions', () => {
     const fixture = createFixture();
     const socket = makeReady(fixture);

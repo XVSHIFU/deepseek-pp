@@ -574,7 +574,14 @@ function validateCapabilities(value: unknown): BridgeCapabilities {
 }
 
 function defaultCapabilities(): BridgeCapabilities {
-  return Object.freeze({ text: true, structured_tool_calls: true, usage: true, cancel: true, query: true });
+  return Object.freeze({
+    text: true,
+    reasoning: true,
+    structured_tool_calls: true,
+    usage: true,
+    cancel: true,
+    query: true,
+  });
 }
 
 function validatePairingToken(value: unknown): string {
