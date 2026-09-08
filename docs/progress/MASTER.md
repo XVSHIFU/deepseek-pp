@@ -2,6 +2,9 @@
 
 ## 2026-09-08 普通请求十秒中断与工具结果边界修复
 
+- **真实网页补验通过（15:05–15:07）：** 用户安装 `C:\temp\deepseek-pp-fix-a636469\chrome-mv3` 并配对，在隔离官方 Harness `web` profile 中选择人工样本工作区；编排通过 Chrome 的官方 Harness 网页发送任务。运行组件来自增量候选 `a636469`，模型为 DeepSeek Web Default / Thinking off，Windows 命令关闭，无 Shell Local 前置条件。首次请求在 142ms 内以 `DEEPSEEK_AUTH_REQUIRED` 失败、零工具调用；刷新已登录的 DeepSeek 页面后，手动重新发送未执行的只读任务成功，没有自动重放 ambiguous 请求。
+- **读取及连续长回答证据：** session `session-973abd56-e867-4773-b061-d16db84e3c3b` 的第二轮 9,779ms、`glob → read → read` 共 3 次调用 / 3 个成功结果，随后中文终答正确引用验证短语“雪松与蓝色茶杯-6842”、观察对象“银杏”和数量 7。第三轮 31,080ms、零工具调用，正确复述前轮内容，2,899 字符长回答以 `LONG-ANSWER-COMPLETE-6842` 完整结束；两轮均有持久化 `turn/end(completed)`。官方 `JsonlSessionPersistence.readRaw` 解码多帧 zstd 后，复用既有逻辑事件解码器核对，原始解码 JSONL SHA-256 为 `1f7aabd282a834481e8738dce0bd06af5e4f3850146052ad013ce70253e9dd5c`。
+- **验证边界和保留环境：** 样本目录 `C:\temp\deepseek-real-a636469\workspace` 仅两个人工文件，复核内容与文件清单均未改变；没有读取用户项目或执行命令。本轮证明 Windows 真实网页读取、结果后终答、连续追问及超过十秒的生成正常，不扩大为 WSL 复测或模型永不幻觉保证。初次登录状态恢复仍需刷新网页。原始会话保留在隔离 `dsh-home\sessions`，不纳入 Git；Harness 50301 服务和新扩展目录留给用户继续使用。候选包保持不变，包内 `real_web=not_run` 是打包时记录，由本条后续证据补充；未 push 或替换公开附件。
 - 用户跨电脑日志 `session-67ff4c48-d040-40d9-8855-f37752d54f78`：普通 agent 请求未携带 `timeout_ms`，约十秒后以 `WEB_MODEL_TIMEOUT_AMBIGUOUS` 结束；生成流包含 17 个工具调用块，但没有实际工具结果，模型提前编造了项目说明。日志和原始截图不纳入源码或交付包。
 - 根因：Host 将完整生成的缺省 deadline 错误复用为 RPC 的 10 秒超时。现拆为独立 5 分钟生成预算；RPC 回应仍为 10 秒，显式请求时限仍生效，断线/超时不自动重放。
 - Mode A 提示词要求工具调用后等待真实结果、先发现路径再选择依赖调用，并跟随用户语言。Mode A 独立开启文本截断：首个工具开标签之后的正文不再发送给 Harness，防止同轮未验证总结进入本地消息；流仍完整解析并验证网页会话链，不能把人为中止流冒充成功或提前执行工具。原 Mode B 默认行为保持不变。该约束不等于保证模型永不幻觉，也不会拦截所有猜测出的工具参数。
