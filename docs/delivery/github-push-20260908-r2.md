@@ -1,6 +1,6 @@
 # 2026-09-08 r2 推送准备
 
-状态：仅本地准备，等待用户批准推送和发布。目标为 `XVSHIFU/deepseek-pp` 的 `feature/web-harness`；不改 main，不 force push，不向上游提 PR。
+状态：用户已授权推送和正式发布，并要求删除此前预发布。目标为 `XVSHIFU/deepseek-pp` 的 `feature/web-harness`；不改 main，不 force push，不向上游提 PR。以用户最终编辑的 README 和新增图片为准。
 
 ## 本次内容
 
@@ -16,6 +16,18 @@
 ```text
 README.md
 README_EN.md
+assets/image-20260908132550835.png
+assets/image-20260908132711630.png
+assets/image-20260908132725306.png
+assets/image-20260908132813534.png
+assets/image-20260908132845913.png
+assets/image-20260908132853521.png
+assets/image-20260908134207798.png
+assets/image-20260908134234617.png
+assets/image-20260908155129472.png
+assets/image-20260908155138697.png
+assets/image-20260908155143989.png
+assets/image-20260908155149537.png
 core/harness-bridge/deepseek-turn-adapter.ts
 core/interceptor/streaming-tool-text.ts
 docs/delivery/github-push-20260908-r2.md
@@ -46,7 +58,7 @@ tests/streaming-tool-text.test.ts
 
 浏览器与 Harness 插件复用已核验的 `a636469` 修复包；vendor 复用原完整包并逐项核对散列；README 使用本轮提交。组件来源分开记录，不重建或改写旧产物，不把旧包的整体校验值当作新包校验值。
 
-建议另建预发布 `web-harness-preview-20260908-r2`，保留旧 Release。README 已指向 r2 附件，因此正式对外需要同时发布附件；仅 git push 不会上传安装包。发布文案见同目录 `github-release-20260908-r2.md`。
+按用户最终指示新建正式 Release `web-harness-20260908-r2`，设置为 Latest，上传完整 ZIP 和 SHA-256 校验文件。先核对新发布和附件，再删除 `web-harness-preview-20260907`、`web-harness-preview-20260908` 两个 Release 及附件；保留它们的 Git 标签与本地备份。README 已指向 r2 附件，因此与源码一起上线。发布文案见同目录 `github-release-20260908-r2.md`。
 
 ## 验证范围
 
@@ -54,9 +66,11 @@ tests/streaming-tool-text.test.ts
 - Windows 真实 Chrome + 官方 Harness：3 次文件工具调用及结果、中文终答、连续追问和 31.08 秒长回答完成；人工样本文件未改变。
 - 本轮整理不改变运行时代码；验证文档命令语法、整包文件清单、来源散列及压缩后内容。不冒称重新执行 Linux 新机、完整模式矩阵或全仓 ci:quality。
 - 原始测试日志留在本机隔离目录，不进入源码和分发包。
+- 发布闭环尝试执行 `ci:quality`，在第一个 `verify:workflows` 因本机未安装 `actionlint` 停止，后续项目未执行；没有残留测试进程。不将本机完整门禁记为通过，不修改依赖或绕过检查。正式 Release 类型是用户的发布选择，具体运行时验证仍以上述定向测试、构建和真实网页证据为准。
 
 ## 最终本地附件
 
+- 用户最终新增 12 张 `assets/` 截图已逐张查看，README 原样保留；中文共 17 个图片引用、英文 5 个，全部图片纳入最终整包。以下为加入用户截图前的图文包记录，最终发布校验值在发布完成记录中更新。
 - **本轮图文补齐：** 中英文 README 均引用 `docs/images/guide/` 下相同的五张图：三张当前 Harness 实拍、一张用户提供的浏览器扩展设置截图、一张明确标注的安装目录 SVG 示意图。仅截取设置区域，排除地址栏和聊天记录；扩展输入框中的令牌已被界面隐藏，没有读取或生成令牌。扩展示例的“等待重试”如实保留并解释，未改图伪造已连接。没有为截图修改用户的模型、权限或配对配置。
 - 无图版本的文件夹、ZIP 和外部校验文件已移至 `.release/.backups/r2-before-images-864f923/`，可以恢复。以下为待发布的图文版校验值。
 - 完整 ZIP：27,330,185 字节，SHA-256 `1f4678621391727201c74448e90aa91e0869b3ed79e3eb72b6b7086194568224`。

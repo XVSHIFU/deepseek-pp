@@ -234,8 +234,31 @@ dsh web
 在 Harness 左侧选择要处理的工作区；尚未出现时，点击“添加工作区”选择项目目录。新建会话后，确认模型选择器显示 **DeepSeek Web (Default)** 或 **DeepSeek Web (Expert)**，即可发送任务，例如：
 
 - “读取 README.md，用中文说明这个项目是做什么的。”
+
+  ![image-20260908132550835](assets/image-20260908132550835.png)
 - “阅读这个模块，解释各个文件的作用。”
 - “修改 README 的项目说明，并告诉我改了什么。”
+- 创建文件夹、写文件、审批
+
+  ![image-20260908132711630](assets/image-20260908132711630.png)
+
+  ![image-20260908132725306](assets/image-20260908132725306.png)
+
+​	![image-20260908132813534](assets/image-20260908132813534.png)
+
+
+
+Linux-wsl-ubuntu:
+
+![image-20260908155129472](assets/image-20260908155129472.png)
+
+![image-20260908155138697](assets/image-20260908155138697.png)
+
+![image-20260908155143989](assets/image-20260908155143989.png)
+
+![image-20260908155149537](assets/image-20260908155149537.png)
+
+
 
 用完在终端按 `Ctrl+C` 停止服务，下次仍用 `dsh web` 打开。浏览器和 DeepSeek 网页需要保持可用，才能继续使用网页模型。
 
@@ -252,6 +275,10 @@ dsh web
 ![Harness 网页模型的默认或专家模式、思考开关与新会话默认模型设置](docs/images/guide/harness-model.jpg)
 
 - 默认模式与专家模式都可以独立开启或关闭思考，并非“专家模式就是开启思考”。
+
+  ![image-20260908132845913](assets/image-20260908132845913.png)
+
+  ![image-20260908132853521](assets/image-20260908132853521.png)
 - 开启思考后，可展开会话中的“思考中…”或“已思考”区域；思考内容仅临时展示，刷新页面后不从历史恢复，最终回答和工具结果照常保留。
 - 以 Harness 中的选择为准，不需要到 DeepSeek 网页上手动切换模式。
 - 此连接用于文字对话和本机工具任务，不提供图片上传或识图入口。
@@ -271,6 +298,14 @@ dsh web
 ![Windows PowerShell 7 开关、命令批准方式、可执行文件位置与配对状态](docs/images/guide/harness-permissions-pairing.jpg)
 
 命令以运行 Harness 的当前 Windows 用户权限执行，不局限于项目目录。原生命令默认关闭，自动批准需要单独开启。
+
+![image-20260908134207798](assets/image-20260908134207798.png)
+
+可以看到调用了工具执行了命令
+
+![image-20260908134234617](assets/image-20260908134234617.png)
+
+
 
 ### Linux：Bash
 
