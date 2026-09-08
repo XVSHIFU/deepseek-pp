@@ -33,7 +33,25 @@ npm install --global @deepseek-ai/dsh@0.1.2-rc.1
 
 Follow the [Windows / Linux installation instructions](README.md#首次安装) to install prerequisites, load the browser extension, and install the DSH plugin with its companion dependencies. Browser extension builds and Harness plugin builds are separate steps; when using a matching prebuilt package, source compilation is unnecessary.
 
-Choose a companion archive from [GitHub Releases](https://github.com/XVSHIFU/deepseek-pp/releases), checking that version's feature description, or use the local delivery archive you received. Do not choose the generated Source code archives. Extract it and locate the directory containing `extensions`, `plugin`, and `vendor`; if a README surrounds a `deepseek-web-official-…` subdirectory, enter that subdirectory for installation commands.
+In the Assets section of [GitHub Releases](https://github.com/XVSHIFU/deepseek-pp/releases), choose the complete installation archive **`deepseek-web-harness-20260908.zip`**, or use that archive if you already have it. No separate extension patch is needed. Do not choose the generated Source code archives. Extract it and enter `deepseek-web-harness-20260908`, containing `README.md`, `extensions`, `plugin`, and `vendor`. Run package installation and upgrade commands from that directory.
+
+Install the Harness plugin and companion dependencies:
+
+Windows (PowerShell 7):
+
+```powershell
+$vendor = @(Get-ChildItem -LiteralPath ./vendor -Filter '*.tgz' | Select-Object -ExpandProperty FullName)
+$plugin = @(Get-ChildItem -LiteralPath ./plugin -Filter '*.tgz' | Select-Object -ExpandProperty FullName)
+dsh plugin --profile web add $vendor $plugin --allow-build=koffi
+```
+
+Linux (Bash):
+
+```bash
+dsh plugin --profile web add ./vendor/*.tgz ./plugin/*.tgz --allow-build=koffi
+```
+
+Wait for installation to succeed, then load the browser extension below. Installation needs internet access. Git and source compilation are unnecessary when using the complete installation archive.
 
 Then [pair them in the settings UI](README.md#首次配对只做一次). The extension ID and pairing token are saved for daily use.
 
@@ -62,6 +80,8 @@ Thinking appears in a collapsible live panel. It is not stored in session histor
 ## Upgrade
 
 Stop Harness with `Ctrl+C` and keep the previous package. From the new package directory, update the companion dependencies and plugin together:
+
+These steps apply to complete packages. For a package explicitly labelled as a browser-extension-only update, follow its instructions and leave unchanged Harness components installed.
 
 Windows (PowerShell 7):
 

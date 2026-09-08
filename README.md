@@ -6,7 +6,7 @@
 
 日常流程：**首次安装并配对 → 运行 `dsh web` → 在 Harness 网页里使用。**
 
-[首次安装](#首次安装) · [首次配对](#首次配对只做一次) · [日常使用](#日常使用) · [模式与深度思考](#模式与深度思考) · [执行命令](#执行命令) · [升级](#升级)
+[English](README_EN.md) · [首次安装](#首次安装) · [首次配对](#首次配对只做一次) · [日常使用](#日常使用) · [模式与深度思考](#模式与深度思考) · [执行命令](#执行命令) · [升级](#升级)
 
 ## 能力
 
@@ -35,10 +35,9 @@ Harness 插件和浏览器扩展各有分工：Harness 负责本地任务与工�
 
 **Windows**
 
-在终端中安装 Git、Node.js 24 和 PowerShell 7：
+在终端中安装 Node.js 24 和 PowerShell 7：
 
 ```powershell
-winget install --id Git.Git --exact --source winget
 winget install --id OpenJS.NodeJS.LTS --version 24.19.0 --exact --source winget
 winget install --id Microsoft.PowerShell --exact --source winget
 ```
@@ -50,6 +49,8 @@ npm install --global @deepseek-ai/dsh@0.1.2-rc.1
 ```
 
 也可使用 [Node.js 安装程序](https://nodejs.org/en/download)选择 24.x，以及 [PowerShell 官方安装方法](https://learn.microsoft.com/powershell/scripting/install/install-powershell-on-windows)。日常运行 Harness 不需要管理员权限。
+
+使用完整安装包不需要 Git；选择源码构建时，再执行 `winget install --id Git.Git --exact --source winget`。
 
 **Linux（Ubuntu / Debian 示例）**
 
@@ -77,9 +78,9 @@ npm install --global @deepseek-ai/dsh@0.1.2-rc.1
 
 这两项是不同的软件：**浏览器扩展安装到浏览器，DSH 插件安装到本机 Harness。**
 
-从 [GitHub Releases](https://github.com/XVSHIFU/deepseek-pp/releases) 选择配套整包；各版本包含的功能以该版本下载页说明为准。已经拿到本地交付包时，直接使用该包，不必再次下载。不要选择 GitHub 自动生成的 **Source code**。
+从 [GitHub Releases](https://github.com/XVSHIFU/deepseek-pp/releases) 的附件（Assets）中选择 **完整安装包 `deepseek-web-harness-20260908.zip`**，不需要另找扩展补丁。已经拿到这份整包时，直接解压使用，不必再次下载。不要选择 GitHub 自动生成的 **Source code**。
 
-解压整包后，找到同时包含 **`extensions`、`plugin`、`vendor`** 的目录，以下称为“安装包目录”。如果外面还有一层 README 文件夹，继续进入其中的 `deepseek-web-official-…` 子文件夹。
+解压整包后，进入 **`deepseek-web-harness-20260908`** 文件夹，里面同时有 **`README.md`、`extensions`、`plugin`、`vendor`**。以下称这一层为“安装包目录”，安装和升级命令都在这一层执行。
 
 使用配套安装包时，解压到准备长期保留的目录。浏览器 ZIP 位于 `extensions/`，DSH 插件位于 `plugin/`，配套依赖位于 `vendor/`；无需执行下面的源码构建。
 
@@ -176,7 +177,8 @@ dsh plugin --profile web add ./vendor/harness-request-budget/*.tgz ./.release/ma
 目录对应关系：
 
 ```text
-deepseek-web-official-…/                ← 安装包目录，不要选这里
+deepseek-web-harness-20260908/           ← 安装包目录，不要加载这一层
+├─ README.md                           ← 从这里阅读安装步骤
 ├─ manifest.json                       ← 安装包清单，不是浏览器扩展清单
 ├─ plugin/                             ← 本机 Harness 插件
 ├─ vendor/                             ← 配套依赖
@@ -260,7 +262,7 @@ dsh web
 
 ## 升级
 
-浏览器扩展和 Harness 插件使用同一个配套包，不要只更新其中一项。
+使用完整安装包升级时，按下面步骤更新配套文件，不混用不同整包中的组件。若取得的是明确标注“仅浏览器扩展”的更新包，则按该包说明操作，无需重复安装未变化的 Harness 插件。
 
 1. 在运行 Harness 的终端按 `Ctrl+C` 停止服务，保留旧安装包以便回退。
 2. 进入新“安装包目录”，执行对应系统的更新命令：
