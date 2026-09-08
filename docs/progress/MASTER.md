@@ -7,6 +7,7 @@
 - 保留浏览器准备阶段的白名单原因码，经 broker 传到 Harness；失败消息增加 `web-diag:v1`、请求 ID 的 SHA-256 前 16 位、阶段、原因、耗时。未知原因不透传，未增加凭据/请求正文记录，不自动上传，不改变 quarantine、取消、超时或不重放策略。
 - 核心四文件 162/162、扩展相关九文件 105/105（含交叉覆盖）、模拟桥接/取消/重连 24/24、打包 19/19 均通过；compile、prompt freeze 7/7、插件构建通过。部分旧测试最初因新增诊断后缀失败，已保留原错误码/消息前缀断言并补齐严格后缀和隐私断言，复跑通过。
 - 更新步骤见 `docs/verification/Windows_工具纠正与诊断复测.md`。需在出错电脑同时原位更新浏览器扩展与 Harness 插件；保留扩展 ID、配对及原 vendor，不要求重装完整环境。源码提交后通过 `package:web-harness --instructions` 生成含复测说明的本地更新包；实际网页复测待用户完成，本轮未发布或替换正式 Release。
+- 最终组件源码 `1ce9270fcbdd37a83f7b10fcacc3d95b4d761c45`：补充仅扫描末尾工具包装以避免重复后缀扫描，71/71 适配器测试再次通过。原 `deepseek+++++` 路径触发 WXT 未转义正则错误后，在普通名称的独立源码副本构建；Chrome/Edge/Firefox、插件、manifest policy、177 个文本产物 UTF-8 检查均通过。`deepseek-web-harness-stopfix-20260908.zip` 含 34 文件，SHA-256 `e83ebc38d4b9b2a39c3e94b74d1c9b8399568d4a0d6d32834fc8503393e94de4`，逐文件 ZIP 回读通过；位于项目外 `deepseek-stop-fix-20260908/build-final/`。未推送本轮修复提交、未上传安装包；不要在保存这些新提交前删除本地源码。没有把本地模拟测试或构建宣称为另一台 Windows 的真实验证。
 
 ## 2026-09-08 GitHub 开发恢复验证完成
 
