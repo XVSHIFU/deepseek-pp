@@ -595,7 +595,11 @@ window.__ModuleLoader__.load({
       locale
     }) {
       const snapshot = import_react.default.useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
-      import_react.default.useSyncExternalStore(locale.subscribe, locale.getSnapshot, locale.getSnapshot);
+      import_react.default.useSyncExternalStore(
+        (listener) => locale.subscribe(listener),
+        () => locale.getSnapshot(),
+        () => locale.getSnapshot()
+      );
       const reasoning = snapshot.sessions.get(sessionId);
       if (reasoning === void 0 || reasoning.text === "") return null;
       const t = locale.bind(DEEPSEEK_WEB_SETTINGS_LOCALE_NAMESPACE);
@@ -619,7 +623,11 @@ window.__ModuleLoader__.load({
       locale
     }) {
       const snapshot = import_react.default.useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
-      import_react.default.useSyncExternalStore(locale.subscribe, locale.getSnapshot, locale.getSnapshot);
+      import_react.default.useSyncExternalStore(
+        (listener) => locale.subscribe(listener),
+        () => locale.getSnapshot(),
+        () => locale.getSnapshot()
+      );
       const t = locale.bind(DEEPSEEK_WEB_SETTINGS_LOCALE_NAMESPACE);
       const [open, setOpen] = import_react.default.useState(false);
       const saveStarted = import_react.default.useRef(false);

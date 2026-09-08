@@ -38,15 +38,17 @@ describe("DeepSeek Web settings card", () => {
     const context: Record<string, unknown> = {
       effect(register: () => unknown) { register(); },
       locale: {
+        currentSnapshot: localeSnapshot,
+        listeners: localeListeners,
         register: (_namespace: string, dictionaries: { zh: Record<string, string> }) => {
           dictionary = dictionaries.zh;
           return unregister;
         },
         bind: () => (key: string) => dictionary[key] ?? key,
-        getSnapshot: () => localeSnapshot,
-        subscribe: (listener: () => void) => {
-          localeListeners.add(listener);
-          return () => localeListeners.delete(listener);
+        getSnapshot(this: { currentSnapshot: typeof localeSnapshot }) { return this.currentSnapshot; },
+        subscribe(this: { listeners: Set<() => void> }, listener: () => void) {
+          this.listeners.add(listener);
+          return () => this.listeners.delete(listener);
         },
       },
       remote: {

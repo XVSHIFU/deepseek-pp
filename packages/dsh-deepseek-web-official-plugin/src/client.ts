@@ -594,7 +594,11 @@ function DeepSeekWebReasoningDock({
   readonly locale: LocaleService;
 }): React.ReactElement | null {
   const snapshot = React.useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
-  React.useSyncExternalStore(locale.subscribe, locale.getSnapshot, locale.getSnapshot);
+  React.useSyncExternalStore(
+    (listener) => locale.subscribe(listener),
+    () => locale.getSnapshot(),
+    () => locale.getSnapshot(),
+  );
   const reasoning = snapshot.sessions.get(sessionId);
   if (reasoning === undefined || reasoning.text === "") return null;
   const t = locale.bind(DEEPSEEK_WEB_SETTINGS_LOCALE_NAMESPACE);
@@ -616,7 +620,11 @@ function DeepSeekWebSettingsCard({
   readonly locale: LocaleService;
 }): React.ReactElement | null {
   const snapshot = React.useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
-  React.useSyncExternalStore(locale.subscribe, locale.getSnapshot, locale.getSnapshot);
+  React.useSyncExternalStore(
+    (listener) => locale.subscribe(listener),
+    () => locale.getSnapshot(),
+    () => locale.getSnapshot(),
+  );
   const t = locale.bind(DEEPSEEK_WEB_SETTINGS_LOCALE_NAMESPACE);
   const [open, setOpen] = React.useState(false);
   const saveStarted = React.useRef(false);
