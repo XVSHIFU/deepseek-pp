@@ -14,11 +14,11 @@
 
 ## 2026-09-08 T8 网页模型控制、工具可靠性与视觉一致性
 
-- T8.1–T8.3 已在 `05ee53d`、`aab2aac`、`2123443` 完成本地实现：官方设置卡片中英文折叠体验、默认/专家网页模式、独立思考开关与不持久化思考 dock，以及只对明确畸形工具意图执行一次、有历史链验证且禁止副作用重放的纠正回合。截图中的 `[调用 glob]` / `[调用 read]` 已确认只是没有进入权威 XML parser 的模型正文，不再被视为工具已执行。
+- T8 已本地完成。T8.1–T8.3 在既有实现上由 `ca773f6` 完成官方风格 UI 改造、`d2e93c5` 补齐 reasoning 能力协商；设置页按“连接、网页模型、Windows 命令、配对、旧会话导入”分组，对齐 Harness token、控件状态、主次操作、中英文与浅/深主题。默认/专家、独立思考与不持久化 reasoning dock 均贯通；只对明确畸形工具意图执行一次、有历史链验证且禁止副作用重放的纠正回合保持不变。截图中的 `[调用 glob]` / `[调用 read]` 已确认只是没有进入权威 XML parser 的模型正文。
 - 根 compile、prompt freeze、定向 UI/adapter/digest/bridge/tool/acceptance 测试通过；全量测试首次并行运行 2503 passed、1 skipped、33 failed，行为预期修正后逐项通过，其余并行资源争用文件单独复跑全部通过。三浏览器构建、manifest policy 与 UTF-8/ASCII 产物检查通过。sidepanel raw 门槛超 32 字节，但同环境未含 T8.2/T8.3 改动的 `HEAD` 快照结果完全相同，未放宽既有预算。
-- `2123443` 候选在首次官方 UI 打开时暴露 locale service receiver 丢失，设置卡片被错误边界隐藏；`6e48dd4` 已修复并增加相应回归测试。替代候选 `.release/deepseek-web-official-6e48dd4` 的 manifest SHA-256=`18328ccf10753428c4d5800a2c25674afeb60a206ff68beb1809ec5fa389859c`，package/verify、隔离首装和官方 UI 展开均通过。
-- 2026-09-08 用户为新扩展 `hadnmeeaihlddmdpameekgadofgjbmno` 生成令牌并确认已连接；本机只读核验 `127.0.0.1:43123` 同时存在 listener 与 established loopback 连接，令牌明文未读取或记录。该结果只把“配对连接”标为通过，四组合模型/思考与真实工具矩阵仍待执行。
-- 用户三张实机截图确认 DeepSeek 卡片虽然功能可用，但原生表单控件、复选框对齐、按钮层级、长表单分组和间距与同页官方插件卡片明显不一致。T8 新增 T8.1b：只使用公开 Harness 原语/设计 token 或插件内薄适配，对齐圆角卡片、分组、控件状态、操作层级、浅深主题、中英文、缩放、窄窗口和键盘无障碍；视觉改造后重新生成候选，`6e48dd4` 仅保留为连接验证基线。
+- 最终运行候选 `.release/deepseek-web-official-d8e3c80` 来源 `d8e3c80515d29816046ef04087747bd2198f8925`；Chrome / Edge / Firefox ZIP SHA-256 为 `7f5dd872…ceb8`、`6f553350…b6e`、`e6909362…446c`。三端 build/zip、package/verify、Manifest policy、177 个 UTF-8/ASCII 产物与隔离安装均通过；未发布，候选 manifest 仍为 `release_eligible=false`。
+- 用户为实际生效的扩展 `hadnmeeaihlddmdpameekgadofgjbmno` 完成新令牌保存与重载后，真实官方 UI 验收全部通过：默认/专家 × 思考关/开四个独立会话各有两轮、三模型步、一次 `read`；Default/off 另有 read-before-edit 的 editor 精确修改；Expert/off 经一次 `allowed_once` 审批完成 PowerShell 7 文件复制。一次 `WEB_MODEL_TIMEOUT_AMBIGUOUS` 未被自动重放，改以新会话继续，符合副作用安全合同。证据清单为 `C:\temp\deepseek-t8-real-d8e3c80\evidence\acceptance-manifest.json`；真实验收器返回 `verified`。
+- `5eaaedf` 修正真实验收器：官方运行时注入的 context/skill catalog 也使用 `user/message` 事件，直接用户轮次现按 `source.kind=user` 计数；新增回归测试通过。该提交不改变候选运行时。官方 Harness 核心、Mode B prompt、用户项目和现有公开 Release 均未修改。
 
 ## 2026-09-07 README 与推送准备（待用户确认）
 

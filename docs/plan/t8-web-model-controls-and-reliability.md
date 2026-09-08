@@ -1,6 +1,6 @@
 # T8 网页模型控制、工具可靠性与设置体验计划
 
-状态：`in_progress_visual_alignment_and_real_acceptance`（2026-09-07 启动；2026-09-08 增加官方视觉一致性任务；基线 `89ab502bc637f79cea51d48d55c6d4b552b786d9`）
+状态：`completed_local`（2026-09-07 启动；2026-09-08 完成视觉一致性、真实网页矩阵与本地候选验收；基线 `89ab502bc637f79cea51d48d55c6d4b552b786d9`）
 
 T8 在已完成的官方 DeepSeek++ Harness 增量插件上继续，保留 `89ab502` 的品牌与 README 安装说明。阶段范围只包括官方设置卡片体验、Mode A 工具调用可靠性、网页默认/专家模式与独立深度思考、定向验证及新的本地候选。不得修改 Harness 核心、引入 API fallback、重构 Koffi/WinAPI 安装事务、覆盖 `.release/deepseek-web-official-395cf37`，也不包含图片输入、上传或引用链。
 
@@ -64,11 +64,12 @@ T8 在已完成的官方 DeepSeek++ Harness 增量插件上继续，保留 `89ab
 
 ## 6. 实施记录（2026-09-07）
 
-- T8.1 功能合同已完成：设置卡片使用公开 locale、slot、settings scope 与 Remote，支持中英文、初始折叠、草稿跨折叠保留、保存成功后折叠、失败保持展开；一次性令牌在本次页面内可复制，保存后的明文不能回读。T8.1b 视觉一致性尚未完成，不再把“功能可用”表述为 UI 整体完成。
+- T8.1 与 T8.1b 已完成：设置卡片使用公开 locale、slot、settings scope、Remote 与 Harness 设计 token，支持中英文、浅色/深色主题、窄窗口、键盘焦点、草稿跨折叠保留、保存成功后折叠和失败保持展开。展开内容重组为“连接、网页模型、Windows 命令、配对、旧会话导入”五组原生风格卡片；文本框、选择器、开关、状态点及主次操作层级统一。一次性令牌只保留在当前页面临时状态，保存后不能回读。实机已检查中英文和浅/深主题；125%/150% 缩放由响应式自动合同覆盖，未冒称完成不可自动化的逐档人工点击。
 - T8.2 已完成自动验证：事件级证据确认截图中的方括号调用只是模型文本，既有流式 XML parser 没有收到完整正式标签。Mode A prompt 现明确只有完整 XML 标签执行；仅在首轮完成、历史链已验证、没有正式调用且文本是明确畸形意图时，在同一 deadline、取消信号、页面链与冻结选项下追加一次纠正。纠正仍畸形返回 `TOOL_CALL_INVALID`；已调用、断线、取消、超时、ambiguous 或历史未验证均不重放。普通说明、围栏代码、未知工具标记继续只作为文本。
 - T8.3 已完成自动验证：默认/专家模式和独立思考通过官方 model route / reasoning effort 进入已有 `model_type` 与 `thinking_enabled` 字段；旧设置确定性回落为默认模式且关闭思考。全局设置只在明确选择“设为新会话默认”或当前默认已是本 provider 时更新默认模型，不覆盖其他 provider。思考内容经有界 Remote 流进入浏览器内存中的会话 dock，释放时清空，不写 session event、settings、日志或下一轮上下文。
+- 实机首次开启思考时发现 Browser capability 未声明 `reasoning`，导致前端正确拒绝该组合；`ca773f6` 完成视觉改造，`d2e93c5` 补齐 Browser/Host 的 reasoning 能力协商，重载实际生效的扩展 `hadnmeeaihlddmdpameekgadofgjbmno` 后默认/专家 × 思考关/开四组合全部通过。未修改官方 Harness 核心，Mode B prompt 字节保持不变。
 - 定向验证通过：根 compile、prompt freeze、设置 UI、插件/配置、adapter/digest、Harness bridge/tool-wire、fake e2e 及 readonly/file-edit/command acceptance。全量测试共 2537 项，首次并行运行 2503 passed、1 skipped、33 failed；其中行为预期已按新合同修正并逐项通过，其余四组为并行资源争用，单文件复跑全部通过。
 - Chrome、Edge、Firefox 在不含连续 `+` 的临时源码快照中构建通过；Manifest policy 与 177 个文本产物 UTF-8/ASCII 检查通过。WXT 0.20.26 会把原仓库绝对路径中的 `+++++` 当成正则而拒绝直接构建。sidepanel raw 门槛报告 384075/384043（超 32 字节），但同一环境对未包含 T8.2/T8.3 工作区改动的 `HEAD` 快照得到完全相同结果，证明不是本阶段增量；gzip 117316/117568 仍在预算内，因此不在 T8 中放宽或改写既有预算。
 - `2123443` 候选在首次官方 UI 打开时暴露 locale service 方法失去 receiver 的运行时问题，已由 `6e48dd475ac7b894584faa56eb6fc0cf8af51316` 修复并增加官方调用形态的回归测试，因此 `.release/deepseek-web-official-2123443` 明确被取代，不再作为最终候选。
-- 当前连接验证候选 `.release/deepseek-web-official-6e48dd4` 来源 `6e48dd475ac7b894584faa56eb6fc0cf8af51316`，raw `manifest.json` SHA-256=`18328ccf10753428c4d5800a2c25674afeb60a206ff68beb1809ec5fa389859c`；Chrome / Edge / Firefox ZIP SHA-256 分别为 `8946f06140e83329eb9610517c544ccbbd9c9a9d0b69e161ae77878a6b769321`、`897789d291ddc06f158754824e634a885372316bfd84e3451272e95a9708761f`、`509278eca91d1e28203728a66645adf969db235a9ebd24669fadeb94a30e687d`。package/verify 与隔离官方 `web` profile 首装通过。
-- 2026-09-08，隔离 home `C:\temp\deepseek-t8-live-6e48dd4\dsh-home` 已配置用户新加载扩展 ID `hadnmeeaihlddmdpameekgadofgjbmno`；用户完成新令牌生成和扩展保存后，本机 `127.0.0.1:43123` 有一个 listener 与一个 established loopback 连接，且未记录令牌明文。配对连接可标通过；T8.5 的四组合 read/追问、临时 editor、批准命令及 T8.1b 视觉验收仍未完成。视觉改造完成后必须再生成新的不可变候选，`6e48dd4` 只保留为连接验证基线。
+- 最终运行候选 `.release/deepseek-web-official-d8e3c80` 来源 `d8e3c80515d29816046ef04087747bd2198f8925`；Chrome / Edge / Firefox ZIP SHA-256 分别为 `7f5dd872c47c5dca8debcf17715043aad370d43bc94bf6044c81f9ffbbc1ceb8`、`6f553350ec2013e66c5c97fb0768d94949faf137250c2ee700acc14a4c5a1b6e`、`e690936244f4b5021bdd45674db95c6f95cb0e6906b5e322e0fe7fc2926d446c`。三端构建、package/verify、Manifest policy、177 个文本产物 UTF-8/ASCII 检查与隔离安装通过；候选 manifest 保持 `release_eligible=false`，本任务没有发布、上传或改写旧候选。
+- T8.5 已由 `scripts/dsh-official-web-real-acceptance.mjs` 对真实持久会话复验通过：默认/专家 × 思考关/开四个独立会话均为两轮、三模型步、一次 `read` 且没有审批；Default/off 同会话另以 read-before-edit 完成精确 editor 修改；Expert/off 同会话以一次 `allowed_once` 审批执行 PowerShell 7 并证明输出在该回合新建。一次真实 `WEB_MODEL_TIMEOUT_AMBIGUOUS` 按合同未重放，改用全新会话完成对应矩阵。证据清单位于 `C:\temp\deepseek-t8-real-d8e3c80\evidence\acceptance-manifest.json`；`5eaaedf` 仅修正验收器对官方运行时注入 context 消息的直接用户轮次计数，不改变已验收的候选运行时代码。
