@@ -8,6 +8,7 @@
 - 定向回归 6 文件 164/164，包括真实 loopback 持续超过十秒仍成功、显式 deadline 仍超时、全部流分片边界、工具结果到下一轮终答、普通回答和 Mode B 兼容。根 compile、prompt freeze 7/7、官方插件 build、Chrome/Edge/Firefox build+zip、manifest policy、177 文本产物 UTF-8 检查通过。真实 DSH CLI + 假浏览器 read/read-error 两条工具回路通过（各两次模型请求，含清理）。此次没有重跑真实 DeepSeek 网页，也没有重装用户已删除的 WSL 环境。
 - 中英文 README 简短澄清 Shell Local 非 Harness 命令前置条件、Windows 命令开关独立于工作区完全权限；新增增量包更新说明，仅要求更新 Harness 插件及浏览器扩展，不删除会话/配对。未 push 或修改已发布附件。
 - 补充浏览器组合层和官方插件回归 2 文件 7/7；本轮相关回归合计 171/171，最后根 compile 再次通过。
+- 修复提交 `a636469`；本地增量包 `.release/deepseek-web-fix-a636469.zip`，SHA-256 `93626902f1d9c7dc720e2a6d9fec7201c9539d3dd7393950b532e4e3d8f20e35`。三个浏览器 ZIP 的 300 个文件与构建目录逐项一致，外层 8 个文件散列核对通过，Harness TGZ 内含新生成时限。包中不含用户测试文件、网页令牌或原始日志；旧 Release、配对和会话均未改动。增量更新说明位于包内 `修复包使用.md`。
 
 ## 2026-09-08 Linux 插件安装环境说明补充
 
