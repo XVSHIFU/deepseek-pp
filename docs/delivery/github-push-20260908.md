@@ -1,6 +1,8 @@
 # 2026-09-08 推送准备清单
 
-状态：本地准备，等待用户确认。代码保留在当前仓库，不复制另一份开发仓库；安装附件集中在 `.release/deepseek-web-harness-20260908/`。
+状态：**用户已授权，2026-09-08 已推送并公开预发布。** 发布目标提交为 `59317a6a811c5eaa5ab4fedfa75fede25e3e568b`，默认分支已切换为 `feature/web-harness`；`main` 仍为 `0a02c72b135bf2936e11aa78fd6136931ed65908`，未合并或改写。代码保留在当前仓库，安装附件集中在 `.release/deepseek-web-harness-20260908/`。
+
+发布页：`https://github.com/XVSHIFU/deepseek-pp/releases/tag/web-harness-preview-20260908`。GitHub 确认 `draft=false`、`prerelease=true`，完整 ZIP 与校验附件均为 `uploaded`，digest 与本地一致。旧版 Release 保留，未发布商店或修改上游。以下为推送前范围清单及记录，不再代表待授权状态。
 
 ## 目标与边界
 

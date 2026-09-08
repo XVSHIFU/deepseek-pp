@@ -14,6 +14,7 @@
 
 ## 2026-09-08 T8 网页模型控制、工具可靠性与视觉一致性
 
+- **已授权发布：** `feature/web-harness` 已推送至 `59317a6a811c5eaa5ab4fedfa75fede25e3e568b`，随后补交本发布记录；fork 默认分支已切换为 `feature/web-harness`，`main` 保持 `0a02c72b135bf2936e11aa78fd6136931ed65908`。新预发布 `web-harness-preview-20260908` 于 2026-09-08 03:49:28 UTC 公开，非 draft、非稳定 latest；ZIP 27,007,929 字节、SHA-256 `455b593b4f89342afe48b0cdada03ce0c1924162a3486e74e1838e63e4011378`，GitHub 附件 digest 与本地一致，`.zip.sha256` 也已上传并核对。上传曾因 TLS/代理连接失败，保持草稿后通过现有系统代理成功上传，未关闭证书校验、未改系统网络配置。旧 Release 保留，没有商店上传、PR、main 合并或改写旧候选。发布详情见 `docs/delivery/github-push-20260908.md`。
 - **完整推送准备：** 新整理 `.release/deepseek-web-harness-20260908.zip`，组合已校验的 `d8e3c80` Harness 插件及配套依赖、`2f4f289` 修补后浏览器扩展、当前双语 README 与独立许可文件；组件来源分别记录，不伪造为同一源码构建。首次安装不再需要额外补丁。推送范围与 Release 草稿见 `docs/delivery/github-push-20260908.md` 和 `github-release-20260908.md`。用户本轮仅要求准备，未 push、tag、PR 或上传；新整包亦不等于新的跨端实测。
 - **两项审查补修已完成（用户随后授权）：** `657019e` / `2f4f289` 修复带 JSON 参数的方括号意图识别、纠正后的正常回答出口，保留历史验证、单次纠正、取消/已有调用零重放。相关回归 120/120、compile、prompt freeze 7/7、三浏览器构建、manifest 与 UTF-8/ASCII 校验通过；只改变扩展，Harness 插件无改动。交付更新包 `.release/deepseek-web-tool-correction-2f4f289/`；旧候选与整包保留，未重新真实网页实测、未 push 或发布。此前两项待补状态由本记录取代。
 - **后续独立简短复核（2026-09-08）：有保留通过。** 95/95 定向测试、根 compile、候选严格校验及既有真实证据复验通过；但带 JSON 参数的方括号调用不触发纠正，以及纠正后没有正常回答出口两项 P2 尚未补齐，不认可“工具可靠性全部完成”的无保留结论。详见 `docs/delivery/t8-review-and-files.md`。本轮只整理 README 与便携安装文件，没有改运行时、重新实测网页、push 或发布。下文为实施者此前交付记录。
