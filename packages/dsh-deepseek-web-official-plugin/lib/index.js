@@ -1229,6 +1229,7 @@ function validateUpgradeRequest(request, policy) {
 var DEFAULT_AUTH_TIMEOUT_MS = 2e3;
 var DEFAULT_HEARTBEAT_TIMEOUT_MS = 3e4;
 var DEFAULT_RPC_TIMEOUT_MS = 1e4;
+var DEFAULT_GENERATION_TIMEOUT_MS = 5 * 6e4;
 var DEFAULT_MAX_BUFFERED_EVENTS = 128;
 var DEFAULT_MAX_EVENTS = 4096;
 var DeepSeekWebModelHost = class {
@@ -1385,7 +1386,7 @@ var DeepSeekWebModelHost = class {
       this.updateRecord(request.request_id, { type: "dispatch" });
       this.trackOperation(rpcId, { kind: "generate", identity: active, deferred: active.accepted });
       this.sendPreparedFrame(peer, encoded);
-      const timeoutMs = Math.min(request.options.timeout_ms ?? this.rpcTimeoutMs, 30 * 60 * 1e3);
+      const timeoutMs = Math.min(request.options.timeout_ms ?? DEFAULT_GENERATION_TIMEOUT_MS, 30 * 60 * 1e3);
       active.deadlineTimer = deadline(() => {
         this.settleGenerationAmbiguous("generation_timeout");
         this.closePeer(peer, 1008, "REQUEST_TIMEOUT");

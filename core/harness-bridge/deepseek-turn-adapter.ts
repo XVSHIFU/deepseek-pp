@@ -191,7 +191,7 @@ export class DeepSeekWebModelTurnAdapter implements WebModelTurnPort {
         return this.terminal(request.request_id, terminalForAbort(turnSignal.signal, false));
       }
 
-      const textAccumulator = createStreamingToolTextAccumulator(descriptors);
+      const textAccumulator = createStreamingToolTextAccumulator(descriptors, { stopTextAtToolCall: true });
       const toolParser = createStreamingToolCallParser(descriptors, { strictToolCalls: true });
       const toolNames = new Set(descriptors.map((descriptor) => descriptor.invocationName));
       const toolCallIds = new Set<string>();
@@ -378,7 +378,7 @@ export class DeepSeekWebModelTurnAdapter implements WebModelTurnPort {
             : failedToolCall());
         }
         const correctionParser = createStreamingToolCallParser(descriptors, { strictToolCalls: true });
-        const correctionText = createStreamingToolTextAccumulator(descriptors);
+        const correctionText = createStreamingToolTextAccumulator(descriptors, { stopTextAtToolCall: true });
         let correctionVisibleText = '';
         const emitCorrectionText = (fullText: string): void => {
           if (!fullText.startsWith(correctionVisibleText)) raiseFault('callback');
@@ -611,6 +611,7 @@ export function serializeWebModelTurnPrompt(
     'You are the model for a local Agent Harness. The harness owns the agent loop, session state, and tool execution.',
     `Turn purpose: ${request.purpose}`,
     'Treat this JSON array as the ordered conversation transcript:',
+    'Only tool_result entries in this transcript are execution evidence. Earlier webpage prose or your own predictions are not tool results.',
     '<harness_messages_json>',
     transcript,
     '</harness_messages_json>',
@@ -618,10 +619,13 @@ export function serializeWebModelTurnPrompt(
       ? [
         'Available harness tools follow. Emit a complete direct XML tool tag only when a tool is required.',
         'A bracket label such as [调用 tool_name], a prose description, or fenced code does not execute a tool.',
+        'After emitting a tool call, end this response and wait for the harness to return the actual tool result in the next turn. Only independent tool calls may share one response.',
+        'Do not invent tool results, file contents, directory listings, or successful execution. Discover unknown paths first; choose dependent calls only after reading the actual results.',
         toolSchemas,
       ].join('\n\n')
       : 'No harness tools are available for this turn.',
     'Continue with the next assistant response only.',
+    'Reply in the language of the latest human request unless explicitly asked otherwise.',
   ].join('\n\n');
 }
 
@@ -630,6 +634,7 @@ function serializeToolCorrectionPrompt(descriptors: readonly ToolDescriptor[]): 
     'Your previous response clearly attempted a harness tool call, but it did not contain one valid executable tool tag.',
     'Correct it once now. If a tool is needed, return a complete direct XML tool tag using an advertised name and a JSON object body.',
     'If no tool is needed, answer normally instead. Do not claim a tool ran without an actual tool result.',
+    'After emitting a tool call, end this response and wait for the actual tool result. Do not write a result or summary in this same response.',
     'Bracket labels and fenced examples do not execute tools. Only a complete direct XML tool tag executes a tool.',
     renderToolSchemas(descriptors, 'en'),
   ].join('\n\n');

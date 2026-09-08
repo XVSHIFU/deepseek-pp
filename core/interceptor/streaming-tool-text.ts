@@ -21,9 +21,10 @@ export interface StreamingToolTextAccumulator {
 
 export function createStreamingToolTextAccumulator(
   descriptors: readonly ToolDescriptor[],
+  options: { readonly stopTextAtToolCall?: boolean } = {},
 ): StreamingToolTextAccumulator {
   const catalog = createToolInvocationCatalog(descriptors);
-  return new ToolTextAccumulator(catalog.invocationNames);
+  return new ToolTextAccumulator(catalog.invocationNames, options.stopTextAtToolCall === true);
 }
 
 class ToolTextAccumulator implements StreamingToolTextAccumulator {
@@ -39,8 +40,9 @@ class ToolTextAccumulator implements StreamingToolTextAccumulator {
   private pendingNormal = '';
   private pendingSuppressed = '';
   private visibleText = '';
+  private textStopped = false;
 
-  constructor(invocationNames: readonly string[]) {
+  constructor(invocationNames: readonly string[], private readonly stopTextAtToolCall = false) {
     this.suppressionTargets = invocationNames.map((tool) => ({
       key: `xml:${tool}`,
       openTag: getToolOpenTag(tool),
@@ -68,6 +70,7 @@ class ToolTextAccumulator implements StreamingToolTextAccumulator {
   }
 
   append(chunk: string): string {
+    if (this.textStopped) return this.visibleText;
     if (!chunk || this.suppressionTargets.length === 0) {
       this.visibleText += chunk;
       return this.visibleText;
@@ -84,6 +87,7 @@ class ToolTextAccumulator implements StreamingToolTextAccumulator {
   }
 
   flush(): string {
+    if (this.textStopped) return this.visibleText;
     if (this.state === 'NORMAL' && this.pendingNormal) {
       this.visibleText += this.pendingNormal;
     }
@@ -116,6 +120,14 @@ class ToolTextAccumulator implements StreamingToolTextAccumulator {
 
     if (found.index > 0) {
       this.visibleText += text.slice(0, found.index);
+    }
+
+    // Mode A executes tools only after the verified model turn completes.
+    // Text after a tool opening cannot yet be grounded in that tool's result.
+    // The independent parser still consumes and validates the complete stream.
+    if (this.stopTextAtToolCall) {
+      this.textStopped = true;
+      return '';
     }
 
     this.state = 'SUPPRESSING';

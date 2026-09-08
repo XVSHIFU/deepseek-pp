@@ -290,7 +290,7 @@ describe('DeepSeekWebModelTurnAdapter', () => {
       request_digest: DIGEST_A,
       status: 'accepted',
     }]);
-    expect(collected.text.map((event) => event.text).join('')).toBe('Checking done.');
+    expect(collected.text.map((event) => event.text).join('')).toBe('Checking ');
     expect(collected.tools).toHaveLength(1);
     expect(collected.tools[0]).toMatchObject({
       type: 'tool_call',

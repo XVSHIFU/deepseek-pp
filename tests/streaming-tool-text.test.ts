@@ -30,6 +30,23 @@ describe('createStreamingToolTextAccumulator', () => {
     expect(stream.flush()).toBe('literal <memory_');
   });
 
+  it('optionally stops visible text at the first tool opening at every chunk boundary', () => {
+    const wire = 'Before <memory_save>{"name":"n","content":"c"}</memory_save>Invented result';
+    for (let split = 0; split <= wire.length; split += 1) {
+      const stream = createStreamingToolTextAccumulator(descriptors, { stopTextAtToolCall: true });
+      stream.append(wire.slice(0, split));
+      stream.append(wire.slice(split));
+      expect(stream.append(' more unverified claims')).toBe('Before ');
+      expect(stream.flush()).toBe('Before ');
+    }
+  });
+
+  it('keeps ordinary answers and literal partial tags in stop-at-tool mode', () => {
+    const stream = createStreamingToolTextAccumulator(descriptors, { stopTextAtToolCall: true });
+    expect(stream.append('An ordinary answer <memory_')).toBe('An ordinary answer ');
+    expect(stream.flush()).toBe('An ordinary answer <memory_');
+  });
+
   it('keeps tail text after a same-chunk tool call', () => {
     const stream = createStreamingToolTextAccumulator(descriptors);
 

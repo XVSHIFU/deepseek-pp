@@ -23,11 +23,12 @@ The browser extension supplies the web model connection; Harness owns local tool
 
 ## Installation
 
-Requirements: Node.js 24.x, DeepSeek Harness `0.1.2-rc.1`, and Chrome, Edge, or Firefox on the same computer. Windows commands use PowerShell 7. Linux commands require Bash and a working Bubblewrap or Landlock backend.
+Requirements: Node.js 24.x, pnpm `11.7.0`, DeepSeek Harness `0.1.2-rc.1`, and Chrome, Edge, or Firefox on the same computer. pnpm installs the Harness plugins. Windows commands use PowerShell 7. Linux commands require Bash and a working Bubblewrap or Landlock backend.
 
-Install the official Harness locally:
+Install pnpm and the official Harness locally:
 
 ```sh
+npm install --global pnpm@11.7.0
 npm install --global @deepseek-ai/dsh@0.1.2-rc.1
 ```
 
@@ -100,6 +101,8 @@ dsh plugin --profile web add ./vendor/*.tgz ./plugin/*.tgz --force --allow-build
 After the command succeeds, back up the currently loaded extension folder and copy the new browser ZIP's extracted files into that same folder. Reload the extension and refresh the signed-in DeepSeek page, then run `dsh web` again. Keeping the original Chrome/Edge extension path preserves its ID and pairing. Firefox temporary loading may change the origin and require pairing again. Installation and upgrades may need internet access.
 
 ## Commands and data
+
+Harness commands do not require the browser extension's MCP → Shell Local. On Windows, enable the Harness plugin's Windows command switch; full workspace access does not enable it. When Harness runs in WSL, commands run in Ubuntu, while the paired browser can run on Windows.
 
 Windows native commands are disabled by default. Enable them in the DeepSeek Web settings, keep **Ask for every command**, and create a new session. Approved commands run with the current Windows-user permissions, not a workspace sandbox.
 

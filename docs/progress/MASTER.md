@@ -1,5 +1,20 @@
 # Web Model Broker × Local DSH — Active Progress
 
+## 2026-09-08 普通请求十秒中断与工具结果边界修复
+
+- 用户跨电脑日志 `session-67ff4c48-d040-40d9-8855-f37752d54f78`：普通 agent 请求未携带 `timeout_ms`，约十秒后以 `WEB_MODEL_TIMEOUT_AMBIGUOUS` 结束；生成流包含 17 个工具调用块，但没有实际工具结果，模型提前编造了项目说明。日志和原始截图不纳入源码或交付包。
+- 根因：Host 将完整生成的缺省 deadline 错误复用为 RPC 的 10 秒超时。现拆为独立 5 分钟生成预算；RPC 回应仍为 10 秒，显式请求时限仍生效，断线/超时不自动重放。
+- Mode A 提示词要求工具调用后等待真实结果、先发现路径再选择依赖调用，并跟随用户语言。Mode A 独立开启文本截断：首个工具开标签之后的正文不再发送给 Harness，防止同轮未验证总结进入本地消息；流仍完整解析并验证网页会话链，不能把人为中止流冒充成功或提前执行工具。原 Mode B 默认行为保持不变。该约束不等于保证模型永不幻觉，也不会拦截所有猜测出的工具参数。
+- 定向回归 6 文件 164/164，包括真实 loopback 持续超过十秒仍成功、显式 deadline 仍超时、全部流分片边界、工具结果到下一轮终答、普通回答和 Mode B 兼容。根 compile、prompt freeze 7/7、官方插件 build、Chrome/Edge/Firefox build+zip、manifest policy、177 文本产物 UTF-8 检查通过。真实 DSH CLI + 假浏览器 read/read-error 两条工具回路通过（各两次模型请求，含清理）。此次没有重跑真实 DeepSeek 网页，也没有重装用户已删除的 WSL 环境。
+- 中英文 README 简短澄清 Shell Local 非 Harness 命令前置条件、Windows 命令开关独立于工作区完全权限；新增增量包更新说明，仅要求更新 Harness 插件及浏览器扩展，不删除会话/配对。未 push 或修改已发布附件。
+- 补充浏览器组合层和官方插件回归 2 文件 7/7；本轮相关回归合计 171/171，最后根 compile 再次通过。
+
+## 2026-09-08 Linux 插件安装环境说明补充
+
+- 用户安装时报 `Unknown option: 'allow-build'`。核对官方 DSH 安装器，其将参数透传给 PATH 中的 pnpm；pnpm 官方文档注明该选项自 10.4.0 提供。尚未取得用户机器上的具体 pnpm 版本。
+- 中英文 README 补充 pnpm `11.7.0` 前置要求和 Windows / Linux 安装命令，沿用配套 Harness 依赖的已有构建工具版本；保留仅允许 koffi 构建的安装参数。
+- 当时仅修改文档，静态差异检查通过，不涉及运行时测试。后续用户 WSL 测试截图确认升级后插件安装成功、koffi 构建完成，随后已完成配对、写文件和 Bash 读取，且由 Ubuntu 终端核对；不将该结果扩大为沙箱隔离完整验收。未修改已发布 ZIP、校验值或远端内容。
+
 > 本页是本轮工作的唯一活动进度真源；历史项目记录继续保留在 `docs/archives/`，不得把历史完成状态当作本轮已完成状态。
 >
 > **Tracking mode**: `LOCAL_ONLY`（尚未创建 GitHub Issue、Milestone 或 PR）

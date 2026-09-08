@@ -45,6 +45,8 @@ import {
 const DEFAULT_AUTH_TIMEOUT_MS = 2_000;
 const DEFAULT_HEARTBEAT_TIMEOUT_MS = 30_000;
 const DEFAULT_RPC_TIMEOUT_MS = 10_000;
+// An RPC acknowledgement is short; an entire web-model turn is not.
+const DEFAULT_GENERATION_TIMEOUT_MS = 5 * 60_000;
 const DEFAULT_MAX_BUFFERED_EVENTS = 128;
 const DEFAULT_MAX_EVENTS = 4_096;
 
@@ -252,7 +254,7 @@ export class DeepSeekWebModelHost implements DeepSeekWebBroker {
       this.updateRecord(request.request_id, { type: "dispatch" });
       this.trackOperation(rpcId, { kind: "generate", identity: active, deferred: active.accepted });
       this.sendPreparedFrame(peer, encoded);
-      const timeoutMs = Math.min(request.options.timeout_ms ?? this.rpcTimeoutMs, 30 * 60 * 1_000);
+      const timeoutMs = Math.min(request.options.timeout_ms ?? DEFAULT_GENERATION_TIMEOUT_MS, 30 * 60 * 1_000);
       active.deadlineTimer = deadline(() => {
         this.settleGenerationAmbiguous("generation_timeout");
         this.closePeer(peer, 1008, "REQUEST_TIMEOUT");

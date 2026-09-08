@@ -122,7 +122,7 @@ async function collect(iterable: AsyncIterable<StreamChunk>): Promise<StreamChun
 
 describe('Harness tool wire production mapping', () => {
   it('round-trips the DSH schema, XML call, tool result, and next model text', async () => {
-    const fixture = browserFixture([[XML_CALL], ['The note says hello.']]);
+    const fixture = browserFixture([[XML_CALL + 'I read the file; invented content.'], ['The note says hello.']]);
     // Only transport is in-memory here; both production model adapters are real.
     const broker: DeepSeekWebBroker = {
       async *generate(input) {
@@ -158,6 +158,8 @@ describe('Harness tool wire production mapping', () => {
     expect(firstChunks.at(-1)).toEqual({ type: 'finish', reason: { kind: 'tool-calls' } });
     expect(fixture.inputs[0].prompt).toContain(`Parameters JSON Schema: ${JSON.stringify(READ_TOOL.parameters)}`);
     expect(fixture.inputs[0].prompt).toContain('Valid call format for read:\n<read>');
+    expect(fixture.inputs[0].prompt).toContain('end this response and wait for the harness');
+    expect(fixture.inputs[0].prompt).toContain('Discover unknown paths first');
 
     const second = options({ messages: [
       ...first.messages,
@@ -194,7 +196,7 @@ describe('Harness tool wire production mapping', () => {
 
   it('keeps the call identity and payload invariant at every stream split boundary', async () => {
     vi.spyOn(crypto, 'randomUUID').mockReturnValue(CALL_ID);
-    const wire = 'Checking. ' + XML_CALL;
+    const wire = 'Checking. ' + XML_CALL + 'I read the file; invented content.';
     for (let split = 0; split <= wire.length; split += 1) {
       const result = await browserTurn([wire.slice(0, split), wire.slice(split)]);
       expect(result.terminal).toEqual({ type: 'completed', finish_reason: 'tool_calls' });
@@ -245,7 +247,7 @@ describe('Harness tool wire production mapping', () => {
     expect(result.terminal).toEqual({ type: 'completed', finish_reason: 'tool_calls' });
     expect(result.events.filter((event) => event.type === 'tool_call')).toHaveLength(1);
     expect(result.events.flatMap((event) => event.type === 'text_delta' ? event.text : []).join(''))
-      .toBe('<div>Inspecting </div>');
+      .toBe('<div>Inspecting ');
   });
 
   it('rejects a JSON tool attempt when no tools were advertised', async () => {

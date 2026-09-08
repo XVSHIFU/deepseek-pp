@@ -342,6 +342,38 @@ describe("DSH web model loopback host", () => {
     await expect(waitForClose(browser)).resolves.toMatchObject({ code: 1008, reason: "REQUEST_TIMEOUT" });
   });
 
+  it("does not apply the acknowledgement deadline to an accepted generation without an explicit timeout", async () => {
+    const { host, address } = await startHost();
+    const browser = await connectAndAuthenticate(address);
+    const input = generateInput();
+    const { timeout_ms: _timeout, ...options } = input.options;
+    const iterator = host.generate({ ...input, options })[Symbol.asyncIterator]();
+    const first = iterator.next();
+    const request = await nextFrame(browser);
+    sendAccepted(browser, request);
+    sendEvent(browser, 1, { type: "text_delta", text: "still thinking" });
+    await expect(first).resolves.toMatchObject({ value: { type: "text_delta" } });
+    // Real loopback regression for the reported ~10-second cutoff; no timer mocks.
+    await new Promise((resolve) => setTimeout(resolve, 10_100));
+    expect(host.hasAuthenticatedPeer).toBe(true);
+    sendEvent(browser, 2, { type: "completed", finish_reason: "stop" });
+    await expect(iterator.next()).resolves.toMatchObject({ value: { type: "completed" } });
+    await expect(iterator.next()).resolves.toMatchObject({ done: true });
+  }, 15_000);
+
+  it("still enforces an explicit generation timeout after acceptance without replay", async () => {
+    const { host, address } = await startHost();
+    const browser = await connectAndAuthenticate(address);
+    const input = generateInput();
+    const result = collect(host.generate({ ...input, options: { ...input.options, timeout_ms: 100 } }));
+    const request = await nextFrame(browser);
+    sendAccepted(browser, request);
+    const closed = waitForClose(browser);
+    await expect(result).resolves.toEqual([{ type: "ambiguous", reason: "generation_timeout" }]);
+    await expect(closed).resolves.toMatchObject({ code: 1008, reason: "REQUEST_TIMEOUT" });
+    expect(host.hasAuthenticatedPeer).toBe(false);
+  });
+
   it("keeps an observable ambiguous terminal when the consumer buffer is full", async () => {
     const { host, address } = await startHost({ maxBufferedEvents: 1 });
     const browser = await connectAndAuthenticate(address);

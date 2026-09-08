@@ -29,7 +29,7 @@ Harness 插件和浏览器扩展各有分工：Harness 负责本地任务与工�
 
 ### 1. 准备环境
 
-需要 **Node.js 24.x、DeepSeek Harness `0.1.2-rc.1`**，以及 Chrome、Edge 或 Firefox。Harness 和登录 DeepSeek 的浏览器须在同一台电脑运行。
+需要 **Node.js 24.x、pnpm `11.7.0`、DeepSeek Harness `0.1.2-rc.1`**，以及 Chrome、Edge 或 Firefox。Harness 和登录 DeepSeek 的浏览器须在同一台电脑运行。pnpm 用于安装 Harness 插件，下面的命令会一并安装。
 
 以下命令安装本机运行环境；已有的软件可跳过。源码构建还需要 Git。
 
@@ -42,9 +42,10 @@ winget install --id OpenJS.NodeJS.LTS --version 24.19.0 --exact --source winget
 winget install --id Microsoft.PowerShell --exact --source winget
 ```
 
-安装后重新打开 **PowerShell 7**，安装本机 Harness：
+安装后重新打开 **PowerShell 7**，安装 pnpm 和本机 Harness：
 
 ```powershell
+npm install --global pnpm@11.7.0
 npm install --global @deepseek-ai/dsh@0.1.2-rc.1
 ```
 
@@ -69,6 +70,7 @@ export NVM_DIR="$HOME/.nvm"
 . "$NVM_DIR/nvm.sh"
 nvm install 24
 nvm use 24
+npm install --global pnpm@11.7.0
 npm install --global @deepseek-ai/dsh@0.1.2-rc.1
 ```
 
@@ -245,6 +247,8 @@ dsh web
 - 此连接用于文字对话和本机工具任务，不提供图片上传或识图入口。
 
 ## 执行命令
+
+**在 Harness 中执行命令，不需要开启浏览器扩展的 MCP → Shell Local。** Windows 命令需开启下面的 Harness 插件开关，工作区“完全权限”不能代替该开关。WSL 中运行 Harness 时，命令在 Ubuntu 中执行，浏览器可使用 Windows 上已配对的 Chrome / Edge。
 
 ### Windows：PowerShell 7
 
