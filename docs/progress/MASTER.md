@@ -1,5 +1,14 @@
 # Web Model Broker × Local DSH — Active Progress
 
+## 2026-09-08 GitHub 开发恢复验证完成
+
+- 用户授权将 Harness 补丁源码公开保存到 `XVSHIFU/deepseek-harness` 的 `codex/web-request-budget` 分支。已从回收站仓库独立克隆恢复并推送原提交 `34d57aed2e386af0b61874390c86fc5915c51b1a`，随后直接从 GitHub 新克隆验证 HEAD 和补丁源文件可获取；`master` 仍为 `76fda729799fe9b3848dbe2c211d4b231032b81e`，未创建 PR。
+- 主项目实现提交 `919f80e3c1db111d149262ad40f11cb9f1ee7686`：新增 `docs/development/recovery.md`、`npm run package:web-harness` 和打包入口测试；修正 CONTRIBUTING 的工作分支以及 vendor 源码说明。命令复用现有浏览器构建、插件打包和组件校验器，从当前源码生成三浏览器整包，带全部 README 图片、许可和 SHA-256，不依赖历史 `.release` / `.tmp`。根 README 和运行时代码未改。
+- **Windows 全新克隆验证：** 从 GitHub 克隆上述主项目提交，使用独立空 npm 缓存执行 `npm ci --cache ../npm-cache --no-audit --no-fund`，安装 1,020 个包成功；未链接或复制旧 `node_modules`。Node `24.18.0` / npm `12.0.2`。打包入口、官方组件包、请求预算、上下文预算四个测试文件 **46/46** 通过；根 compile、prompt freeze **7/7**、插件重建、Chrome/Edge/Firefox 重建均通过；构建后工作树干净。
+- 执行 `npm run package:web-harness -- --output ../build-from-github --name deepseek-web-harness-recovery-check` 成功。33 个文件的 ZIP 内容逐一回读校验通过，整包 SHA-256 为 `15f536fd45965fd0eec18fd66d6c1a63d50a49a9a070dd89a74fb6ad1eff78f2`。产物位于本地独立恢复验证目录，不作为新 Release 上传；以后可用同一命令重新生成，不保证 ZIP 时间戳导致的逐字节复现。
+- 验证边界：本次是源码恢复与构建验证，没有重跑真实网页、Linux 主机运行或完整 `ci:quality`，没有扩大既有验收结论。npm 12 提示若干依赖安装脚本按其策略被阻止，以上安装/测试/构建仍全部通过；不将其视为原生命令运行测试。Pyodide 构建 externalization 提示保持原样。
+- 旧项目两个仅本地的归档分支另存为原目录之外的 `legacy-local-agent.bundle`，已通过 `git bundle verify`，不是当前构建依赖。历史原始测试资料/本地备份不会随 GitHub 克隆恢复。当前 r2 正式 ZIP SHA-256 复核仍为 `d3a8672de95473bc396e1c60511dde6c835229d686ba1f27c327ad20edb54954`；未改动正式 Release、标签、默认分支或任一上游基线。
+
 ## 2026-09-08 r2 正式发布完成
 
 - 按用户最终授权，保留当前 README 原文和新增 12 张截图，推送至 `XVSHIFU/deepseek-pp` / `feature/web-harness`。正式标签 `web-harness-20260908-r2` 指向 `41d25b51600502c0018ec248087ddf5c3b1e7edd`；正式 Release 于 `2026-09-08T07:58:14Z` 发布，`draft=false`、`prerelease=false`，设为 Latest。默认分支仍是 `feature/web-harness`，main 未改。
