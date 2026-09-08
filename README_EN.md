@@ -60,11 +60,21 @@ Then [pair them in the settings UI](README.md#首次配对只做一次). The ext
 
 For Chrome / Edge, extract the companion archive first, then extract the browser ZIP inside `extensions/chrome/` or `extensions/edge/`. In the browser's **Load unpacked** dialog, choose the extracted browser folder containing `manifest.json` alongside `_locales/` and `assets/`. Do not choose the companion archive's top-level folder: its `manifest.json` is a package inventory, not a browser extension manifest. Enable only **DeepSeek++ Harness**, not both it and the original extension.
 
+![Extract both archives and load only the inner browser extension folder](docs/images/guide/extension-folder.svg)
+
 For Firefox, extract the Firefox ZIP, open `about:debugging#/runtime/this-firefox`, and select **Load Temporary Add-on** with the extension's `manifest.json`. Pair using its full `moz-extension://…` address. Temporary loading ends when the browser exits; update the pairing if the address changes after reloading. Keep the extension folder, then open the DeepSeek website, sign in, and refresh the page.
 
 **WSL Ubuntu with a Windows browser:** install Node.js, pnpm, Harness, and the DSH plugin inside Ubuntu using the Linux instructions, and run `dsh web` there. Load the browser extension in Windows Chrome / Edge and use that browser's extension ID for pairing. You can extract another copy of the archive on Windows solely for the extension, or run `explorer.exe .` in Ubuntu to open its current folder and copy the extracted extension to a permanent Windows directory. Project files and commands remain in Ubuntu. Shell Local is not required.
 
 In Harness, expand **Settings → Plugins → DeepSeek Web model**. Enter the extension ID under **Connection**, select **Set DeepSeek Web as the default for future new sessions**, then **Save settings**. Reopen the card, select **Generate pairing token → Copy** under **Pairing**, and paste it into the browser extension's **Settings → Local Harness** with port `43123`. Save there and check that the connection is established. Existing pairing does not need to be regenerated.
+
+The screenshots below use the Chinese interface; the controls are in the same positions in English. Use your own extension ID, not the example shown.
+
+![Harness plugin connection settings and extension ID field](docs/images/guide/harness-connection.jpg)
+
+In the extension, paste the token into the masked field and click **Save** at the bottom right. This location example shows **Waiting to retry** before connection; successful pairing should show **Connected**.
+
+![Browser extension bridge switch, port, masked pairing token and Save button](docs/images/guide/extension-pairing.png)
 
 ## Daily use
 
@@ -85,6 +95,10 @@ Under **Settings → Plugins → DeepSeek Web model → Web model**, select **De
 For an existing session, use the Harness model selector: **DeepSeek Web (Default)** or **DeepSeek Web (Expert)**, with **Thinking off / Thinking on**. Change selections between replies; they apply to subsequent turns without changing other sessions. No manual mode change on the DeepSeek website is needed.
 
 Thinking appears in a collapsible live panel. It is not stored in session history or restored after a page reload; final answers and tool results are retained. This connection supports text and local tools, not image uploads or vision.
+
+Mode, thinking, and the default-provider switch are independent. Enable the last switch and save if you want new sessions to use the web model automatically.
+
+![Model mode, thinking toggle and default-provider setting in Harness](docs/images/guide/harness-model.jpg)
 
 ## Upgrade
 
@@ -113,6 +127,10 @@ After the command succeeds, back up the currently loaded extension folder and co
 Harness commands do not require the browser extension's MCP → Shell Local. On Windows, enable the Harness plugin's Windows command switch; full workspace access does not enable it. When Harness runs in WSL, commands run in Ubuntu, while the paired browser can run on Windows.
 
 Windows native commands are disabled by default. Enable them in the DeepSeek Web settings, keep **Ask for every command**, and create a new session. Approved commands run with the current Windows-user permissions, not a workspace sandbox.
+
+This screenshot shows Windows commands enabled with per-command approval. The pairing section below already has a saved token; it does not need to be regenerated.
+
+![Windows PowerShell command switch, approval policy, executable field and saved pairing status](docs/images/guide/harness-permissions-pairing.jpg)
 
 Linux retains the official `workspace-write + ask` behavior: ordinary commands run in a file sandbox, with approval requested when broader file access is needed. A file sandbox is not network isolation.
 

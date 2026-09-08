@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="470" viewBox="0 0 880 470" role="img" aria-labelledby="title desc">
+  <title id="title">浏览器扩展加载目录示意 / Browser extension folder guide</title>
+  <desc id="desc">解压完整安装包，再解压 extensions/chrome 中的 ZIP。加载包含 manifest.json、_locales 和 assets 的内层扩展文件夹，不加载安装包根目录。</desc>
+  <rect width="880" height="470" rx="18" fill="#f5f7fb"/>
+  <g font-family="Segoe UI,Microsoft YaHei,sans-serif" fill="#182230">
+    <text x="28" y="42" font-size="22" font-weight="700">先解压整包，再解压浏览器 ZIP</text>
+    <text x="28" y="69" font-size="14" fill="#526477">Folder guide · Extract the main archive, then the browser ZIP</text>
+    <rect x="26" y="91" width="828" height="110" rx="12" fill="#fff" stroke="#dbe2eb"/>
+    <circle cx="52" cy="120" r="14" fill="#435bea"/><text x="48" y="125" font-size="14" fill="#fff">1</text>
+    <text x="77" y="124" font-size="17" font-weight="600">deepseek-web-harness-20260908-r2/</text>
+    <text x="49" y="153" font-size="14">README.md　　plugin/　　vendor/　　manifest.json</text>
+    <text x="49" y="182" font-size="14" fill="#a74426">这是安装包目录，不要加载这一层 / Do not load this folder</text>
+    <path d="M69 204v21h20" fill="none" stroke="#91a1b7" stroke-width="2"/>
+    <rect x="104" y="213" width="750" height="65" rx="12" fill="#fff" stroke="#dbe2eb"/>
+    <circle cx="129" cy="244" r="14" fill="#435bea"/><text x="125" y="249" font-size="14" fill="#fff">2</text>
+    <text x="154" y="239" font-size="16">extensions/chrome/deepseek-plus-plus-1.14.0-chrome.zip</text>
+    <text x="154" y="262" font-size="14" fill="#526477">将这个 ZIP 再解压一次 / Extract this ZIP too</text>
+    <path d="M142 280v25h20" fill="none" stroke="#91a1b7" stroke-width="2"/>
+    <rect x="181" y="292" width="673" height="145" rx="12" fill="#eaf6ef" stroke="#7cba94" stroke-width="2"/>
+    <circle cx="207" cy="322" r="14" fill="#237445"/><text x="203" y="327" font-size="14" fill="#fff">3</text>
+    <text x="232" y="326" font-size="18" font-weight="700">选择解压后的扩展文件夹 / Load this folder</text>
+    <text x="207" y="358" font-size="15">manifest.json　　_locales/　　assets/　　background.js</text>
+    <text x="207" y="390" font-size="14">chrome://extensions → 开发者模式 → 加载已解压的扩展程序</text>
+    <text x="207" y="416" font-size="13" fill="#326046">Developer mode → Load unpacked · Edge 使用 extensions/edge/</text>
+  </g>
+</svg>

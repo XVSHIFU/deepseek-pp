@@ -178,22 +178,9 @@ dsh plugin --profile web add ./vendor/harness-request-budget/*.tgz ./.release/ma
 6. 点击“加载已解压的扩展程序”，选择**第 4 步找到的文件夹**，不是 `manifest.json` 文件本身。
 7. 记下扩展卡片上的 **ID**，并确保只启用一份 DeepSeek++。本扩展名称为 **DeepSeek++ Harness**，不要与原版 DeepSeek++ 混用。
 
-目录对应关系：
+目录示意：只加载最内层的扩展文件夹。
 
-```text
-deepseek-web-harness-20260908-r2/        ← 安装包目录，不要加载这一层
-├─ README.md                           ← 从这里阅读安装步骤
-├─ manifest.json                       ← 安装包清单，不是浏览器扩展清单
-├─ plugin/                             ← 本机 Harness 插件
-├─ vendor/                             ← 配套依赖
-└─ extensions/
-   └─ chrome/
-      ├─ deepseek-plus-plus-1.14.0-chrome.zip
-      └─ 解压出的扩展文件夹/             ← 加载这一层
-         ├─ manifest.json
-         ├─ _locales/
-         └─ assets/
-```
+![两次解压后，选择包含扩展 manifest.json、_locales 和 assets 的文件夹](docs/images/guide/extension-folder.svg)
 
 选对后，浏览器会显示扩展卡片。请长期保留这个扩展文件夹，浏览器从这里加载文件。源码构建直接选择 `dist/chrome-mv3` 或 `dist/edge-mv3`，无需再解压。
 
@@ -226,6 +213,14 @@ deepseek-web-harness-20260908-r2/        ← 安装包目录，不要加载这�
 
 配对令牌只在生成时显示，请妥善保管。扩展 ID 和令牌会保存，不需要每天重新填写。
 
+**Harness 这一侧：** 先展开“DeepSeek 网页模型”，填写你自己浏览器中的扩展 ID。图中的 ID 仅用于示意，不要照抄。
+
+![Harness 的设置、插件入口与网页模型连接配置](docs/images/guide/harness-connection.jpg)
+
+**浏览器扩展这一侧：** 在“设置 → 本机 Harness”粘贴令牌，点击右下角“保存”。下图用于标示填写位置，显示的是尚未连通时的“等待重试”；完成配置后应为“已连接”。
+
+![浏览器扩展中的桥接开关、端口、隐藏的配对令牌和保存按钮](docs/images/guide/extension-pairing.png)
+
 如果 Harness 使用英文，卡片名为 **DeepSeek Web model**，对应按钮为 **Save settings / Generate pairing token / Copy**。设置语言跟随 Harness，无需单独配置。
 
 ## 日常使用
@@ -252,6 +247,10 @@ dsh web
 
 **调整当前会话：** 使用 Harness 会话内的模型选择器，选择 **DeepSeek Web (Default)** 或 **DeepSeek Web (Expert)**；思考选项为 **Thinking off / Thinking on**。等待当前回复结束后再调整，选择作用于后续回合，不改变其他会话。
 
+下图中的模式、思考开关与“以后新会话的默认模型”是三个独立设置；需要默认使用网页模型时，开启第三项后保存。
+
+![Harness 网页模型的默认或专家模式、思考开关与新会话默认模型设置](docs/images/guide/harness-model.jpg)
+
 - 默认模式与专家模式都可以独立开启或关闭思考，并非“专家模式就是开启思考”。
 - 开启思考后，可展开会话中的“思考中…”或“已思考”区域；思考内容仅临时展示，刷新页面后不从历史恢复，最终回答和工具结果照常保留。
 - 以 Harness 中的选择为准，不需要到 DeepSeek 网页上手动切换模式。
@@ -266,6 +265,10 @@ dsh web
 展开 **设置 → 插件 → DeepSeek 网页模型 → Windows PowerShell 7**，开启 **为新会话启用原生 Windows 命令**，批准方式选择 **每条命令都询问**。可执行文件填写 `pwsh`，或 PowerShell 7 的完整路径；保存设置后，**再新建会话**。
 
 例如发送“执行 `Get-Location`，告诉我当前目录”，检查网页中的命令批准请求后选择“允许一次”。
+
+图中已开启 Windows 命令，并选择“每条命令都询问”。下方“配对”显示已保存令牌时，无需再次生成。
+
+![Windows PowerShell 7 开关、命令批准方式、可执行文件位置与配对状态](docs/images/guide/harness-permissions-pairing.jpg)
 
 命令以运行 Harness 的当前 Windows 用户权限执行，不局限于项目目录。原生命令默认关闭，自动批准需要单独开启。
 
