@@ -12,6 +12,8 @@
 
 下载附件 **`deepseek-web-harness-20260908.zip`**，解压后从里面的 **README.md** 开始。整包已包含 Chrome、Edge、Firefox 扩展和 Harness 插件，无需另装扩展补丁。请勿选择 GitHub 自动生成的 Source code。
 
+整包 SHA-256：`455b593b4f89342afe48b0cdada03ce0c1924162a3486e74e1838e63e4011378`。附件同时提供 `.zip.sha256` 校验文件。
+
 运行环境：Node.js 24.x、DeepSeek Harness `0.1.2-rc.1`、同机桌面浏览器。Windows 命令需要 PowerShell 7；Linux 命令需要可用的 Bubblewrap 或 Landlock 后端。Firefox 使用临时加载方式。
 
 已安装用户查看 README 的“升级”。保持 Chrome/Edge 原扩展目录并重新加载，可以沿用扩展 ID 和配对；刷新已登录的 DeepSeek 网页即可继续连接。

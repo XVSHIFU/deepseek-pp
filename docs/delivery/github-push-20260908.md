@@ -84,3 +84,11 @@ README 下载说明指向新附件名；正式对外时需要同时准备对应 
 - 已有四种网页模式/read/追问/editor/PowerShell 单次审批证据通过；最后两项浏览器纠正修补有 120/120 回归、compile、prompt freeze 7/7、三端构建和 fake-browser 实际官方 read 联调，不冒称重新完成真实网页矩阵或 Linux 新机实测。
 - 本轮只调整文档和分发组织，不重建相同二进制；检查 README 命令语法、所有选取文件 SHA-256、最终 ZIP 条目与来源内容。运行时门禁沿用上述对应提交记录。
 - 当前未宣称全仓 `ci:quality` 或稳定发行通过，既有完整门禁记录见 MASTER。
+
+## 最终附件校验
+
+- 完整包 `.release/deepseek-web-harness-20260908.zip`：`455b593b4f89342afe48b0cdada03ce0c1924162a3486e74e1838e63e4011378`。
+- ZIP 中 13 个文件逐项与本地目录 SHA-256 一致；11 个 payload 文件均列入 manifest，另有 manifest 与 SHA256SUMS。
+- 三份浏览器 ZIP 与 `2f4f289` 更新清单一致，Harness 插件和三份 vendor TGZ 与 `d8e3c80` 原候选清单一致。
+- 双语 README 共 7 段 PowerShell 和 7 段 Bash 示例语法检查通过，未执行安装命令；检查不替代 Windows/Linux 新机验收。
+- README 来源提交 `ca831d94d7138605487980afef82972ed0a4b436`；本轮附加校验记录不改变整包内容。后续推送包括原 17 个本地提交和本轮两个文档提交，共 19 个提交、49 个差异文件。
