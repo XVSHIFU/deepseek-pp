@@ -25,6 +25,8 @@ The browser extension supplies the web model connection; Harness owns local tool
 
 Requirements: Node.js 24.x, pnpm `11.7.0`, DeepSeek Harness `0.1.2-rc.1`, and Chrome, Edge, or Firefox on the same computer. pnpm installs the Harness plugins. Windows commands use PowerShell 7. Linux commands require Bash and a working Bubblewrap or Landlock backend.
 
+Use this Harness version together with the bundled dependencies: the plugin's model, tool, and settings integrations are paired with these interfaces.
+
 Install pnpm and the official Harness locally:
 
 ```sh
@@ -34,7 +36,7 @@ npm install --global @deepseek-ai/dsh@0.1.2-rc.1
 
 Follow the [Windows / Linux installation instructions](README.md#首次安装) to install prerequisites, load the browser extension, and install the DSH plugin with its companion dependencies. Browser extension builds and Harness plugin builds are separate steps; when using a matching prebuilt package, source compilation is unnecessary.
 
-In the Assets section of [GitHub Releases](https://github.com/XVSHIFU/deepseek-pp/releases), choose the complete installation archive **`deepseek-web-harness-20260908.zip`**, or use that archive if you already have it. No separate extension patch is needed. Do not choose the generated Source code archives. Extract it and enter `deepseek-web-harness-20260908`, containing `README.md`, `extensions`, `plugin`, and `vendor`. Run package installation and upgrade commands from that directory.
+In the Assets section of [GitHub Releases](https://github.com/XVSHIFU/deepseek-pp/releases), choose the complete installation archive **`deepseek-web-harness-20260908-r2.zip`**, or use that archive if you already have it. No separate extension patch is needed. Do not choose the generated Source code archives. Extract it and enter `deepseek-web-harness-20260908-r2`, containing `README.md`, `extensions`, `plugin`, and `vendor`. Run package installation and upgrade commands from that directory.
 
 Install the Harness plugin and companion dependencies:
 
@@ -58,6 +60,10 @@ Then [pair them in the settings UI](README.md#首次配对只做一次). The ext
 
 For Chrome / Edge, extract the companion archive first, then extract the browser ZIP inside `extensions/chrome/` or `extensions/edge/`. In the browser's **Load unpacked** dialog, choose the extracted browser folder containing `manifest.json` alongside `_locales/` and `assets/`. Do not choose the companion archive's top-level folder: its `manifest.json` is a package inventory, not a browser extension manifest. Enable only **DeepSeek++ Harness**, not both it and the original extension.
 
+For Firefox, extract the Firefox ZIP, open `about:debugging#/runtime/this-firefox`, and select **Load Temporary Add-on** with the extension's `manifest.json`. Pair using its full `moz-extension://…` address. Temporary loading ends when the browser exits; update the pairing if the address changes after reloading. Keep the extension folder, then open the DeepSeek website, sign in, and refresh the page.
+
+**WSL Ubuntu with a Windows browser:** install Node.js, pnpm, Harness, and the DSH plugin inside Ubuntu using the Linux instructions, and run `dsh web` there. Load the browser extension in Windows Chrome / Edge and use that browser's extension ID for pairing. You can extract another copy of the archive on Windows solely for the extension, or run `explorer.exe .` in Ubuntu to open its current folder and copy the extracted extension to a permanent Windows directory. Project files and commands remain in Ubuntu. Shell Local is not required.
+
 In Harness, expand **Settings → Plugins → DeepSeek Web model**. Enter the extension ID under **Connection**, select **Set DeepSeek Web as the default for future new sessions**, then **Save settings**. Reopen the card, select **Generate pairing token → Copy** under **Pairing**, and paste it into the browser extension's **Settings → Local Harness** with port `43123`. Save there and check that the connection is established. Existing pairing does not need to be regenerated.
 
 ## Daily use
@@ -68,7 +74,9 @@ Keep the signed-in DeepSeek page open. From your project directory, run:
 dsh web
 ```
 
-Create or continue a conversation in the Harness web interface. Stop the service with `Ctrl+C` in its terminal.
+Select your project workspace in the Harness sidebar; use **Add workspace** if it is not listed. Create or continue a conversation, and check that the model selector shows **DeepSeek Web (Default)** or **DeepSeek Web (Expert)**. Stop the service with `Ctrl+C` in its terminal.
+
+If prompted to sign in, refresh the signed-in DeepSeek page before sending the task again. If disconnected, check that `dsh web` is still running and save the connection settings in the extension's Local Harness panel. Reinstallation is unnecessary for these cases.
 
 ## Model mode and thinking
 

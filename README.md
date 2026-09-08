@@ -31,6 +31,8 @@ Harness 插件和浏览器扩展各有分工：Harness 负责本地任务与工�
 
 需要 **Node.js 24.x、pnpm `11.7.0`、DeepSeek Harness `0.1.2-rc.1`**，以及 Chrome、Edge 或 Firefox。Harness 和登录 DeepSeek 的浏览器须在同一台电脑运行。pnpm 用于安装 Harness 插件，下面的命令会一并安装。
 
+请使用上述 Harness 版本及安装包内的配套依赖，它们与插件的模型、工具和设置接口配套。
+
 以下命令安装本机运行环境；已有的软件可跳过。源码构建还需要 Git。
 
 **Windows**
@@ -80,9 +82,9 @@ npm install --global @deepseek-ai/dsh@0.1.2-rc.1
 
 这两项是不同的软件：**浏览器扩展安装到浏览器，DSH 插件安装到本机 Harness。**
 
-从 [GitHub Releases](https://github.com/XVSHIFU/deepseek-pp/releases) 的附件（Assets）中选择 **完整安装包 `deepseek-web-harness-20260908.zip`**，不需要另找扩展补丁。已经拿到这份整包时，直接解压使用，不必再次下载。不要选择 GitHub 自动生成的 **Source code**。
+从 [GitHub Releases](https://github.com/XVSHIFU/deepseek-pp/releases) 的附件（Assets）中选择 **完整安装包 `deepseek-web-harness-20260908-r2.zip`**，不需要另找扩展补丁。已经拿到这份整包时，直接解压使用，不必再次下载。不要选择 GitHub 自动生成的 **Source code**。
 
-解压整包后，进入 **`deepseek-web-harness-20260908`** 文件夹，里面同时有 **`README.md`、`extensions`、`plugin`、`vendor`**。以下称这一层为“安装包目录”，安装和升级命令都在这一层执行。
+解压整包后，进入 **`deepseek-web-harness-20260908-r2`** 文件夹，里面同时有 **`README.md`、`extensions`、`plugin`、`vendor`**。以下称这一层为“安装包目录”，安装和升级命令都在这一层执行。
 
 使用配套安装包时，解压到准备长期保留的目录。浏览器 ZIP 位于 `extensions/`，DSH 插件位于 `plugin/`，配套依赖位于 `vendor/`；无需执行下面的源码构建。
 
@@ -179,7 +181,7 @@ dsh plugin --profile web add ./vendor/harness-request-budget/*.tgz ./.release/ma
 目录对应关系：
 
 ```text
-deepseek-web-harness-20260908/           ← 安装包目录，不要加载这一层
+deepseek-web-harness-20260908-r2/        ← 安装包目录，不要加载这一层
 ├─ README.md                           ← 从这里阅读安装步骤
 ├─ manifest.json                       ← 安装包清单，不是浏览器扩展清单
 ├─ plugin/                             ← 本机 Harness 插件
@@ -198,6 +200,13 @@ deepseek-web-harness-20260908/           ← 安装包目录，不要加载这�
 **Firefox：** 解压 Firefox ZIP，打开 `about:debugging#/runtime/this-firefox`，选择“临时载入附加组件”，打开扩展目录中的 `manifest.json`。配对时使用该扩展的 `moz-extension://…` 地址。临时加载在浏览器退出后失效；重载后的地址如有变化，需更新配对设置。
 
 安装完成后，打开 [DeepSeek 网页](https://chat.deepseek.com)，登录并刷新页面。
+
+**如果使用 WSL Ubuntu + Windows 浏览器：**
+
+- Node.js、pnpm、Harness 和 DSH 插件按 Linux 步骤装在 Ubuntu 中，`dsh web` 也在 Ubuntu 中运行。
+- 浏览器扩展装在 Windows 的 Chrome / Edge 中。最简单的方式是在 Windows 也解压一份整包，只取其中的浏览器扩展；这不会重复安装 Harness。
+- 要从 Windows 查看 Ubuntu 的安装包目录，可在该 Ubuntu 目录执行 `explorer.exe .`。建议把解压后的扩展文件夹复制到 Windows 的固定目录再加载。
+- 配对填写 **Windows 浏览器**中的扩展 ID；项目文件和命令由 Ubuntu 中的 Harness 处理，不需要安装 Shell Local。
 
 ## 首次配对（只做一次）
 
@@ -227,13 +236,15 @@ deepseek-web-harness-20260908/           ← 安装包目录，不要加载这�
 dsh web
 ```
 
-启动时所在的目录是默认工作区。在 Harness 网页中新建会话或继续历史会话，例如：
+在 Harness 左侧选择要处理的工作区；尚未出现时，点击“添加工作区”选择项目目录。新建会话后，确认模型选择器显示 **DeepSeek Web (Default)** 或 **DeepSeek Web (Expert)**，即可发送任务，例如：
 
 - “读取 README.md，用中文说明这个项目是做什么的。”
 - “阅读这个模块，解释各个文件的作用。”
 - “修改 README 的项目说明，并告诉我改了什么。”
 
 用完在终端按 `Ctrl+C` 停止服务，下次仍用 `dsh web` 打开。浏览器和 DeepSeek 网页需要保持可用，才能继续使用网页模型。
+
+提示需要登录时，刷新已登录的 DeepSeek 页面后再发送任务；显示未连接时，先确认 `dsh web` 仍在运行，再到扩展的“本机 Harness”中保存连接设置。不必因此卸载或重新安装。
 
 ## 模式与深度思考
 
