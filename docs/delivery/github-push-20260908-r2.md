@@ -1,6 +1,8 @@
 # 2026-09-08 r2 推送准备
 
-状态：用户已授权推送和正式发布，并要求删除此前预发布。目标为 `XVSHIFU/deepseek-pp` 的 `feature/web-harness`；不改 main，不 force push，不向上游提 PR。以用户最终编辑的 README 和新增图片为准。
+状态：**2026-09-08 已推送并正式发布。** 仓库为 `XVSHIFU/deepseek-pp`，分支与默认展示分支均为 `feature/web-harness`；未改 main、未 force push、未向上游提 PR。用户最终 README 与 12 张新增图片原样纳入提交 `41d25b51600502c0018ec248087ddf5c3b1e7edd`。
+
+正式发布：[web-harness-20260908-r2](https://github.com/XVSHIFU/deepseek-pp/releases/tag/web-harness-20260908-r2)，发布时间 `2026-09-08T07:58:14Z`，`draft=false`、`prerelease=false`，已设为 Latest。旧的两个预发布 Release 及其附件已按用户要求删除；旧 Git 标签、本地安装包保留，可重新上传恢复附件，但旧下载链接不再可用。
 
 ## 本次内容
 
@@ -70,12 +72,12 @@ tests/streaming-tool-text.test.ts
 
 ## 最终本地附件
 
-- 用户最终新增 12 张 `assets/` 截图已逐张查看，README 原样保留；中文共 17 个图片引用、英文 5 个，全部图片纳入最终整包。以下为加入用户截图前的图文包记录，最终发布校验值在发布完成记录中更新。
+- 用户最终新增 12 张 `assets/` 截图已逐张查看，README 原样保留；中文共 17 个图片引用、英文 5 个，全部图片纳入最终整包。以下为最终正式发布附件的校验记录。
 - **本轮图文补齐：** 中英文 README 均引用 `docs/images/guide/` 下相同的五张图：三张当前 Harness 实拍、一张用户提供的浏览器扩展设置截图、一张明确标注的安装目录 SVG 示意图。仅截取设置区域，排除地址栏和聊天记录；扩展输入框中的令牌已被界面隐藏，没有读取或生成令牌。扩展示例的“等待重试”如实保留并解释，未改图伪造已连接。没有为截图修改用户的模型、权限或配对配置。
-- 无图版本的文件夹、ZIP 和外部校验文件已移至 `.release/.backups/r2-before-images-864f923/`，可以恢复。以下为待发布的图文版校验值。
-- 完整 ZIP：27,330,185 字节，SHA-256 `1f4678621391727201c74448e90aa91e0869b3ed79e3eb72b6b7086194568224`。
-- Manifest SHA-256：`e02b86b618a6f9556647b6499990a22e59f12366faa0ba5649a94c4ae08e6549`。
-- README 与五张配图来源提交：`542967215f71ac88dff1c42cebc9987e046bfa9b`；本记录的补充不改变附件。
-- 16 个 payload 文件均列入 manifest，加上 manifest 与 SHA256SUMS 共 18 个文件；ZIP 解压内容与目录逐文件散列一致，内部校验清单全部通过。中英文各 5 个图片引用均能在包内解析，4 张截图解码和 SVG XML 校验通过。
+- 无图版本保存在 `.release/.backups/r2-before-images-864f923/`，未加入用户截图的图文版本保存在 `.release/.backups/r2-before-user-images-c7df73b/`；均可恢复。
+- 完整 ZIP：28,349,627 字节，SHA-256 `d3a8672de95473bc396e1c60511dde6c835229d686ba1f27c327ad20edb54954`。GitHub 附件状态为 `uploaded`，其 digest 与本地一致；正式发布后下载公开 `.zip.sha256` 文件，内容一致。
+- Manifest SHA-256：`e02d609d6e1c296fee0ff06e7f3335620bd5766f8bb6b5b813496244516074b3`。
+- README 与全部配图来源提交：`41d25b51600502c0018ec248087ddf5c3b1e7edd`；也是正式标签的目标提交，本发布记录的补充不改变附件。
+- 28 个 payload 文件均列入 manifest，加上 manifest 与 SHA256SUMS 共 30 个文件；ZIP 解压内容与目录逐文件散列一致，内部校验清单全部通过。中文 17 个、英文 5 个图片引用均能在包内解析。
 - 两份 README 的 7 段 PowerShell 示例通过 PowerShell Parser；14 段 Bash/sh 示例通过 Git Bash `bash -n`。只检查语法，没有执行环境安装命令；本机已测试的相同运行时组件不重复构建。
-- 旧完整包与 `a636469` 增量包均保留，新增包只包含明确列出的文件；未 push、tag、PR 或上传。
+- 旧完整包与 `a636469` 增量包均在本地保留。删除旧 Release 前再次核对 9 月 7 日、9 月 8 日两个旧包的散列与旧远端附件一致；未删除旧 Git 标签。没有公开真实会话、令牌或 DSH 配置。

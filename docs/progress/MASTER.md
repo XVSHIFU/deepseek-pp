@@ -1,5 +1,12 @@
 # Web Model Broker × Local DSH — Active Progress
 
+## 2026-09-08 r2 正式发布完成
+
+- 按用户最终授权，保留当前 README 原文和新增 12 张截图，推送至 `XVSHIFU/deepseek-pp` / `feature/web-harness`。正式标签 `web-harness-20260908-r2` 指向 `41d25b51600502c0018ec248087ddf5c3b1e7edd`；正式 Release 于 `2026-09-08T07:58:14Z` 发布，`draft=false`、`prerelease=false`，设为 Latest。默认分支仍是 `feature/web-harness`，main 未改。
+- 最终整包包含 30 个文件、28,349,627 字节；SHA-256 `d3a8672de95473bc396e1c60511dde6c835229d686ba1f27c327ad20edb54954`。GitHub 上传完成状态、附件 digest 和公开下载的校验文件均通过；中文 17 个、英文 5 个图片引用已随包保留。发布地址：`https://github.com/XVSHIFU/deepseek-pp/releases/tag/web-harness-20260908-r2`。
+- 新正式版可下载后，按用户要求删除 `web-harness-preview-20260907` 和 `web-harness-preview-20260908` 两个旧 Release 及附件。两个旧 Git 标签、本地 ZIP 备份均保留，并在删除前核对原附件散列；旧附件可重新上传恢复，不声称旧下载链接仍有效。
+- 本次 `ci:quality` 在第一项因本机缺少 `actionlint` 停止，后续未执行、无残留测试进程；未声称全仓完整门禁通过。运行时沿用已有定向 171/171、构建及 Windows 真实读取 / 31.08 秒长回答证据，没有因正式 Release 标签而扩大验证结论。完整发布记录见 `docs/delivery/github-push-20260908-r2.md`；以下整理记录为发布前历史。
+
 ## 2026-09-08 r2 README 与完整包整理（待推送）
 
 - 按用户要求只做推送准备。双语 README 补齐 Windows / WSL 安装分工、扩展文件夹位置、工作区与网页模型选择、连接提示和原位更新；保留能力、安装命令、友情链接与许可，不加入开发日志。
