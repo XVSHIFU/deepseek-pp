@@ -666,7 +666,8 @@ function isStandaloneMalformedToolMarker(text: string, toolNames: ReadonlySet<st
 function hasMalformedToolWrapper(text: string, toolNames: ReadonlySet<string>): boolean {
   // Leave quoted/fenced examples alone. Accept leading prose, as in real model replies.
   if (/```|~~~/u.test(text)) return false;
-  const wrappers = [...text.matchAll(/(?:^|\n) {0,3}<(tool_call|invoke)\s+name\s*=\s*(["'])([A-Za-z_][A-Za-z0-9_.:-]*)\2\s*>/gu)];
+  // Only the trailing wrapper can qualify; do not repeatedly scan suffixes.
+  const wrappers = [...text.matchAll(/(?:^|\n) {0,3}<(tool_call|invoke)\s+name\s*=\s*(["'])([A-Za-z_][A-Za-z0-9_.:-]*)\2\s*>/gu)].slice(-1);
   for (const wrapper of wrappers) {
     if (!toolNames.has(wrapper[3]!)) continue;
     const prefix = text.slice(0, wrapper.index).trimEnd();

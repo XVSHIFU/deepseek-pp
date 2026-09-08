@@ -19,6 +19,8 @@ npm run build:chrome
 
 不要用旧目录的 `node_modules`，不要删除锁文件或用 `npm update` 替代 `npm ci`。安装需要能访问 npm registry；GitHub 保存源码和锁定的三份补丁包，不是所有第三方依赖的离线镜像。
 
+源码目录建议直接使用克隆默认名 `deepseek-pp`。当前 WXT 构建器会把路径当作正则处理，不要把源码放在带 `+` 等正则特殊字符的目录中（例如 `deepseek+++++`）；遇到该错误时，用普通名称的新克隆构建，不需要修改依赖。
+
 Chrome 构建输出为 `dist/chrome-mv3`；Edge、Firefox 分别使用 `npm run build:edge`、`npm run build:firefox`。Harness 插件输出在 `packages/dsh-deepseek-web-official-plugin/lib`。该目录已纳入版本管理，修改插件后须一起检查生成文件差异。
 
 普通插件开发无需克隆 Harness：`vendor/harness-request-budget/*.tgz` 和 `package-lock.json` 已固定所需补丁。
