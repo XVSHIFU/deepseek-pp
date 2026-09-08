@@ -41,6 +41,7 @@
     "smoke:dsh-web-agent:readonly": "node scripts/dsh-web-readonly-acceptance.mjs",
     "smoke:dsh-web-agent:file-edit": "node scripts/dsh-web-file-edit-acceptance.mjs",
     "smoke:dsh-web-agent:commands": "node scripts/dsh-web-command-acceptance.mjs",
+    "verify:dsh-official-web:real": "node scripts/dsh-official-web-real-acceptance.mjs",
     "prepare:dsh-web-agent": "node scripts/prepare-dsh-web-agent-distribution.mjs",
     "install:dsh-web-agent": "node scripts/install-dsh-web-agent.mjs",
     "uninstall:dsh-web-agent": "node scripts/uninstall-dsh-web-agent.mjs",
