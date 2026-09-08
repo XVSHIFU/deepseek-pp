@@ -4,7 +4,7 @@
 >
 > **Tracking mode**: `LOCAL_ONLY`（尚未创建 GitHub Issue、Milestone 或 PR）
 >
-> **Started / last updated**: 2026-09-04 / 2026-09-07
+> **Started / last updated**: 2026-09-04 / 2026-09-08
 >
 > **Active repository**: `XVSHIFU/deepseek-pp`
 >
@@ -12,11 +12,13 @@
 >
 > **Active direction**: 模式 A（本机 DeepSeek Harness + DeepSeek++ 网页模型 Broker）唯一主开发线
 
-## 2026-09-07 T8 网页模型控制与工具可靠性
+## 2026-09-08 T8 网页模型控制、工具可靠性与视觉一致性
 
 - T8.1–T8.3 已在 `05ee53d`、`aab2aac`、`2123443` 完成本地实现：官方设置卡片中英文折叠体验、默认/专家网页模式、独立思考开关与不持久化思考 dock，以及只对明确畸形工具意图执行一次、有历史链验证且禁止副作用重放的纠正回合。截图中的 `[调用 glob]` / `[调用 read]` 已确认只是没有进入权威 XML parser 的模型正文，不再被视为工具已执行。
 - 根 compile、prompt freeze、定向 UI/adapter/digest/bridge/tool/acceptance 测试通过；全量测试首次并行运行 2503 passed、1 skipped、33 failed，行为预期修正后逐项通过，其余并行资源争用文件单独复跑全部通过。三浏览器构建、manifest policy 与 UTF-8/ASCII 产物检查通过。sidepanel raw 门槛超 32 字节，但同环境未含 T8.2/T8.3 改动的 `HEAD` 快照结果完全相同，未放宽既有预算。
-- 新不可变本地候选 `.release/deepseek-web-official-2123443` 来源 `21234430aaa6942fbc0deae514c44a77a3701970`，manifest SHA-256=`1830b874a4db77604f41b883ab379b7afdc7e1fec0f4296815e30c5b9f79aadb`，11 个受管文件，package/verify 通过。隔离的 `C:\temp\deepseek-t8-live-2123443\dsh-home` 已完成官方 `web` profile 首装，四个锁定包可列出且 Koffi 构建成功。人工加载目录为 `C:\temp\deepseek-web-official-2123443-chrome`；旧候选、用户现有扩展目录、配对和会话未改。真实网页四组合与工具验收须在新扩展手动加载/配对后进行，当前不标通过。
+- `2123443` 候选在首次官方 UI 打开时暴露 locale service receiver 丢失，设置卡片被错误边界隐藏；`6e48dd4` 已修复并增加相应回归测试。替代候选 `.release/deepseek-web-official-6e48dd4` 的 manifest SHA-256=`18328ccf10753428c4d5800a2c25674afeb60a206ff68beb1809ec5fa389859c`，package/verify、隔离首装和官方 UI 展开均通过。
+- 2026-09-08 用户为新扩展 `hadnmeeaihlddmdpameekgadofgjbmno` 生成令牌并确认已连接；本机只读核验 `127.0.0.1:43123` 同时存在 listener 与 established loopback 连接，令牌明文未读取或记录。该结果只把“配对连接”标为通过，四组合模型/思考与真实工具矩阵仍待执行。
+- 用户三张实机截图确认 DeepSeek 卡片虽然功能可用，但原生表单控件、复选框对齐、按钮层级、长表单分组和间距与同页官方插件卡片明显不一致。T8 新增 T8.1b：只使用公开 Harness 原语/设计 token 或插件内薄适配，对齐圆角卡片、分组、控件状态、操作层级、浅深主题、中英文、缩放、窄窗口和键盘无障碍；视觉改造后重新生成候选，`6e48dd4` 仅保留为连接验证基线。
 
 ## 2026-09-07 README 与推送准备（待用户确认）
 
