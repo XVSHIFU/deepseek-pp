@@ -248,6 +248,40 @@ describe("official DeepSeek Web settings and connection", () => {
     controller.dispose();
   });
 
+  it("coalesces concurrent pairing requests and exposes only one authoritative token", async () => {
+    let finishStore: ((value: { ok: true; value: undefined }) => void) | undefined;
+    const storePending = new Promise<{ ok: true; value: undefined }>((resolve) => { finishStore = resolve; });
+    const setCredential = vi.fn(async () => storePending);
+    const reconnect = vi.fn(async () => ({ ok: true as const, value: {
+      accepted: true,
+      deferred: false,
+      status: connectionView(),
+    } }));
+    const controller = new DeepSeekWebClientController({
+      settings: fakeClientSettings(),
+      credentials: {
+        describe: async () => ({ ok: true, value: {} }),
+        set: setCredential,
+      },
+      callConnection: reconnect,
+      randomBytes: (length) => new Uint8Array(length).fill(9),
+    });
+
+    const first = controller.rePair();
+    const second = controller.rePair();
+    expect(controller.getSnapshot().pairing).toBe(true);
+    expect(setCredential).toHaveBeenCalledOnce();
+    expect(first).toBe(second);
+
+    finishStore!({ ok: true, value: undefined });
+    const [firstToken, secondToken] = await Promise.all([first, second]);
+    expect(firstToken).toBe(secondToken);
+    expect(reconnect).toHaveBeenCalledOnce();
+    expect(controller.getSnapshot().pairing).toBe(false);
+    expect(JSON.stringify(controller.getSnapshot())).not.toContain(firstToken);
+    controller.dispose();
+  });
+
   it("stages incomplete identity text locally and commits one revision-fenced settings mutation", async () => {
     const mutations: Array<{ ops: readonly unknown[]; revision?: number }> = [];
     const controller = new DeepSeekWebClientController({

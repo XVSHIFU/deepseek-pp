@@ -41,16 +41,30 @@ const settingsLocales = {
     phaseConnected: "已连接",
     phaseBusy: "忙碌",
     phaseError: "错误",
+    connectionTitle: "连接",
+    connectionDescription: "配置浏览器扩展与本机 Harness 之间的回环连接。",
     browser: "浏览器",
     chromiumExtensionId: "Chrome / Edge 扩展 ID",
+    chromiumExtensionIdHint: "在浏览器扩展管理页中查看；留空表示尚未配置。",
     firefoxExtensionOrigin: "Firefox 扩展来源",
+    firefoxExtensionOriginHint: "使用 moz-extension:// 开头的扩展来源；留空表示尚未配置。",
     port: "回环端口",
+    portHint: "仅监听 127.0.0.1 端口，不接受远程主机或任意 URL。",
+    invalidPort: "请输入 1 到 65535 之间的端口。",
+    invalidChromiumExtensionId: "扩展 ID 应为 32 位小写字母 a–p，或留空。",
+    invalidFirefoxExtensionOrigin: "请输入有效的 moz-extension:// 来源，或留空。",
+    modelTitle: "网页模型",
+    modelDescription: "为新会话选择网页模式与思考行为；正在运行的会话不会被改写。",
     modelMode: "网页模型模式",
+    modelModeHint: "专家模式会请求网页端现有的专家模型类型。",
     modelDefault: "默认模式",
     modelExpert: "专家模式",
     thinking: "为新会话启用思考",
+    thinkingHint: "思考内容仅在当前浏览器内临时展示，不写入会话记录。",
     makeDefault: "将 DeepSeek 网页模型设为以后新会话的默认模型",
+    makeDefaultHint: "只影响之后新建的会话，不覆盖其他模型提供方的现有会话。",
     windowsTitle: "Windows PowerShell 7",
+    windowsDescription: "控制新会话是否可以在当前 Windows 用户身份下运行原生命令。",
     windowsUnavailable: "PowerShell 状态不可用。",
     windowsDisabled: "新会话的原生 Windows 命令已禁用。",
     windowsReady: "PowerShell {major} 已就绪：{executable}",
@@ -60,18 +74,23 @@ const settingsLocales = {
     windowsAuto: "自动运行（明确选择）",
     windowsWarning: "命令以当前 Windows 用户身份运行；工作目录不是沙箱。",
     powershellExecutable: "PowerShell 7 可执行文件",
+    powershellExecutableHint: "可填写 pwsh，或 PowerShell 7 可执行文件的绝对路径。",
+    invalidPowerShellExecutable: "路径不能包含空字符，且长度不能超过 1024 个字符。",
     save: "保存设置",
     saving: "正在保存…",
     discard: "放弃更改",
     conflict: "设置已在另一个客户端中更改。请放弃当前草稿后再编辑。",
-    tokenConfigured: "配对令牌已保存（出于安全原因不能再次读取）",
+    tokenConfigured: "配对令牌已保存在受保护的凭据存储中（已有值不能回读）",
     tokenMissing: "尚未配置配对令牌",
     generateToken: "生成配对令牌",
     repair: "重新配对",
     reconnect: "重新连接",
+    pairingTitle: "配对",
+    pairingDescription: "Harness 在受保护的凭据存储中保存令牌；粘贴到扩展后，副本只保存在浏览器本地。",
     newTokenLabel: "新配对令牌",
     copy: "复制",
-    tokenOnce: "请立即复制此令牌并粘贴到浏览器扩展。保存后无法再次查看。",
+    copied: "已复制",
+    tokenOnce: "请立即复制此令牌并粘贴到浏览器扩展。关闭或刷新此页面后无法再次查看。",
     importTitle: "导入已完成的独立会话",
     importDescription: "已完成的根会话及其已完成的子会话会作为一组验证并提交。源记录会保留；导入的会话不会继承 Windows 命令权限。",
     importHome: "旧版 DeepSeek Web Agent 安装目录",
@@ -100,16 +119,30 @@ const settingsLocales = {
     phaseConnected: "connected",
     phaseBusy: "busy",
     phaseError: "error",
+    connectionTitle: "Connection",
+    connectionDescription: "Configure the loopback connection between the browser extension and this Harness.",
     browser: "Browser",
     chromiumExtensionId: "Chrome / Edge extension ID",
+    chromiumExtensionIdHint: "Find it on the browser extensions page; leave blank while unconfigured.",
     firefoxExtensionOrigin: "Firefox extension origin",
+    firefoxExtensionOriginHint: "Use the extension origin beginning with moz-extension://, or leave it blank.",
     port: "Loopback port",
+    portHint: "Listens on 127.0.0.1 only; remote hosts and arbitrary URLs are not accepted.",
+    invalidPort: "Enter a port from 1 through 65535.",
+    invalidChromiumExtensionId: "The extension ID must be 32 lowercase letters from a–p, or blank.",
+    invalidFirefoxExtensionOrigin: "Enter a valid moz-extension:// origin, or leave it blank.",
+    modelTitle: "Web model",
+    modelDescription: "Choose web mode and thinking behavior for new sessions; running sessions are not rewritten.",
     modelMode: "Web model mode",
+    modelModeHint: "Expert requests the existing expert model type from the web session.",
     modelDefault: "Default",
     modelExpert: "Expert",
     thinking: "Enable thinking for new sessions",
+    thinkingHint: "Reasoning is shown only in this browser and is never written to session history.",
     makeDefault: "Set DeepSeek Web as the default for future new sessions",
+    makeDefaultHint: "Affects only future sessions and does not replace existing sessions from other providers.",
     windowsTitle: "Windows PowerShell 7",
+    windowsDescription: "Control whether new sessions may run native commands as the current Windows user.",
     windowsUnavailable: "PowerShell status unavailable.",
     windowsDisabled: "Native Windows commands are disabled for new sessions.",
     windowsReady: "PowerShell {major} ready: {executable}",
@@ -119,18 +152,23 @@ const settingsLocales = {
     windowsAuto: "Run automatically (explicit opt-in)",
     windowsWarning: "Commands run as the current Windows user; cwd is not a sandbox.",
     powershellExecutable: "PowerShell 7 executable",
+    powershellExecutableHint: "Enter pwsh or an absolute path to a PowerShell 7 executable.",
+    invalidPowerShellExecutable: "The path cannot contain NUL and must be at most 1,024 characters.",
     save: "Save settings",
     saving: "Saving…",
     discard: "Discard",
     conflict: "Settings changed in another client. Discard this draft before editing again.",
-    tokenConfigured: "Pairing token saved (it cannot be read back for security)",
+    tokenConfigured: "Pairing token saved in protected credential storage (existing values cannot be read back)",
     tokenMissing: "No pairing token configured",
     generateToken: "Generate pairing token",
     repair: "Re-pair",
     reconnect: "Reconnect",
+    pairingTitle: "Pairing",
+    pairingDescription: "Harness stores the token as a protected credential; after you paste it, the extension keeps its copy only in browser-local storage.",
     newTokenLabel: "New pairing token",
     copy: "Copy",
-    tokenOnce: "Copy this token now and paste it into the browser extension. It cannot be viewed again after saving.",
+    copied: "Copied",
+    tokenOnce: "Copy this token now and paste it into the browser extension. It cannot be viewed again after this page closes or reloads.",
     importTitle: "Import completed standalone session",
     importDescription: "The completed root and its completed child sessions are validated and committed as one group. Source records are retained; imported sessions never inherit Windows command permission.",
     importHome: "Old DeepSeek Web Agent installation directory",
@@ -223,6 +261,7 @@ export interface DeepSeekWebClientSnapshot {
   readonly invalid: boolean;
   readonly loading: boolean;
   readonly saving: boolean;
+  readonly pairing: boolean;
   readonly error: string | null;
 }
 
@@ -253,6 +292,7 @@ export class DeepSeekWebClientController {
   private draftRevision: number | undefined;
   private savingSettings = false;
   private settingsConflict = false;
+  private pairingTask: Promise<string> | undefined;
   private snapshotValue: DeepSeekWebClientSnapshot;
   private readonly statusTimer: ReturnType<typeof setInterval>;
   private statusRequestActive = false;
@@ -398,12 +438,12 @@ export class DeepSeekWebClientController {
     return response.value;
   }
 
-  async pair(): Promise<string> {
-    return this.replacePairingToken();
+  pair(): Promise<string> {
+    return this.beginPairing();
   }
 
-  async rePair(): Promise<string> {
-    return this.replacePairingToken();
+  rePair(): Promise<string> {
+    return this.beginPairing();
   }
 
   dispose(): void {
@@ -427,6 +467,19 @@ export class DeepSeekWebClientController {
     }
     this.publish();
     return token;
+  }
+
+  private beginPairing(): Promise<string> {
+    if (this.pairingTask !== undefined) return this.pairingTask;
+    const operation = this.replacePairingToken();
+    const tracked = operation.finally(() => {
+      if (this.pairingTask !== tracked) return;
+      this.pairingTask = undefined;
+      this.publish();
+    });
+    this.pairingTask = tracked;
+    this.publish();
+    return tracked;
   }
 
   private async refreshConnection(): Promise<void> {
@@ -467,6 +520,7 @@ export class DeepSeekWebClientController {
       invalid: draft !== undefined && !validDraft(draft),
       loading: this.loading,
       saving: this.savingSettings,
+      pairing: this.pairingTask !== undefined,
       error: this.error,
     };
   }
@@ -605,11 +659,11 @@ function DeepSeekWebReasoningDock({
   return React.createElement("details", {
     key: reasoning.requestId,
     open: reasoning.active || undefined,
-    style: reasoningDockStyle,
+    className: "dsh-deepseek-web-reasoning",
   },
-  React.createElement("summary", { style: { cursor: "pointer" } },
+  React.createElement("summary", { className: "dsh-deepseek-web-reasoning-summary" },
     t(reasoning.active ? "reasoningWorking" : "reasoningDone")),
-  React.createElement("div", { style: reasoningTextStyle }, reasoning.text));
+  React.createElement("div", { className: "dsh-deepseek-web-reasoning-text" }, reasoning.text));
 }
 
 function DeepSeekWebSettingsCard({
@@ -628,7 +682,9 @@ function DeepSeekWebSettingsCard({
   const t = locale.bind(DEEPSEEK_WEB_SETTINGS_LOCALE_NAMESPACE);
   const [open, setOpen] = React.useState(false);
   const saveStarted = React.useRef(false);
+  const formId = React.useId();
   const [pairingTokenValue, setPairingTokenValue] = React.useState<string | null>(null);
+  const [tokenCopied, setTokenCopied] = React.useState(false);
   const [importSourceHome, setImportSourceHome] = React.useState("");
   const [importRootSessionId, setImportRootSessionId] = React.useState("");
   const [sourceProcessesStopped, setSourceProcessesStopped] = React.useState(false);
@@ -649,10 +705,84 @@ function DeepSeekWebSettingsCard({
   const settings = snapshot.draft;
   if (settings === undefined) return null;
   const disabled = !snapshot.settings.writable;
-  const field = (label: string, input: React.ReactElement): React.ReactElement =>
-    React.createElement("label", { style: fieldStyle }, label, input);
+  const controlId = (name: string): string => `${formId}-${name}`;
+  const field = (
+    id: string,
+    label: string,
+    input: React.ReactElement,
+    hint: string,
+    invalidMessage?: string,
+  ): React.ReactElement => React.createElement("div", { className: "dsh-deepseek-web-field" },
+    React.createElement("label", { className: "dsh-deepseek-web-label", htmlFor: id }, label),
+    input,
+    React.createElement("p", {
+      id: `${id}-hint`,
+      className: invalidMessage === undefined ? "dsh-deepseek-web-hint" : "dsh-deepseek-web-error",
+      ...(invalidMessage === undefined ? {} : { role: "alert" }),
+    }, invalidMessage ?? hint));
+  const select = (
+    id: string,
+    value: string,
+    selectDisabled: boolean,
+    onChange: (value: string) => void,
+    options: readonly (readonly [string, string])[],
+  ): React.ReactElement => React.createElement("span", { className: "dsh-deepseek-web-select-wrap" },
+    React.createElement("select", {
+      id,
+      className: "dsh-deepseek-web-control dsh-deepseek-web-select-control",
+      value,
+      disabled: selectDisabled,
+      "aria-describedby": `${id}-hint`,
+      onChange: (event: React.ChangeEvent<HTMLSelectElement>) => onChange(event.currentTarget.value),
+    }, ...options.map(([optionValue, optionLabel]) =>
+      React.createElement("option", { key: optionValue, value: optionValue }, optionLabel))),
+    chevronIcon("dsh-deepseek-web-select-chevron"));
+  const toggle = (
+    id: string,
+    label: string,
+    hint: string,
+    checked: boolean,
+    toggleDisabled: boolean,
+    onChange: (value: boolean) => void,
+  ): React.ReactElement => React.createElement("div", { className: "dsh-deepseek-web-field" },
+    React.createElement("button", {
+      id,
+      type: "button",
+      role: "switch",
+      className: "dsh-deepseek-web-toggle",
+      "aria-checked": checked,
+      "aria-describedby": `${id}-hint`,
+      disabled: toggleDisabled,
+      onClick: () => onChange(!checked),
+    },
+    React.createElement("span", { className: "dsh-deepseek-web-toggle-label" }, label),
+    React.createElement("span", {
+      className: "dsh-deepseek-web-switch",
+      "data-checked": checked,
+      "aria-hidden": true,
+    }, React.createElement("span", { className: "dsh-deepseek-web-switch-thumb" }))),
+    React.createElement("p", { id: `${id}-hint`, className: "dsh-deepseek-web-hint" }, hint));
+  const section = (
+    name: string,
+    titleText: string,
+    descriptionText: string,
+    ...children: React.ReactNode[]
+  ): React.ReactElement => {
+    const titleId = controlId(`${name}-title`);
+    return React.createElement("section", {
+      className: "dsh-deepseek-web-section",
+      "aria-labelledby": titleId,
+      "data-section": name,
+    },
+    React.createElement("div", { className: "dsh-deepseek-web-section-head" },
+      React.createElement("h4", { id: titleId, className: "dsh-deepseek-web-section-title" }, titleText),
+      React.createElement("p", { className: "dsh-deepseek-web-section-description" }, descriptionText)),
+    ...children);
+  };
   const update = (name: keyof DeepSeekWebOfficialSettings, value: unknown): void => controller.editSetting(name, value);
   const createToken = (replace: boolean): void => {
+    setPairingTokenValue(null);
+    setTokenCopied(false);
     void (replace ? controller.rePair() : controller.pair()).then(setPairingTokenValue, () => undefined);
   };
   const title = t("title");
@@ -660,145 +790,239 @@ function DeepSeekWebSettingsCard({
     ? t("connectionUnavailable")
     : formatText(t("connection"), { phase: connectionPhaseText(snapshot.connection.phase, t) }) +
       (snapshot.connection.pendingReconfigure ? t("changePending") : "");
+  const statusId = controlId("status");
+  const pendingId = controlId("pending");
   const header = React.createElement("button", {
     type: "button",
-    style: cardHeaderStyle,
+    className: "dsh-deepseek-web-card-header",
     "aria-expanded": open,
     "aria-label": `${t(open ? "collapse" : "expand")}: ${title}`,
+    "aria-describedby": snapshot.dirty ? `${statusId} ${pendingId}` : statusId,
     onClick: () => setOpen(!open),
   },
-  React.createElement("span", { style: { display: "grid", gap: "3px", textAlign: "left" } },
-    React.createElement("span", { style: { fontWeight: 650 } }, title),
-    React.createElement("span", { style: mutedTextStyle }, t("description")),
-    React.createElement("span", { style: statusTextStyle }, status)),
-  snapshot.dirty ? React.createElement("span", { style: pendingStyle }, t("unsaved")) : null,
-  React.createElement("span", {
-    "aria-hidden": true,
-    style: { transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 120ms ease" },
-  }, "⌄"));
+  React.createElement("span", { className: "dsh-deepseek-web-head-text" },
+    React.createElement("span", { className: "dsh-deepseek-web-name" }, title),
+    React.createElement("span", { className: "dsh-deepseek-web-description" }, t("description")),
+    React.createElement("span", {
+      id: statusId,
+      className: "dsh-deepseek-web-status",
+      "data-phase": snapshot.connection?.phase ?? "unavailable",
+    }, React.createElement("span", { className: "dsh-deepseek-web-status-dot", "aria-hidden": true }), status)),
+  snapshot.dirty ? React.createElement("span", { id: pendingId, className: "dsh-deepseek-web-pending" }, t("unsaved")) : null,
+  chevronIcon(`dsh-deepseek-web-chevron${open ? " dsh-deepseek-web-chevron-open" : ""}`));
   if (!open) return React.createElement("li", cardProps(false), header);
+  const portInvalid = !validPortDraft(settings.port);
+  const originInvalid = settings.browser === "firefox"
+    ? !validFirefoxOriginDraft(settings.firefoxExtensionOrigin)
+    : !validChromiumExtensionIdDraft(settings.chromiumExtensionId);
+  const executableInvalid = !validPowerShellExecutableDraft(settings.powerShellExecutable);
+  const browserId = controlId("browser");
+  const originId = controlId(settings.browser === "firefox" ? "firefox-origin" : "chromium-extension-id");
+  const portId = controlId("port");
+  const modelModeId = controlId("model-mode");
+  const thinkingId = controlId("thinking");
+  const makeDefaultId = controlId("make-default");
+  const windowsEnableId = controlId("windows-enable");
+  const windowsApprovalId = controlId("windows-approval");
+  const executableId = controlId("powershell-executable");
+  const importHomeId = controlId("import-home");
+  const importRootId = controlId("import-root");
   return React.createElement(
     "li",
     cardProps(true),
     header,
-    React.createElement("div", { style: cardBodyStyle },
-    disabled ? React.createElement("p", { role: "status", style: warningStyle }, t("readOnly")) : null,
-    field(t("browser"), React.createElement("select", {
-      value: settings.browser,
-      disabled,
-      onChange: (event: React.ChangeEvent<HTMLSelectElement>) => update("browser", event.currentTarget.value),
-    }, React.createElement("option", { value: "chrome" }, "Chrome"),
-    React.createElement("option", { value: "edge" }, "Edge"),
-    React.createElement("option", { value: "firefox" }, "Firefox"))),
-    settings.browser === "firefox"
-      ? field(t("firefoxExtensionOrigin"), React.createElement("input", {
-        value: settings.firefoxExtensionOrigin,
+    React.createElement("div", {
+      className: "dsh-deepseek-web-card-body",
+      "aria-busy": snapshot.saving || snapshot.pairing || importing || snapshot.loading,
+    },
+    disabled ? React.createElement("p", { role: "status", className: "dsh-deepseek-web-notice" }, t("readOnly")) : null,
+    section("connection", t("connectionTitle"), t("connectionDescription"),
+      field(browserId, t("browser"), select(browserId, settings.browser, disabled, (value) => update("browser", value), [
+        ["chrome", "Chrome"], ["edge", "Edge"], ["firefox", "Firefox"],
+      ]), ""),
+      settings.browser === "firefox"
+        ? field(originId, t("firefoxExtensionOrigin"), React.createElement("input", {
+          id: originId,
+          className: "dsh-deepseek-web-control",
+          value: settings.firefoxExtensionOrigin,
+          disabled,
+          placeholder: "moz-extension://…",
+          "aria-invalid": originInvalid || undefined,
+          "aria-describedby": `${originId}-hint`,
+          onChange: (event: React.ChangeEvent<HTMLInputElement>) => update("firefoxExtensionOrigin", event.currentTarget.value),
+        }), t("firefoxExtensionOriginHint"), originInvalid ? t("invalidFirefoxExtensionOrigin") : undefined)
+        : field(originId, t("chromiumExtensionId"), React.createElement("input", {
+          id: originId,
+          className: "dsh-deepseek-web-control dsh-deepseek-web-monospace",
+          value: settings.chromiumExtensionId,
+          disabled,
+          autoComplete: "off",
+          spellCheck: false,
+          "aria-invalid": originInvalid || undefined,
+          "aria-describedby": `${originId}-hint`,
+          onChange: (event: React.ChangeEvent<HTMLInputElement>) => update("chromiumExtensionId", event.currentTarget.value),
+        }), t("chromiumExtensionIdHint"), originInvalid ? t("invalidChromiumExtensionId") : undefined),
+      field(portId, t("port"), React.createElement("input", {
+        id: portId,
+        className: "dsh-deepseek-web-control",
+        type: "number",
+        inputMode: "numeric",
+        min: 1,
+        max: 65_535,
+        value: settings.port,
         disabled,
-        placeholder: "moz-extension://…",
-        onChange: (event: React.ChangeEvent<HTMLInputElement>) => update("firefoxExtensionOrigin", event.currentTarget.value),
-      }))
-      : field(t("chromiumExtensionId"), React.createElement("input", {
-        value: settings.chromiumExtensionId,
+        "aria-invalid": portInvalid || undefined,
+        "aria-describedby": `${portId}-hint`,
+        onChange: (event: React.ChangeEvent<HTMLInputElement>) => update("port", event.currentTarget.value),
+      }), t("portHint"), portInvalid ? t("invalidPort") : undefined)),
+    section("model", t("modelTitle"), t("modelDescription"),
+      field(modelModeId, t("modelMode"), select(modelModeId, settings.webModelMode, disabled, (value) => update("webModelMode", value), [
+        ["default", t("modelDefault")], ["expert", t("modelExpert")],
+      ]), t("modelModeHint")),
+      toggle(thinkingId, t("thinking"), t("thinkingHint"), settings.thinkingEnabled, disabled,
+        (value) => update("thinkingEnabled", value)),
+      toggle(makeDefaultId, t("makeDefault"), t("makeDefaultHint"), settings.makeDefaultForNewSessions, disabled,
+        (value) => update("makeDefaultForNewSessions", value))),
+    section("windows", t("windowsTitle"), t("windowsDescription"),
+      React.createElement("p", { className: "dsh-deepseek-web-state-line", role: "status" },
+        windowsStatusText(snapshot.connection, t)),
+      toggle(windowsEnableId, t("windowsEnable"), t("windowsWarning"), settings.windowsCommandsEnabled, disabled,
+        (value) => update("windowsCommandsEnabled", value)),
+      field(windowsApprovalId, t("windowsApproval"), select(
+        windowsApprovalId,
+        settings.windowsApprovalPolicy,
+        disabled || !settings.windowsCommandsEnabled,
+        (value) => update("windowsApprovalPolicy", value),
+        [["ask", t("windowsAsk")], ["auto", t("windowsAuto")]],
+      ), ""),
+      field(executableId, t("powershellExecutable"), React.createElement("input", {
+        id: executableId,
+        className: "dsh-deepseek-web-control dsh-deepseek-web-monospace",
+        value: settings.powerShellExecutable,
         disabled,
-        onChange: (event: React.ChangeEvent<HTMLInputElement>) => update("chromiumExtensionId", event.currentTarget.value),
-      })),
-    field(t("port"), React.createElement("input", {
-      type: "number", min: 1, max: 65_535, value: settings.port, disabled,
-      onChange: (event: React.ChangeEvent<HTMLInputElement>) => update("port", event.currentTarget.value),
-    })),
-    field(t("modelMode"), React.createElement("select", {
-      value: settings.webModelMode,
-      disabled,
-      onChange: (event: React.ChangeEvent<HTMLSelectElement>) => update("webModelMode", event.currentTarget.value),
-    }, React.createElement("option", { value: "default" }, t("modelDefault")),
-    React.createElement("option", { value: "expert" }, t("modelExpert")))),
-    field(t("thinking"), React.createElement("input", {
-      type: "checkbox", checked: settings.thinkingEnabled, disabled,
-      onChange: (event: React.ChangeEvent<HTMLInputElement>) => update("thinkingEnabled", event.currentTarget.checked),
-    })),
-    field(t("makeDefault"), React.createElement("input", {
-      type: "checkbox", checked: settings.makeDefaultForNewSessions, disabled,
-      onChange: (event: React.ChangeEvent<HTMLInputElement>) => update("makeDefaultForNewSessions", event.currentTarget.checked),
-    })),
-    React.createElement("h4", null, t("windowsTitle")),
-    React.createElement("p", null, windowsStatusText(snapshot.connection, t)),
-    field(t("windowsEnable"), React.createElement("input", {
-      type: "checkbox", checked: settings.windowsCommandsEnabled, disabled,
-      onChange: (event: React.ChangeEvent<HTMLInputElement>) => update("windowsCommandsEnabled", event.currentTarget.checked),
-    })),
-    field(t("windowsApproval"), React.createElement("select", {
-      value: settings.windowsApprovalPolicy,
-      disabled: disabled || !settings.windowsCommandsEnabled,
-      onChange: (event: React.ChangeEvent<HTMLSelectElement>) => update("windowsApprovalPolicy", event.currentTarget.value),
-    }, React.createElement("option", { value: "ask" }, t("windowsAsk")),
-    React.createElement("option", { value: "auto" }, t("windowsAuto")))),
-    React.createElement("p", null, t("windowsWarning")),
-    field(t("powershellExecutable"), React.createElement("input", {
-      value: settings.powerShellExecutable,
-      disabled,
-      placeholder: "pwsh or C:\\Program Files\\PowerShell\\7\\pwsh.exe",
-      onChange: (event: React.ChangeEvent<HTMLInputElement>) => update("powerShellExecutable", event.currentTarget.value),
-    })),
-    snapshot.conflicted ? React.createElement("p", { role: "status" },
-      t("conflict")) : null,
-    React.createElement("p", null, snapshot.credential.configured ? t("tokenConfigured") : t("tokenMissing")),
-    React.createElement("button", { type: "button", disabled: !snapshot.credential.writable || snapshot.credential.configured, onClick: () => createToken(false) }, t("generateToken")),
-    React.createElement("button", { type: "button", disabled: !snapshot.credential.writable, onClick: () => createToken(true) }, t("repair")),
-    React.createElement("button", { type: "button", onClick: () => { void controller.reconnect().catch(() => undefined); } }, t("reconnect")),
-    pairingTokenValue === null ? null : React.createElement("div", null,
-      React.createElement("output", { "aria-label": t("newTokenLabel") }, pairingTokenValue),
-      React.createElement("button", { type: "button", onClick: () => { void globalThis.navigator?.clipboard?.writeText(pairingTokenValue); } }, t("copy")),
-      React.createElement("p", { style: warningStyle }, t("tokenOnce"))),
-    React.createElement("h4", null, t("importTitle")),
-    React.createElement("p", null, t("importDescription")),
-    field(t("importHome"), React.createElement("input", {
-      value: importSourceHome,
-      disabled: importing,
-      placeholder: "C:\\Users\\you\\AppData\\Local\\DeepSeekWebAgent",
-      onChange: (event: React.ChangeEvent<HTMLInputElement>) => setImportSourceHome(event.currentTarget.value),
-    })),
-    field(t("importRoot"), React.createElement("input", {
-      value: importRootSessionId,
-      disabled: importing,
-      onChange: (event: React.ChangeEvent<HTMLInputElement>) => setImportRootSessionId(event.currentTarget.value),
-    })),
-    field(t("importStopped"), React.createElement("input", {
-      type: "checkbox",
-      checked: sourceProcessesStopped,
-      disabled: importing,
-      onChange: (event: React.ChangeEvent<HTMLInputElement>) => setSourceProcessesStopped(event.currentTarget.checked),
-    })),
-    React.createElement("button", {
-      type: "button",
-      disabled: importing || !sourceProcessesStopped || importSourceHome.trim() === "" || importRootSessionId.trim() === "",
-      onClick: () => {
-        setImporting(true);
-        setImportStatus(null);
-        void controller.importCompleted({
-          sourceHome: importSourceHome.trim(),
-          rootSessionId: importRootSessionId.trim(),
-          sourceProcessesStopped: true,
-        }).then((receipt) => {
-          setImportStatus(formatText(t("imported"), { imported: receipt.imported, idempotent: receipt.idempotent }));
-        }, (error: unknown) => {
-          setImportStatus(error instanceof Error ? error.message : t("importFailed"));
-        }).finally(() => setImporting(false));
-      },
-    }, importing ? t("importing") : t("importAction")),
-    importStatus === null ? null : React.createElement("p", { role: "status" }, importStatus),
-    snapshot.error === null ? null : React.createElement("p", { role: "alert" }, snapshot.error),
-    React.createElement("div", { style: cardFooterStyle },
+        placeholder: "pwsh or C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+        spellCheck: false,
+        "aria-invalid": executableInvalid || undefined,
+        "aria-describedby": `${executableId}-hint`,
+        onChange: (event: React.ChangeEvent<HTMLInputElement>) => update("powerShellExecutable", event.currentTarget.value),
+      }), t("powershellExecutableHint"), executableInvalid ? t("invalidPowerShellExecutable") : undefined)),
+    snapshot.conflicted ? React.createElement("p", { role: "alert", className: "dsh-deepseek-web-alert" }, t("conflict")) : null,
+    section("pairing", t("pairingTitle"), t("pairingDescription"),
+      React.createElement("p", { className: "dsh-deepseek-web-state-line", role: "status" },
+        snapshot.credential.configured ? t("tokenConfigured") : t("tokenMissing")),
+      React.createElement("div", { className: "dsh-deepseek-web-actions" },
+        React.createElement("button", {
+          type: "button",
+          className: "dsh-deepseek-web-button dsh-deepseek-web-button-secondary",
+          disabled: snapshot.pairing || !snapshot.credential.writable || snapshot.credential.configured,
+          onClick: () => createToken(false),
+        }, t("generateToken")),
+        React.createElement("button", {
+          type: "button",
+          className: "dsh-deepseek-web-button dsh-deepseek-web-button-caution",
+          disabled: snapshot.pairing || !snapshot.credential.writable,
+          onClick: () => createToken(true),
+        }, t("repair")),
+        React.createElement("button", {
+          type: "button",
+          className: "dsh-deepseek-web-button dsh-deepseek-web-button-secondary",
+          disabled: snapshot.pairing,
+          onClick: () => { void controller.reconnect().catch(() => undefined); },
+        }, t("reconnect"))),
+      snapshot.pairing || pairingTokenValue === null ? null : React.createElement("div", { className: "dsh-deepseek-web-token-panel" },
+        React.createElement("div", { className: "dsh-deepseek-web-token-row" },
+          React.createElement("output", {
+            className: "dsh-deepseek-web-token-value",
+            "aria-label": t("newTokenLabel"),
+          }, pairingTokenValue),
+          React.createElement("button", {
+            type: "button",
+            className: "dsh-deepseek-web-button dsh-deepseek-web-button-secondary",
+            onClick: () => {
+              void globalThis.navigator?.clipboard?.writeText(pairingTokenValue).then(() => setTokenCopied(true), () => undefined);
+            },
+          }, t(tokenCopied ? "copied" : "copy"))),
+        React.createElement("p", { className: "dsh-deepseek-web-token-warning" }, t("tokenOnce")))),
+    section("import", t("importTitle"), t("importDescription"),
+      field(importHomeId, t("importHome"), React.createElement("input", {
+        id: importHomeId,
+        className: "dsh-deepseek-web-control dsh-deepseek-web-monospace",
+        value: importSourceHome,
+        disabled: importing,
+        placeholder: "C:\\Users\\you\\AppData\\Local\\DeepSeekWebAgent",
+        spellCheck: false,
+        onChange: (event: React.ChangeEvent<HTMLInputElement>) => setImportSourceHome(event.currentTarget.value),
+      }), ""),
+      field(importRootId, t("importRoot"), React.createElement("input", {
+        id: importRootId,
+        className: "dsh-deepseek-web-control dsh-deepseek-web-monospace",
+        value: importRootSessionId,
+        disabled: importing,
+        spellCheck: false,
+        onChange: (event: React.ChangeEvent<HTMLInputElement>) => setImportRootSessionId(event.currentTarget.value),
+      }), ""),
+      React.createElement("label", { className: "dsh-deepseek-web-check-row" },
+        React.createElement("input", {
+          className: "dsh-deepseek-web-checkbox",
+          type: "checkbox",
+          checked: sourceProcessesStopped,
+          disabled: importing,
+          onChange: (event: React.ChangeEvent<HTMLInputElement>) => setSourceProcessesStopped(event.currentTarget.checked),
+        }),
+        React.createElement("span", null, t("importStopped"))),
+      React.createElement("div", { className: "dsh-deepseek-web-actions dsh-deepseek-web-actions-end" },
+        React.createElement("button", {
+          type: "button",
+          className: "dsh-deepseek-web-button dsh-deepseek-web-button-secondary",
+          disabled: importing || !sourceProcessesStopped || importSourceHome.trim() === "" || importRootSessionId.trim() === "",
+          onClick: () => {
+            setImporting(true);
+            setImportStatus(null);
+            void controller.importCompleted({
+              sourceHome: importSourceHome.trim(),
+              rootSessionId: importRootSessionId.trim(),
+              sourceProcessesStopped: true,
+            }).then((receipt) => {
+              setImportStatus(formatText(t("imported"), { imported: receipt.imported, idempotent: receipt.idempotent }));
+            }, (error: unknown) => {
+              setImportStatus(error instanceof Error ? error.message : t("importFailed"));
+            }).finally(() => setImporting(false));
+          },
+        }, importing ? t("importing") : t("importAction"))),
+      importStatus === null ? null : React.createElement("p", { role: "status", className: "dsh-deepseek-web-notice" }, importStatus)),
+    snapshot.error === null ? null : React.createElement("p", { role: "alert", className: "dsh-deepseek-web-alert" }, snapshot.error),
+    React.createElement("div", { className: "dsh-deepseek-web-card-footer" },
       React.createElement("button", {
-        type: "button", disabled: !snapshot.dirty || snapshot.saving,
+        type: "button",
+        className: "dsh-deepseek-web-button dsh-deepseek-web-button-secondary",
+        disabled: !snapshot.dirty || snapshot.saving,
         onClick: () => controller.discardSettings(),
       }, t("discard")),
       React.createElement("button", {
         type: "button",
+        className: "dsh-deepseek-web-button dsh-deepseek-web-button-primary",
         disabled: disabled || !snapshot.dirty || snapshot.invalid || snapshot.conflicted || snapshot.saving,
         onClick: () => { void controller.saveSettings().catch(() => undefined); },
       }, snapshot.saving ? t("saving") : t("save"))),
     ),
   );
+}
+
+function chevronIcon(className: string): React.ReactElement {
+  return React.createElement("svg", {
+    className,
+    width: 14,
+    height: 14,
+    viewBox: "0 0 14 14",
+    fill: "none",
+    "aria-hidden": true,
+  }, React.createElement("path", {
+    d: "M3.25 5.25 7 9l3.75-3.75",
+    stroke: "currentColor",
+    strokeWidth: 1.25,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+  }));
 }
 
 export async function apply(ctx: Context): Promise<() => Promise<void>> {
@@ -810,6 +1034,7 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
       () => injected.locale.register(DEEPSEEK_WEB_SETTINGS_LOCALE_NAMESPACE, settingsLocales),
       "deepseek-web: settings dictionaries",
     );
+    injected.effect(installDeepSeekWebClientStyles, "deepseek-web: client styles");
     const reasoningStore = new DeepSeekWebReasoningStore();
     injected.effect(() => {
       void reasoningStore.start(injected.remote[DEEPSEEK_WEB_REASONING_NAMESPACE]);
@@ -927,15 +1152,31 @@ function sameConnectionStatus(
 }
 
 function validDraft(value: DeepSeekWebSettingsDraft): boolean {
-  if (value.powerShellExecutable.includes("\0") || value.powerShellExecutable.length > 1_024) return false;
+  if (!validPowerShellExecutableDraft(value.powerShellExecutable)) return false;
   if (value.browser !== "chrome" && value.browser !== "edge" && value.browser !== "firefox") return false;
-  if (!/^[1-9][0-9]{0,4}$/u.test(value.port)) return false;
-  const port = Number(value.port);
-  if (!Number.isSafeInteger(port) || port > 65_535) return false;
+  if (!validPortDraft(value.port)) return false;
   if (value.browser === "firefox") {
-    return value.firefoxExtensionOrigin === "" || /^moz-extension:\/\/[a-zA-Z0-9_-]+$/u.test(value.firefoxExtensionOrigin);
+    return validFirefoxOriginDraft(value.firefoxExtensionOrigin);
   }
-  return value.chromiumExtensionId === "" || /^[a-p]{32}$/u.test(value.chromiumExtensionId);
+  return validChromiumExtensionIdDraft(value.chromiumExtensionId);
+}
+
+function validPortDraft(value: string): boolean {
+  if (!/^[1-9][0-9]{0,4}$/u.test(value)) return false;
+  const port = Number(value);
+  return Number.isSafeInteger(port) && port <= 65_535;
+}
+
+function validFirefoxOriginDraft(value: string): boolean {
+  return value === "" || /^moz-extension:\/\/[a-zA-Z0-9_-]+$/u.test(value);
+}
+
+function validChromiumExtensionIdDraft(value: string): boolean {
+  return value === "" || /^[a-p]{32}$/u.test(value);
+}
+
+function validPowerShellExecutableDraft(value: string): boolean {
+  return !value.includes("\0") && value.length <= 1_024;
 }
 
 function normalizedSettingValue(
@@ -1010,34 +1251,465 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function cardProps(open: boolean): Record<string, unknown> {
   return {
-    "aria-label": "DeepSeek Web", "data-dsh-plugin-card": DEEPSEEK_WEB_SETTINGS_NAMESPACE,
-    style: {
-      border: "1px solid var(--dsw-alias-border-l2)",
-      borderRadius: "12px",
-      overflow: "hidden",
-      background: open ? "var(--dsw-alias-bg-base)" : "transparent",
-      listStyle: "none",
-    },
+    "aria-label": "DeepSeek Web",
+    "data-dsh-plugin-card": DEEPSEEK_WEB_SETTINGS_NAMESPACE,
+    "data-open": open,
+    className: "dsh-deepseek-web-card",
   };
 }
 
-const fieldStyle = { display: "grid", gap: "4px", marginBlock: "12px" } as const;
-const cardHeaderStyle = {
-  alignItems: "center", background: "transparent", border: 0, cursor: "pointer", display: "grid",
-  gap: "12px", gridTemplateColumns: "minmax(0, 1fr) auto auto", padding: "16px", textAlign: "left", width: "100%",
-} as const;
-const cardBodyStyle = { borderTop: "1px solid var(--dsw-alias-border-l2)", padding: "4px 16px 16px" } as const;
-const cardFooterStyle = { display: "flex", gap: "8px", justifyContent: "flex-end", marginTop: "16px" } as const;
-const mutedTextStyle = { color: "var(--dsw-alias-label-secondary)", fontSize: "0.875rem" } as const;
-const statusTextStyle = { color: "var(--dsw-alias-label-tertiary)", fontSize: "0.8125rem" } as const;
-const pendingStyle = { color: "var(--dsw-alias-status-warning)", fontSize: "0.8125rem" } as const;
-const warningStyle = { color: "var(--dsw-alias-label-secondary)" } as const;
-const reasoningDockStyle = {
-  border: "1px solid var(--dsw-alias-border-l2)", borderRadius: "10px", padding: "8px 12px",
-} as const;
-const reasoningTextStyle = {
-  maxHeight: "180px", overflow: "auto", paddingTop: "8px", whiteSpace: "pre-wrap", wordBreak: "break-word",
-} as const;
+const DEEPSEEK_WEB_CLIENT_STYLE_ID = "@deepseek-pp/dsh-deepseek-web-official-plugin/client.css";
+let deepSeekWebStyleUsers = 0;
+let ownedDeepSeekWebStyle: HTMLStyleElement | undefined;
+
+function installDeepSeekWebClientStyles(): () => void {
+  deepSeekWebStyleUsers += 1;
+  if (typeof document !== "undefined" &&
+      document.querySelector(`style[data-plugin-css="${DEEPSEEK_WEB_CLIENT_STYLE_ID}"]`) === null) {
+    const style = document.createElement("style");
+    style.dataset.plugin = "@deepseek-pp/dsh-deepseek-web-official-plugin";
+    style.dataset.pluginCss = DEEPSEEK_WEB_CLIENT_STYLE_ID;
+    style.textContent = DEEPSEEK_WEB_CLIENT_CSS;
+    document.head.appendChild(style);
+    ownedDeepSeekWebStyle = style;
+  }
+  return () => {
+    deepSeekWebStyleUsers = Math.max(0, deepSeekWebStyleUsers - 1);
+    if (deepSeekWebStyleUsers !== 0 || ownedDeepSeekWebStyle === undefined) return;
+    ownedDeepSeekWebStyle.remove();
+    ownedDeepSeekWebStyle = undefined;
+  };
+}
+
+const DEEPSEEK_WEB_CLIENT_CSS = String.raw`
+.dsh-deepseek-web-card {
+  min-width: 0;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-layer-3);
+  border: .5px solid var(--dsw-alias-border-l4);
+  border-radius: 16px;
+  list-style: none;
+  transition: border-color .16s, background .16s;
+}
+.dsh-deepseek-web-card:hover { border-color: var(--dsw-alias-label-dimmed); }
+.dsh-deepseek-web-card[data-open="true"] {
+  background: var(--dsw-alias-bg-layer-2);
+  border-color: var(--dsw-alias-label-dimmed);
+}
+.dsh-deepseek-web-card-header {
+  appearance: none;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 12px;
+}
+.dsh-deepseek-web-card-header:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: -2px;
+}
+.dsh-deepseek-web-head-text {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dsh-deepseek-web-name {
+  color: var(--dsw-alias-label-primary);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.dsh-deepseek-web-description {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.dsh-deepseek-web-status {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.dsh-deepseek-web-status-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  background: var(--dsw-alias-label-dimmed);
+  border-radius: 50%;
+}
+.dsh-deepseek-web-status[data-phase="connected"] .dsh-deepseek-web-status-dot,
+.dsh-deepseek-web-status[data-phase="busy"] .dsh-deepseek-web-status-dot {
+  background: var(--dsw-alias-state-success-primary);
+}
+.dsh-deepseek-web-status[data-phase="waiting_for_browser"] .dsh-deepseek-web-status-dot {
+  background: var(--dsw-alias-state-warn-primary);
+}
+.dsh-deepseek-web-status[data-phase="error"] .dsh-deepseek-web-status-dot {
+  background: var(--dsw-alias-state-error-primary);
+}
+.dsh-deepseek-web-pending {
+  flex: none;
+  padding: 1px 8px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 17px;
+  white-space: nowrap;
+  background: var(--dsw-alias-bg-module-platform);
+  border-radius: 999px;
+}
+.dsh-deepseek-web-chevron {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  transition: transform .16s;
+}
+.dsh-deepseek-web-chevron-open { transform: rotate(180deg); }
+.dsh-deepseek-web-card-body {
+  min-width: 0;
+  margin: 0 16px;
+  padding-bottom: 8px;
+  border-top: .5px solid var(--dsw-alias-border-l2);
+}
+.dsh-deepseek-web-section {
+  min-width: 0;
+  padding: 16px 0 4px;
+}
+.dsh-deepseek-web-section + .dsh-deepseek-web-section {
+  border-top: .5px solid var(--dsw-alias-border-l2);
+}
+.dsh-deepseek-web-section-head {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  margin-bottom: 4px;
+}
+.dsh-deepseek-web-section-title {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.dsh-deepseek-web-section-description,
+.dsh-deepseek-web-hint,
+.dsh-deepseek-web-error,
+.dsh-deepseek-web-notice,
+.dsh-deepseek-web-alert,
+.dsh-deepseek-web-token-warning,
+.dsh-deepseek-web-state-line {
+  overflow-wrap: anywhere;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.dsh-deepseek-web-section-description,
+.dsh-deepseek-web-hint,
+.dsh-deepseek-web-notice { color: var(--dsw-alias-label-tertiary); }
+.dsh-deepseek-web-hint:empty { display: none; }
+.dsh-deepseek-web-error,
+.dsh-deepseek-web-alert { color: var(--dsw-alias-state-error-primary); }
+.dsh-deepseek-web-alert { padding: 10px 0; }
+.dsh-deepseek-web-field {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 0;
+}
+.dsh-deepseek-web-field + .dsh-deepseek-web-field {
+  border-top: .5px solid var(--dsw-alias-border-l2);
+}
+.dsh-deepseek-web-label {
+  min-width: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.dsh-deepseek-web-control {
+  appearance: none;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 0 12px;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  background: var(--dsw-alias-bg-layer-3);
+  border: .5px solid var(--dsw-alias-border-l4);
+  border-radius: 8px;
+}
+.dsh-deepseek-web-control:hover:not(:disabled) { border-color: var(--dsw-alias-label-dimmed); }
+.dsh-deepseek-web-control:focus-visible {
+  border-color: var(--dsw-alias-brand-primary);
+  outline: 2px solid transparent;
+  box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary);
+}
+.dsh-deepseek-web-control[aria-invalid="true"] {
+  border-color: var(--dsw-alias-state-error-primary);
+}
+.dsh-deepseek-web-control:disabled {
+  color: var(--dsw-alias-label-tertiary);
+  cursor: default;
+  opacity: .65;
+}
+.dsh-deepseek-web-monospace {
+  font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Consolas, monospace);
+}
+.dsh-deepseek-web-select-wrap {
+  min-width: 0;
+  display: block;
+  position: relative;
+}
+.dsh-deepseek-web-select-control { padding-right: 34px; cursor: pointer; }
+.dsh-deepseek-web-select-control:disabled { cursor: default; }
+.dsh-deepseek-web-select-chevron {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  color: var(--dsw-alias-label-tertiary);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+.dsh-deepseek-web-toggle {
+  appearance: none;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 4px 0;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+}
+.dsh-deepseek-web-toggle:hover:not(:disabled) .dsh-deepseek-web-toggle-label {
+  color: var(--dsw-alias-brand-text);
+}
+.dsh-deepseek-web-toggle:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: 2px;
+}
+.dsh-deepseek-web-toggle:disabled { cursor: default; opacity: .5; }
+.dsh-deepseek-web-toggle-label { min-width: 0; flex: 1; }
+.dsh-deepseek-web-switch {
+  box-sizing: border-box;
+  width: 36px;
+  height: 20px;
+  flex: none;
+  padding: 2px;
+  position: relative;
+  background: var(--dsw-alias-border-l3);
+  border-radius: 10px;
+  transition: background .12s;
+}
+.dsh-deepseek-web-switch[data-checked="true"] { background: var(--dsw-alias-brand-primary); }
+.dsh-deepseek-web-switch-thumb {
+  width: 16px;
+  height: 16px;
+  display: block;
+  background: var(--dsw-alias-label-primary-foreground);
+  border-radius: 50%;
+  transition: transform .12s;
+}
+.dsh-deepseek-web-switch[data-checked="true"] .dsh-deepseek-web-switch-thumb {
+  transform: translateX(16px);
+}
+.dsh-deepseek-web-state-line {
+  margin-top: 10px;
+  padding: 8px 10px;
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-bg-module-platform);
+  border-radius: 8px;
+}
+.dsh-deepseek-web-actions {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-top: 12px;
+}
+.dsh-deepseek-web-actions-end { justify-content: flex-end; }
+.dsh-deepseek-web-button {
+  appearance: none;
+  box-sizing: border-box;
+  min-height: 32px;
+  padding: 5px 14px;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: nowrap;
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+.dsh-deepseek-web-button-secondary {
+  color: var(--dsw-alias-label-secondary);
+  background: transparent;
+  border-color: var(--dsw-alias-border-l2);
+}
+.dsh-deepseek-web-button-secondary:hover:not(:disabled) {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+  border-color: var(--dsw-alias-label-dimmed);
+}
+.dsh-deepseek-web-button-primary {
+  color: var(--dsw-alias-bg-layer-3);
+  background: var(--dsw-alias-label-primary);
+}
+.dsh-deepseek-web-button-primary:hover:not(:disabled) { opacity: .86; }
+.dsh-deepseek-web-button-caution {
+  color: var(--dsw-alias-state-error-primary);
+  background: transparent;
+  border-color: var(--dsw-alias-border-l2);
+}
+.dsh-deepseek-web-button-caution:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover-danger);
+  border-color: var(--dsw-alias-state-error-primary);
+}
+.dsh-deepseek-web-button:disabled { cursor: default; opacity: .4; }
+.dsh-deepseek-web-button:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: 1px;
+}
+.dsh-deepseek-web-token-panel {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px;
+  background: var(--dsw-alias-bg-layer-3);
+  border: .5px solid var(--dsw-alias-border-l4);
+  border-radius: 10px;
+}
+.dsh-deepseek-web-token-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+.dsh-deepseek-web-token-value {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  padding: 7px 9px;
+  overflow-x: auto;
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Consolas, monospace);
+  font-size: 12px;
+  white-space: nowrap;
+  background: var(--dsw-alias-bg-module-platform);
+  border-radius: 7px;
+  scrollbar-width: thin;
+}
+.dsh-deepseek-web-token-warning { color: var(--dsw-alias-state-warn-label); }
+.dsh-deepseek-web-check-row {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 1.5;
+  cursor: pointer;
+  border-top: .5px solid var(--dsw-alias-border-l2);
+}
+.dsh-deepseek-web-checkbox {
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin: 2px 0 0;
+  accent-color: var(--dsw-alias-brand-primary);
+}
+.dsh-deepseek-web-checkbox:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: 2px;
+}
+.dsh-deepseek-web-check-row:has(.dsh-deepseek-web-checkbox:disabled) { cursor: default; opacity: .5; }
+.dsh-deepseek-web-card-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 12px 0 4px;
+  background: var(--dsw-alias-bg-layer-2);
+  border-top: .5px solid var(--dsw-alias-border-l2);
+}
+.dsh-deepseek-web-reasoning {
+  min-width: 0;
+  padding: 8px 12px;
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-bg-layer-3);
+  border: .5px solid var(--dsw-alias-border-l4);
+  border-radius: 10px;
+}
+.dsh-deepseek-web-reasoning-summary {
+  font-size: 13px;
+  cursor: pointer;
+}
+.dsh-deepseek-web-reasoning-summary:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: 2px;
+}
+.dsh-deepseek-web-reasoning-text {
+  max-height: 180px;
+  padding-top: 8px;
+  overflow: auto;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+@media (max-width: 520px) {
+  .dsh-deepseek-web-card-header { gap: 8px; padding: 12px 14px; }
+  .dsh-deepseek-web-card-body { margin: 0 14px; }
+  .dsh-deepseek-web-token-row { grid-template-columns: minmax(0, 1fr); }
+  .dsh-deepseek-web-token-row .dsh-deepseek-web-button { justify-self: start; }
+  .dsh-deepseek-web-actions .dsh-deepseek-web-button { flex: 1 1 auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dsh-deepseek-web-card,
+  .dsh-deepseek-web-chevron,
+  .dsh-deepseek-web-switch,
+  .dsh-deepseek-web-switch-thumb { transition: none; }
+}
+`;
 
 type Translate = (key: string) => string;
 
