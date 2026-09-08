@@ -299,6 +299,18 @@ describe("official web real-acceptance read-only verifier", () => {
     }));
   });
 
+  it("ignores injected context messages when counting direct user turns", () => {
+    const entry = fixture.manifest.readonly[3]!;
+    const raw = fixture.raw.get(entry.session_id)!;
+    const proof = fixture.proof.get(entry.proof_file)!;
+    const injected = insertEvent(raw, event("user/message", {
+      role: "user",
+      source: { kind: "plugin", plugin: "runtime-context", form: "snapshot" },
+      content: [{ type: "text", text: "Injected runtime context." }],
+    }));
+    expect(() => acceptance.verifyReadOnlyEvidence(injected, entry, proof)).not.toThrow();
+  });
+
   it("proves read-before-edit correlation and derives the exact final bytes from the official edit call", () => {
     const entry = fixture.manifest.editor;
     const raw = fixture.raw.get(entry.session_id)!;

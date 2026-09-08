@@ -284,12 +284,12 @@ export function verifyReadOnlyEvidence(raw, expected, proofBytes, options = {}) 
   scenarioUnless(users.length === 2 && starts.length === 3 && ends.length === 3 && answers.length === 3 &&
     calls.length === 1 && results.length === 1 && turnStarts.length === 2 && turnEnds.length === 2,
   "OFFICIAL_WEB_ACCEPTANCE_READONLY_INVALID");
-  scenarioUnless(ofType(readEvents, "user/message").length === users.length &&
-    ofType(readEvents, "approval/asked").length === 0 && ofType(readEvents, "approval/decided").length === 0,
+  scenarioUnless(ofType(readEvents, "approval/asked").length === 0 &&
+    ofType(readEvents, "approval/decided").length === 0,
   "OFFICIAL_WEB_ACCEPTANCE_READONLY_INVALID");
   if (additionalTurns === 0) {
     scenarioUnless(ofType(events, "tool/call").length === 1 && ofType(events, "tool/result").length === 1 &&
-      ofType(events, "user/message").length === 2 && ofType(events, "approval/asked").length === 0 &&
+      userMessages(events).length === 2 && ofType(events, "approval/asked").length === 0 &&
       ofType(events, "approval/decided").length === 0, "OFFICIAL_WEB_ACCEPTANCE_READONLY_INVALID");
   }
   requireTupleSequence(starts, [[1, 1], [1, 2], [2, 1]], "OFFICIAL_WEB_ACCEPTANCE_READONLY_INVALID");
@@ -352,10 +352,9 @@ export function verifyEditorEvidence(raw, expected, files) {
   "OFFICIAL_WEB_ACCEPTANCE_EDITOR_INVALID");
   const allCalls = ofType(decoded.events, "tool/call");
   scenarioUnless(allCalls.length === 3 && allCalls.map((event) => event.data.name).join("\n") === "read\nread\nedit" &&
-    ofType(decoded.events, "tool/result").length === 3 && ofType(decoded.events, "user/message").length === 3 &&
+    ofType(decoded.events, "tool/result").length === 3 && userMessages(decoded.events).length === 3 &&
     ofType(decoded.events, "approval/asked").length === 0 && ofType(decoded.events, "approval/decided").length === 0,
   "OFFICIAL_WEB_ACCEPTANCE_EDITOR_INVALID");
-  scenarioUnless(ofType(events, "user/message").length === users.length, "OFFICIAL_WEB_ACCEPTANCE_EDITOR_INVALID");
   requireTupleSequence(starts, [[3, 1], [3, 2], [3, 3]], "OFFICIAL_WEB_ACCEPTANCE_EDITOR_INVALID");
   requireTupleSequence(ends, [[3, 1], [3, 2], [3, 3]], "OFFICIAL_WEB_ACCEPTANCE_EDITOR_INVALID");
   requireTupleSequence(answers, [[3, 1], [3, 2], [3, 3]], "OFFICIAL_WEB_ACCEPTANCE_EDITOR_INVALID");
@@ -429,10 +428,9 @@ export function verifyPowerShellEvidence(raw, expected, files) {
   scenarioUnless(users.length === 1 && starts.length === 2 && ends.length === 2 && answers.length === 2 &&
     calls.length === 1 && results.length === 1 && asked.length === 1 && decided.length === 1 &&
     turnStarts.length === 1 && turnEnds.length === 1, "OFFICIAL_WEB_ACCEPTANCE_POWERSHELL_INVALID");
-  scenarioUnless(ofType(events, "user/message").length === users.length, "OFFICIAL_WEB_ACCEPTANCE_POWERSHELL_INVALID");
   const allCalls = ofType(decoded.events, "tool/call");
   scenarioUnless(allCalls.length === 2 && allCalls[0].data.name === "read" && allCalls[1].data.name === "pwsh" &&
-    ofType(decoded.events, "tool/result").length === 2 && ofType(decoded.events, "user/message").length === 3 &&
+    ofType(decoded.events, "tool/result").length === 2 && userMessages(decoded.events).length === 3 &&
     ofType(decoded.events, "approval/asked").length === 1 && ofType(decoded.events, "approval/decided").length === 1,
   "OFFICIAL_WEB_ACCEPTANCE_POWERSHELL_INVALID");
   requireTupleSequence(starts, [[3, 1], [3, 2]], "OFFICIAL_WEB_ACCEPTANCE_POWERSHELL_INVALID");
