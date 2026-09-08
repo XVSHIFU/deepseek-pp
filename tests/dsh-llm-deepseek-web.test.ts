@@ -35,6 +35,11 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
+function diagnosticMessage(message: string) {
+  const escaped = message.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return expect.stringMatching(new RegExp(`^${escaped} \\[web-diag:v1 request=[a-f0-9]{16} stage=(browser_terminal|broker_error|cancel_settlement) reason=[A-Za-z_]+ elapsed_ms=\\d+\\]$`));
+}
+
 describe("DeepSeek Web DSH adapter", () => {
   it("advertises default and expert browser modes with independent thinking and no retries", async () => {
     const adapter = new DeepSeekWebAdapter({ broker: new FakeBroker([]) });
@@ -232,7 +237,9 @@ describe("DeepSeek Web DSH adapter", () => {
     await ctx.plugin(LlmRuntime);
     registerDeepSeekWebAdapter(ctx, new FakeBroker([event]));
     const chunks = await collect(ctx.llm.stream(generateOptions()));
-    expect(chunks).toEqual([{ type: "finish", reason }]);
+    expect(chunks).toEqual([{ type: "finish", reason: { ...reason, failure: {
+      ...reason.failure, message: diagnosticMessage(reason.failure.message),
+    } } }]);
   });
 
   it("rejects a browser-reported local budget code without recovery or another generate", async () => {
@@ -258,7 +265,7 @@ describe("DeepSeek Web DSH adapter", () => {
           kind: "error",
           failure: {
             code: "WEB_MODEL_PROTOCOL",
-            message: "The browser reported a reserved local failure code.",
+            message: diagnosticMessage("The browser reported a reserved local failure code."),
           },
         },
       }]);
@@ -297,7 +304,7 @@ describe("DeepSeek Web DSH adapter", () => {
         kind: "error",
         failure: {
           code: "WEB_MODEL_PROTOCOL",
-          message: "The DeepSeek Web broker stream ended without one valid terminal event.",
+          message: diagnosticMessage("The DeepSeek Web broker stream ended without one valid terminal event."),
         },
       },
     }]);
@@ -335,7 +342,7 @@ describe("DeepSeek Web DSH adapter", () => {
       type: "finish",
       reason: {
         kind: "error",
-        failure: { code: "WAITING_FOR_BROWSER", message: "Waiting for an authenticated DeepSeek++ browser broker." },
+        failure: { code: "WAITING_FOR_BROWSER", message: expect.stringMatching(/^Waiting for an authenticated DeepSeek\+\+ browser broker\. \[web-diag:v1 .*reason=WAITING_FOR_BROWSER /) },
       },
     }]);
     expect(broker.generateCount).toBe(1);
@@ -365,6 +372,32 @@ describe("DeepSeek Web DSH adapter", () => {
     const adapter = new DeepSeekWebAdapter({ broker });
     await expect(collect(adapter.stream(generateOptions()))).rejects.toMatchObject({ code: "WEB_MODEL_AMBIGUOUS" });
     expect(broker.generateCount).toBe(1);
+  });
+
+  it.each(['deepseek_chain_unverified', 'browser_worker_restarted', 'private-cookie-canary'])('retains only safe terminal diagnostics: %s', async reason => {
+    const broker = new FakeBroker([{ type: 'ambiguous', reason }]);
+    const adapter = new DeepSeekWebAdapter({ broker, createRequestId: () => 'request-private-canary' });
+    const chunks = await collect(adapter.stream(generateOptions()));
+    const encoded = JSON.stringify(chunks);
+    expect(encoded).toContain(`stage=browser_terminal reason=${reason === 'private-cookie-canary' ? 'unknown' : reason}`);
+    expect(encoded).not.toContain('private-cookie-canary');
+    expect(encoded).not.toContain('request-private-canary');
+    expect(chunks.at(-1)).toMatchObject({ reason: { kind: 'error', failure: { code: 'WEB_MODEL_AMBIGUOUS' } } });
+    expect(broker.requests).toHaveLength(1);
+  });
+
+  it('keeps quarantine diagnostics through the official runtime without changing replay policy', async () => {
+    const ctx = new Context();
+    await ctx.plugin(LlmRuntime);
+    const broker = new ThrowingBroker(new BrokerError('PROTOCOL_VIOLATION', 'unknown', 'SESSION_QUARANTINED'));
+    registerDeepSeekWebAdapter(ctx, broker);
+    const chunks = await collect(ctx.llm.stream(generateOptions()));
+    expect(chunks.at(-1)).toMatchObject({ reason: { kind: 'error', failure: {
+      code: 'WEB_MODEL_AMBIGUOUS', message: expect.stringContaining('stage=broker_error reason=SESSION_QUARANTINED'),
+    } } });
+    expect(broker.generateCount).toBe(1);
+    expect(new BrokerError('PROTOCOL_VIOLATION', 'unknown', 'PRIVATE_CANARY').remoteCode).toBeUndefined();
+    await ctx.fiber.dispose();
   });
 
   it("propagates AbortSignal through broker cancellation and emits one aborted finish", async () => {
@@ -402,7 +435,7 @@ describe("DeepSeek Web DSH adapter", () => {
       type: "finish",
       reason: { kind: "error", failure: {
         code: "WEB_MODEL_CANCEL_UNCONFIRMED",
-        message: "Cancellation was requested, but the web result or cleanup could not be confirmed. Do not replay automatically.",
+        message: diagnosticMessage("Cancellation was requested, but the web result or cleanup could not be confirmed. Do not replay automatically."),
       } },
     }]);
     expect(chunks).not.toContainEqual(expect.objectContaining({ reason: { kind: "tool-calls" } }));
@@ -425,7 +458,7 @@ describe("DeepSeek Web DSH adapter", () => {
       type: "finish",
       reason: { kind: "error", failure: {
         code: "WEB_MODEL_CANCEL_UNCONFIRMED",
-        message: "Cancellation was requested, but the web result or cleanup could not be confirmed. Do not replay automatically.",
+        message: diagnosticMessage("Cancellation was requested, but the web result or cleanup could not be confirmed. Do not replay automatically."),
       } },
     }]);
     const blocked = await collect(ctx.llm.stream(generateOptions()));
@@ -448,7 +481,7 @@ describe("DeepSeek Web DSH adapter", () => {
       type: "finish",
       reason: { kind: "error", failure: {
         code: "WEB_MODEL_CANCEL_UNCONFIRMED",
-        message: "Cancellation was requested, but the web result or cleanup could not be confirmed. Do not replay automatically.",
+        message: diagnosticMessage("Cancellation was requested, but the web result or cleanup could not be confirmed. Do not replay automatically."),
       } },
     });
     await waitFor(() => broker.cleanupCount === 1);

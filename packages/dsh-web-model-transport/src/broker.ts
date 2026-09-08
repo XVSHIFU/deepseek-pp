@@ -38,11 +38,19 @@ export type ExternalOutcome = "not_started" | "started" | "unknown";
 export class BrokerError extends Error {
   readonly code: BrokerErrorCode;
   readonly externalOutcome: ExternalOutcome;
+  readonly remoteCode?: string;
 
-  constructor(code: BrokerErrorCode, externalOutcome: ExternalOutcome) {
+  constructor(code: BrokerErrorCode, externalOutcome: ExternalOutcome, remoteCode?: string) {
     super(code);
     this.name = "BrokerError";
     this.code = code;
     this.externalOutcome = externalOutcome;
+    // Remote strings are untrusted; never retain arbitrary error text or tokens.
+    if (remoteCode && [
+      'DEEPSEEK_AUTH_REQUIRED', 'DEEPSEEK_PREPARATION_FAILED', 'MODEL_PREPARATION_FAILED',
+      'BROKER_BUSY', 'SESSION_QUARANTINED', 'SESSION_BUSY', 'CAPACITY_EXCEEDED',
+      'REQUEST_CAPACITY_EXCEEDED', 'DUPLICATE_REQUEST', 'REQUEST_IDENTITY_MISMATCH',
+      'REASONING_NOT_NEGOTIATED', 'REASONING_CALLBACK_REQUIRED', 'REQUEST_ABORTED',
+    ].includes(remoteCode)) this.remoteCode = remoteCode;
   }
 }

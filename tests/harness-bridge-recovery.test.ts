@@ -253,6 +253,19 @@ describe('browser metadata recovery index', () => {
     expect(fixture.turn.generate).toHaveBeenCalledTimes(2);
   });
 
+  it('preserves the adapter quarantine reason without unquarantining or replaying', async () => {
+    const storage = memoryStorage();
+    const fixture = await setup(storage, {
+      generate: vi.fn().mockRejectedValue(new DeepSeekTurnAdapterError('SESSION_QUARANTINED')),
+    });
+    fixture.client.receive(generate());
+    await vi.waitFor(() => expect(fixture.client.sent.at(-1)).toMatchObject({ error: { data: {
+      error_code: 'SESSION_QUARANTINED', external_outcome: 'unknown', retryable: false,
+    } } }));
+    expect(storage.index().records[0]).toMatchObject({ status: 'ambiguous' });
+    expect(fixture.turn.generate).toHaveBeenCalledOnce();
+  });
+
   it('retains old authority tombstones across pairing changes and fences a late old terminal', async () => {
     const storage = memoryStorage();
     const completion = deferred<ModelTerminalEvent>();

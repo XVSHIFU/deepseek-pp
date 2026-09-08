@@ -59,6 +59,8 @@ npm run package:web-harness -- --output ../deepseek-web-harness-build --name dee
 
 输出目录必须不存在、位于源码仓库之外，而且父目录已经存在。重复执行请换一个新目录名；脚本不覆盖旧包，也不自动删除失败现场。
 
+如果交付专项复测包，可以加 `--instructions docs/verification/某份说明.md`，将已提交的说明一并放入包内 `复测说明.md`。
+
 此命令复用现有构建与组件校验器，依次重新构建插件和 Chrome/Edge/Firefox 扩展，再生成：
 
 ```text

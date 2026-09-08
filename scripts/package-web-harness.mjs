@@ -17,11 +17,12 @@ export function parseOptions(args) {
   const options = {};
   for (let i = 0; i < args.length; i += 2) {
     const key = args[i];
-    if (!['--output', '--name'].includes(key) || !args[i + 1] || Object.hasOwn(options, key.slice(2))) fail('Use --output <new directory outside repository> [--name <archive name>]');
+    if (!['--output', '--name', '--instructions'].includes(key) || !args[i + 1] || Object.hasOwn(options, key.slice(2))) fail('Use --output <new directory outside repository> [--name <archive name>] [--instructions <docs/verification/file.md>]');
     options[key.slice(2)] = args[i + 1];
   }
   if (!options.output) fail('--output is required');
   if (options.name && !/^[a-z0-9][a-z0-9-]{0,79}$/.test(options.name)) fail('Invalid archive name');
+  if (options.instructions && (!/^docs\/verification\/[^/\\]+\.md$/u.test(options.instructions) || options.instructions.includes('..'))) fail('Instructions must be one Markdown file in docs/verification');
   return options;
 }
 
@@ -95,6 +96,7 @@ export async function packageWebHarness(options) {
     await put(path, text.replace(/deepseek-web-harness-\d{8}(?:-r\d+)?/g, name));
   }
   await put('LICENSE', await readFile(join(source, 'LICENSE')));
+  if (options.instructions) await put('复测说明.md', await readSourceAsset(source, options.instructions));
   for (const path of [...images].sort()) await put(path, await readSourceAsset(source, path));
   for (const file of component.files.filter(file => /^(plugin|extensions|vendor)\//.test(file.path))) {
     const bytes = await readFile(join(candidate, file.path));

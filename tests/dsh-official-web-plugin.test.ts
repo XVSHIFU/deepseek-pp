@@ -283,7 +283,7 @@ describe("official DeepSeek Web incremental plugin", () => {
         kind: "error",
         failure: {
           code: "WAITING_FOR_BROWSER",
-          message: "Waiting for an authenticated DeepSeek++ browser broker.",
+          message: expect.stringMatching(/^Waiting for an authenticated DeepSeek\+\+ browser broker\. \[web-diag:v1 request=[a-f0-9]{16} stage=broker_error reason=WAITING_FOR_BROWSER elapsed_ms=\d+\]$/),
         },
       },
     }]);

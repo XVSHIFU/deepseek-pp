@@ -349,11 +349,12 @@ export class DeepSeekWebModelTurnAdapter implements WebModelTurnPort {
         return this.terminal(request.request_id, ambiguous('consumer_callback_outcome_unknown'));
       }
 
-      if (malformedToolIntent && (emittedToolCall || descriptors.length === 0)) {
+      const malformedWrapper = hasMalformedToolWrapper(lastVisibleText, toolNames);
+      if ((malformedToolIntent || malformedWrapper) && (emittedToolCall || descriptors.length === 0)) {
         return this.terminal(request.request_id, failedToolCall());
       }
       const correctionRequired = !emittedToolCall && descriptors.length > 0 &&
-        (malformedToolIntent || isStandaloneMalformedToolMarker(lastVisibleText, toolNames));
+        (malformedToolIntent || malformedWrapper || isStandaloneMalformedToolMarker(lastVisibleText, toolNames));
       if (safeNormalizeMessageId(this.client, result.responseMessageId, 'response_message_id') === null) {
         return this.terminal(request.request_id, ambiguous('response_message_id_missing'));
       }
@@ -468,7 +469,8 @@ export class DeepSeekWebModelTurnAdapter implements WebModelTurnPort {
           if (fault === 'tool') return this.terminal(request.request_id, failedToolCall());
           return this.terminal(request.request_id, ambiguous('consumer_callback_outcome_unknown'));
         }
-        if (isStandaloneMalformedToolMarker(correctionVisibleText, toolNames) ||
+        if (hasMalformedToolWrapper(correctionVisibleText, toolNames) ||
+            isStandaloneMalformedToolMarker(correctionVisibleText, toolNames) ||
             (!emittedToolCall && correctionVisibleText.trim() === '')) {
           return this.terminal(request.request_id, failedToolCall());
         }
@@ -658,6 +660,24 @@ function isStandaloneMalformedToolMarker(text: string, toolNames: ReadonlySet<st
       return false;
     }
   });
+}
+
+/** Mode A correction hint only: wrappers never become executable calls. */
+function hasMalformedToolWrapper(text: string, toolNames: ReadonlySet<string>): boolean {
+  // Leave quoted/fenced examples alone. Accept leading prose, as in real model replies.
+  if (/```|~~~/u.test(text)) return false;
+  const wrappers = [...text.matchAll(/(?:^|\n) {0,3}<(tool_call|invoke)\s+name\s*=\s*(["'])([A-Za-z_][A-Za-z0-9_.:-]*)\2\s*>/gu)];
+  for (const wrapper of wrappers) {
+    if (!toolNames.has(wrapper[3]!)) continue;
+    const prefix = text.slice(0, wrapper.index).trimEnd();
+    if (/(?:example|示例|例如|格式示范)[:：]?$/iu.test(prefix)) continue;
+    const bodyStart = wrapper.index! + wrapper[0].length;
+    const close = text.indexOf(`</${wrapper[1]}>`, bodyStart);
+    // Even invalid JSON needs a correction; the strict parser validates the next reply.
+    if (text.slice(bodyStart, close < 0 ? undefined : close).trimStart().startsWith('{') &&
+        (close < 0 || text.slice(close + wrapper[1]!.length + 3).trim() === '')) return true;
+  }
+  return false;
 }
 
 async function readVerifiedTurn(

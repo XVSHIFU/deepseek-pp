@@ -91,6 +91,7 @@ describe("DSH web model loopback host", () => {
     ["MODEL_PREPARATION_FAILED", "MODEL_PREPARATION_FAILED"],
     ["BROKER_BUSY", "BROKER_BUSY"],
     ["PRIVATE_UPSTREAM_VALUE", "PROTOCOL_VIOLATION"],
+    ["SESSION_QUARANTINED", "PROTOCOL_VIOLATION"],
   ])("preserves only the safe pre-start remote error %s", async (remoteCode, expectedCode) => {
     const { host, address } = await startHost();
     const browser = await connectAndAuthenticate(address);
@@ -99,6 +100,7 @@ describe("DSH web model loopback host", () => {
       code: expectedCode,
       message: expectedCode,
       externalOutcome: "not_started",
+      ...(remoteCode === 'SESSION_QUARANTINED' ? { remoteCode } : {}),
     });
     const request = await nextFrame(browser);
     if (!("method" in request) || request.method !== "model.generate") throw new Error("EXPECTED_GENERATE");

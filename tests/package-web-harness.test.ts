@@ -21,6 +21,13 @@ describe('portable Harness build entry', () => {
     expect(localImages('![a](assets/a.png) ![b](assets/a.png) ![c](https://example.com/c.png) ![d](docs/images/d.svg)'))
       .toEqual(['assets/a.png', 'docs/images/d.svg']);
   });
+  it('allows a tracked verification guide but rejects arbitrary instruction paths', () => {
+    expect(parseOptions(['--output', '../build', '--instructions', 'docs/verification/Windows_复测.md']).instructions)
+      .toBe('docs/verification/Windows_复测.md');
+    for (const path of ['../secret.md', 'docs/verification/../secret.md', 'docs/verification/a/b.md', 'C:\\secret.md']) {
+      expect(() => parseOptions(['--output', '../build', '--instructions', path])).toThrow();
+    }
+  });
   it.each(['../secret', 'assets/../secret', '/absolute.png', 'C:\\secret', 'assets//a.png'])('rejects unsafe picture %s', path => {
     expect(() => localImages(`![image](${path})`)).toThrow();
   });

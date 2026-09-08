@@ -1,5 +1,13 @@
 # Web Model Broker × Local DSH — Active Progress
 
+## 2026-09-08 另一台 Windows 停止问题：格式修复与诊断包
+
+- 用户日志证实两条问题路径：带 `name` 属性的 `<tool_call>` 被当作普通文字后 completed；另有 `TOOL_CALL_INVALID` 和低于一秒的 `WEB_MODEL_AMBIGUOUS`。后两者的具体网页侧原因仍需出错电脑复测，不归因为权限或旧十秒超时。
+- Mode A 对已广告工具的 `<tool_call name="…">` / `<invoke name="…">` 增加有界纠正信号，包含前置说明、单引号、残缺 JSON / 未闭合包装；不直接执行包装文本，最多一次纠正，纠正后仍须通过原严格工具解析与网页历史链验证。围栏、引用、缩进示例及未知工具不自动执行；Mode B 解析器未改。
+- 保留浏览器准备阶段的白名单原因码，经 broker 传到 Harness；失败消息增加 `web-diag:v1`、请求 ID 的 SHA-256 前 16 位、阶段、原因、耗时。未知原因不透传，未增加凭据/请求正文记录，不自动上传，不改变 quarantine、取消、超时或不重放策略。
+- 核心四文件 162/162、扩展相关九文件 105/105（含交叉覆盖）、模拟桥接/取消/重连 24/24、打包 19/19 均通过；compile、prompt freeze 7/7、插件构建通过。部分旧测试最初因新增诊断后缀失败，已保留原错误码/消息前缀断言并补齐严格后缀和隐私断言，复跑通过。
+- 更新步骤见 `docs/verification/Windows_工具纠正与诊断复测.md`。需在出错电脑同时原位更新浏览器扩展与 Harness 插件；保留扩展 ID、配对及原 vendor，不要求重装完整环境。源码提交后通过 `package:web-harness --instructions` 生成含复测说明的本地更新包；实际网页复测待用户完成，本轮未发布或替换正式 Release。
+
 ## 2026-09-08 GitHub 开发恢复验证完成
 
 - 用户授权将 Harness 补丁源码公开保存到 `XVSHIFU/deepseek-harness` 的 `codex/web-request-budget` 分支。已从回收站仓库独立克隆恢复并推送原提交 `34d57aed2e386af0b61874390c86fc5915c51b1a`，随后直接从 GitHub 新克隆验证 HEAD 和补丁源文件可获取；`master` 仍为 `76fda729799fe9b3848dbe2c211d4b231032b81e`，未创建 PR。

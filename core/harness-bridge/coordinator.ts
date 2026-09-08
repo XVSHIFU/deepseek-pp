@@ -549,7 +549,9 @@ export class HarnessBridgeCoordinator {
 
 function safePreparationErrorCode(error: unknown): string {
   if (error instanceof DeepSeekTurnAdapterError &&
-      (error.code === 'DEEPSEEK_AUTH_REQUIRED' || error.code === 'DEEPSEEK_PREPARATION_FAILED')) {
+      ['DEEPSEEK_AUTH_REQUIRED', 'DEEPSEEK_PREPARATION_FAILED', 'SESSION_QUARANTINED',
+        'SESSION_BUSY', 'CAPACITY_EXCEEDED', 'DUPLICATE_REQUEST', 'REQUEST_IDENTITY_MISMATCH',
+        'REASONING_NOT_NEGOTIATED', 'REASONING_CALLBACK_REQUIRED', 'REQUEST_ABORTED'].includes(error.code)) {
     return error.code;
   }
   return 'MODEL_PREPARATION_FAILED';

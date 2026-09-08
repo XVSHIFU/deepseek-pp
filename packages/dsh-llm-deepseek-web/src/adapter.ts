@@ -29,6 +29,7 @@ import {
 } from "./constants.ts";
 import { canonicalJson, serializeGenerateRequest, type RequestIdentityFactory } from "./request.ts";
 import { GenerationScheduler } from "./generation-scheduler.ts";
+import { diagnosticSuffix } from "./diagnostics.ts";
 import { deepSeekWebRequestBudget } from "./request-budget.ts";
 
 const NO_RETRY_POLICY: ResolvedRetryPolicy = resolveRetryPolicy(
@@ -134,6 +135,14 @@ export class DeepSeekWebAdapter extends LlmAdapter {
       throw normalizeAdapterError(error, options.signal);
     }
 
+    const diagnosticStartedAt = performance.now();
+    const diagnose = (chunk: StreamChunk, stage: 'browser_terminal' | 'cancel_settlement', reason?: string): StreamChunk => {
+      if (chunk.type !== 'finish' || chunk.reason.kind !== 'error') return chunk;
+      const failure = chunk.reason.failure;
+      return { ...chunk, reason: { ...chunk.reason, failure: { ...failure,
+        message: failure.message + diagnosticSuffix(request.request_id, diagnosticStartedAt, stage, reason),
+      } } };
+    };
     let terminal = false;
     const reasoningVisible = request.options.thinking_enabled;
     if (reasoningVisible) this.publishReasoning({
@@ -185,7 +194,7 @@ export class DeepSeekWebAdapter extends LlmAdapter {
           iteratorCleanupHandled = true;
           if (textIndex !== undefined) contentBlocks += 1;
           yield* closeText();
-          yield terminalAfterAbort(event);
+          yield diagnose(terminalAfterAbort(event), 'cancel_settlement', event?.type === 'ambiguous' ? event.reason : undefined);
           terminal = true;
           return;
         }
@@ -199,7 +208,7 @@ export class DeepSeekWebAdapter extends LlmAdapter {
           iteratorCleanupHandled = true;
           if (textIndex !== undefined) contentBlocks += 1;
           yield* closeText();
-          yield terminalAfterAbort(settled);
+          yield diagnose(terminalAfterAbort(settled), 'cancel_settlement', settled?.type === 'ambiguous' ? settled.reason : undefined);
           terminal = true;
           return;
         }
@@ -267,7 +276,7 @@ export class DeepSeekWebAdapter extends LlmAdapter {
               }
               if ((event.finish_reason === "tool_calls") !== (toolCallBlocks > 0)) throw protocolFailure();
             }
-            yield terminalFinish(event);
+            yield diagnose(terminalFinish(event), 'browser_terminal', event.type === 'ambiguous' ? event.reason : event.type === 'failed' ? event.error.code : undefined);
             terminal = true;
             return;
           default:
@@ -277,7 +286,10 @@ export class DeepSeekWebAdapter extends LlmAdapter {
       if (!terminal) throw protocolFailure();
     } catch (error) {
       if (error instanceof BrokerError && error.externalOutcome === "not_started") cancellationAllowed = false;
-      throw normalizeAdapterError(error, options.signal);
+      const normalized = normalizeAdapterError(error, options.signal);
+      throw new LlmError(normalized.message + diagnosticSuffix(request.request_id, diagnosticStartedAt, 'broker_error',
+        error instanceof BrokerError ? error.remoteCode ?? error.code : undefined),
+      normalized instanceof LlmError ? normalized.code : 'WEB_MODEL_TRANSPORT');
     } finally {
       if (reasoningVisible) this.publishReasoning({
         phase: "end", sessionId: request.session_id, requestId: request.request_id,

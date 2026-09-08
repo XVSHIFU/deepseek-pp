@@ -810,5 +810,5 @@ function preStartRemoteError(frame: JsonRpcErrorResponse): BrokerError {
         return new BrokerError(frame.error.data.error_code, outcome);
     }
   }
-  return new BrokerError("PROTOCOL_VIOLATION", outcome);
+  return new BrokerError("PROTOCOL_VIOLATION", outcome, frame.error.data.error_code);
 }

@@ -846,6 +846,11 @@ describe('DeepSeekWebModelTurnAdapter', () => {
     '[调用 local_agent_read]\n{"path":"README.md"}',
     '[call local_agent_read]\r\n{\r\n  "path": "README.md",\r\n  "nested": {"values": ["a", "b"]}\r\n}',
     '[调用 local_agent_read] {"path":"README.md"}\n[调用 local_agent_read]\n{"path":"other.md"}',
+    '<tool_call name="local_agent_read">\n{"path":"README.md"}\n</tool_call>',
+    '让我先检查文件。\n\n<tool_call name="local_agent_read">\n{"path":"README.md"}\n</tool_call>',
+    "<invoke name='local_agent_read'>{\"path\":\"README.md\"}</invoke>",
+    '<tool_call name="local_agent_read">{invalid json}</tool_call>',
+    '<tool_call name="local_agent_read">{"path":"README.md"}',
   ])('corrects bracket intent into a formal tool call on the verified page chain: %s', async (text) => {
     const parents: Array<number | null> = [];
     const client = fakeClient({
@@ -893,6 +898,12 @@ describe('DeepSeekWebModelTurnAdapter', () => {
     '    [调用 local_agent_read] {"path":"README.md"}',
     '[调用 local_agent_read] {"path":"README.md"}\nThis is an example.',
     '[调用 local_agent_read] ["README.md"]',
+    '```xml\n<tool_call name="local_agent_read">{"path":"README.md"}</tool_call>\n```',
+    '`<tool_call name="local_agent_read">{"path":"README.md"}</tool_call>`',
+    '> <tool_call name="local_agent_read">{"path":"README.md"}</tool_call>',
+    '    <tool_call name="local_agent_read">{"path":"README.md"}</tool_call>',
+    'Example:\n<tool_call name="local_agent_read">{"path":"README.md"}</tool_call>',
+    '<tool_call name="unknown_tool">{"path":"README.md"}</tool_call>',
   ])('keeps ordinary or unadvertised marker text as text without correction: %s', async (text) => {
     const streamer: TestStreamer = vi.fn(async (_input, callbacks) => {
       callbacks.onTextChunk?.(text, '');
@@ -934,7 +945,8 @@ describe('DeepSeekWebModelTurnAdapter', () => {
     expect(sessions.getSession('session-1')).toMatchObject({ parentMessageId: 13, messageCount: 4, quarantined: false });
   });
 
-  it.each(['[调用 local_agent_read]', '[调用 local_agent_read]\n{"path":"README.md"}', ''])('rejects a still malformed or empty correction without a third request: %s', async (answer) => {
+  it.each(['[调用 local_agent_read]', '[调用 local_agent_read]\n{"path":"README.md"}',
+    '继续读取。\n<tool_call name="local_agent_read">{"path":"README.md"}</tool_call>', ''])('rejects a still malformed or empty correction without a third request: %s', async (answer) => {
     let attempts = 0;
     const streamer: TestStreamer = vi.fn(async (_input, callbacks) => {
       callbacks.onTextChunk?.(++attempts === 1 ? '[调用 local_agent_read]' : answer, '');

@@ -17,11 +17,27 @@ import {
 var BrokerError = class extends Error {
   code;
   externalOutcome;
-  constructor(code, externalOutcome) {
+  remoteCode;
+  constructor(code, externalOutcome, remoteCode) {
     super(code);
     this.name = "BrokerError";
     this.code = code;
     this.externalOutcome = externalOutcome;
+    if (remoteCode && [
+      "DEEPSEEK_AUTH_REQUIRED",
+      "DEEPSEEK_PREPARATION_FAILED",
+      "MODEL_PREPARATION_FAILED",
+      "BROKER_BUSY",
+      "SESSION_QUARANTINED",
+      "SESSION_BUSY",
+      "CAPACITY_EXCEEDED",
+      "REQUEST_CAPACITY_EXCEEDED",
+      "DUPLICATE_REQUEST",
+      "REQUEST_IDENTITY_MISMATCH",
+      "REASONING_NOT_NEGOTIATED",
+      "REASONING_CALLBACK_REQUIRED",
+      "REQUEST_ABORTED"
+    ].includes(remoteCode)) this.remoteCode = remoteCode;
   }
 };
 
@@ -1926,7 +1942,7 @@ function preStartRemoteError(frame) {
         return new BrokerError(frame.error.data.error_code, outcome);
     }
   }
-  return new BrokerError("PROTOCOL_VIOLATION", outcome);
+  return new BrokerError("PROTOCOL_VIOLATION", outcome, frame.error.data.error_code);
 }
 
 // ../dsh-llm-deepseek-web/src/constants.ts
@@ -2116,6 +2132,61 @@ var GenerationScheduler = class {
   }
 };
 
+// ../dsh-llm-deepseek-web/src/diagnostics.ts
+import { createHash as createHash5 } from "node:crypto";
+var REASONS = /* @__PURE__ */ new Set([
+  "browser_worker_restarted",
+  "browser_recovery_failed",
+  "consumer_callback_outcome_unknown",
+  "deepseek_turn_outcome_unknown",
+  "deepseek_stream_incomplete",
+  "response_message_id_missing",
+  "request_message_id_missing",
+  "deepseek_chain_unverified",
+  "adapter_state_inconsistent",
+  "deepseek_turn_timeout",
+  "deepseek_dispatch_abort_outcome_unknown",
+  "generation_timeout",
+  "accept_timeout",
+  "request_timeout",
+  "browser_disconnected",
+  "connection_closed",
+  "connection_lost",
+  "host_stopped",
+  "send_outcome_unknown",
+  "stream_limit_exceeded",
+  "DEEPSEEK_AUTH_REQUIRED",
+  "DEEPSEEK_PREPARATION_FAILED",
+  "MODEL_PREPARATION_FAILED",
+  "BROKER_BUSY",
+  "SESSION_QUARANTINED",
+  "SESSION_BUSY",
+  "CAPACITY_EXCEEDED",
+  "REQUEST_CAPACITY_EXCEEDED",
+  "DUPLICATE_REQUEST",
+  "REQUEST_IDENTITY_MISMATCH",
+  "REASONING_NOT_NEGOTIATED",
+  "REASONING_CALLBACK_REQUIRED",
+  "REQUEST_ABORTED",
+  "BROKER_STOPPED",
+  "CONNECTION_LOST",
+  "JOURNAL_UNAVAILABLE",
+  "PROTOCOL_VIOLATION",
+  "REQUEST_ALREADY_EXISTS",
+  "REQUEST_DIGEST_MISMATCH",
+  "REQUEST_TIMEOUT",
+  "WAITING_FOR_BROWSER",
+  "TOOL_CALL_INVALID",
+  "MODEL_OUTPUT_BUDGET_EXCEEDED",
+  "DEEPSEEK_DISPATCH_FAILED",
+  "ACCEPTED_CALLBACK_FAILED"
+]);
+function diagnosticSuffix(requestId, startedAt, stage, reason) {
+  const request = createHash5("sha256").update(requestId).digest("hex").slice(0, 16);
+  const elapsed = Math.max(0, Math.floor(performance.now() - startedAt));
+  return ` [web-diag:v1 request=${request} stage=${stage} reason=${reason && REASONS.has(reason) ? reason : "unknown"} elapsed_ms=${elapsed}]`;
+}
+
 // ../dsh-llm-deepseek-web/src/request-budget.ts
 var REQUEST_ID = `request-${"0".repeat(36)}`;
 var SESSION_ID = `session-${"0".repeat(36)}`;
@@ -2233,6 +2304,15 @@ var DeepSeekWebAdapter = class extends LlmAdapter {
     } catch (error) {
       throw normalizeAdapterError(error, options.signal);
     }
+    const diagnosticStartedAt = performance.now();
+    const diagnose = (chunk, stage, reason) => {
+      if (chunk.type !== "finish" || chunk.reason.kind !== "error") return chunk;
+      const failure = chunk.reason.failure;
+      return { ...chunk, reason: { ...chunk.reason, failure: {
+        ...failure,
+        message: failure.message + diagnosticSuffix(request.request_id, diagnosticStartedAt, stage, reason)
+      } } };
+    };
     let terminal = false;
     const reasoningVisible = request.options.thinking_enabled;
     if (reasoningVisible) this.publishReasoning({
@@ -2284,7 +2364,7 @@ var DeepSeekWebAdapter = class extends LlmAdapter {
           iteratorCleanupHandled = true;
           if (textIndex !== void 0) contentBlocks += 1;
           yield* closeText();
-          yield terminalAfterAbort(event2);
+          yield diagnose(terminalAfterAbort(event2), "cancel_settlement", event2?.type === "ambiguous" ? event2.reason : void 0);
           terminal = true;
           return;
         }
@@ -2298,7 +2378,7 @@ var DeepSeekWebAdapter = class extends LlmAdapter {
           iteratorCleanupHandled = true;
           if (textIndex !== void 0) contentBlocks += 1;
           yield* closeText();
-          yield terminalAfterAbort(settled);
+          yield diagnose(terminalAfterAbort(settled), "cancel_settlement", settled?.type === "ambiguous" ? settled.reason : void 0);
           terminal = true;
           return;
         }
@@ -2369,7 +2449,7 @@ var DeepSeekWebAdapter = class extends LlmAdapter {
               }
               if (event.finish_reason === "tool_calls" !== toolCallBlocks > 0) throw protocolFailure();
             }
-            yield terminalFinish(event);
+            yield diagnose(terminalFinish(event), "browser_terminal", event.type === "ambiguous" ? event.reason : event.type === "failed" ? event.error.code : void 0);
             terminal = true;
             return;
           default:
@@ -2379,7 +2459,16 @@ var DeepSeekWebAdapter = class extends LlmAdapter {
       if (!terminal) throw protocolFailure();
     } catch (error) {
       if (error instanceof BrokerError && error.externalOutcome === "not_started") cancellationAllowed = false;
-      throw normalizeAdapterError(error, options.signal);
+      const normalized = normalizeAdapterError(error, options.signal);
+      throw new LlmError3(
+        normalized.message + diagnosticSuffix(
+          request.request_id,
+          diagnosticStartedAt,
+          "broker_error",
+          error instanceof BrokerError ? error.remoteCode ?? error.code : void 0
+        ),
+        normalized instanceof LlmError3 ? normalized.code : "WEB_MODEL_TRANSPORT"
+      );
     } finally {
       if (reasoningVisible) this.publishReasoning({
         phase: "end",
@@ -3009,7 +3098,7 @@ function isRecord2(value) {
 }
 
 // src/windows-powershell.ts
-import { createHash as createHash5, randomUUID as randomUUID3 } from "node:crypto";
+import { createHash as createHash6, randomUUID as randomUUID3 } from "node:crypto";
 import { open, lstat, mkdir, rename, unlink } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, parse, relative } from "node:path";
 import { PwshLocalExecutor } from "@deepseek-ai/dsh-pwsh-local";
@@ -3423,7 +3512,7 @@ function isDeepSeekWebExecution(exec) {
 }
 function windowsSessionPolicyIdentity(session) {
   const header = session.header;
-  return createHash5("sha256").update(JSON.stringify([
+  return createHash6("sha256").update(JSON.stringify([
     header.version,
     header.id,
     header.createdAt,
