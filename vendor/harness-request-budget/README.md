@@ -5,7 +5,7 @@
 - 源仓库：`https://github.com/XVSHIFU/deepseek-harness.git`
 - 分支：`codex/web-request-budget`；提交：`34d57aed2e386af0b61874390c86fc5915c51b1a`
 - 基线及未变的 master：`76fda729799fe9b3848dbe2c211d4b231032b81e`
-- 补丁源码分支尚未推送远端；本仓库只携带以下锁定归档，不会随 DeepSeek++ 的推送修改 Harness 仓库或其 `master`。
+- [补丁源码分支](https://github.com/XVSHIFU/deepseek-harness/tree/codex/web-request-budget)已保存到远端；本仓库携带以下锁定归档，普通构建无需克隆 Harness。需要修改补丁时按[开发恢复说明](../../docs/development/recovery.md)获取源码，不修改 Harness 的 `master`。
 
 | 包 | SHA-256 |
 |---|---|

@@ -20,6 +20,7 @@
     "zip:edge": "wxt zip --browser edge",
     "zip:firefox": "wxt zip --browser firefox --mv3",
     "zip:sources": "node scripts/package-sources.mjs",
+    "package:web-harness": "node scripts/package-web-harness.mjs",
     "zip:all": "npm run zip:chrome && npm run zip:edge && npm run zip:firefox && npm run zip:sources",
     "submit:chrome:dry": "wxt submit --dry-run --chrome-zip dist/deepseek-plus-plus-$npm_package_version-chrome.zip",
     "submit:chrome:upload": "wxt submit --chrome-zip dist/deepseek-plus-plus-$npm_package_version-chrome.zip --chrome-skip-submit-review",

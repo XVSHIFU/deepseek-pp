@@ -2,12 +2,14 @@
 
 Thanks for contributing to DeepSeek++.
 
+本 fork 的开发入口是 `feature/web-harness`，不是上游 `main`。从新电脑恢复环境、修改 Harness 补丁和生成完整安装包，请先阅读[开发与恢复说明](docs/development/recovery.md)。
+
 All pull requests must follow these rules before they can be reviewed or merged.
 
 ## Pull Request Requirements
 
 1. Base the work on the latest code.
-   - Rebase or merge the latest `main` before opening the PR.
+   - For this fork, start from `feature/web-harness`. Only rebase or merge upstream `main` as an explicitly scoped upstream-sync task.
    - Re-check this after force-pushes or when the PR becomes stale.
 
 2. Keep the PR focused.
