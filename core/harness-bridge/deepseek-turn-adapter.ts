@@ -468,7 +468,10 @@ export class DeepSeekWebModelTurnAdapter implements WebModelTurnPort {
           if (fault === 'tool') return this.terminal(request.request_id, failedToolCall());
           return this.terminal(request.request_id, ambiguous('consumer_callback_outcome_unknown'));
         }
-        if (!emittedToolCall) return this.terminal(request.request_id, failedToolCall());
+        if (isStandaloneMalformedToolMarker(correctionVisibleText, toolNames) ||
+            (!emittedToolCall && correctionVisibleText.trim() === '')) {
+          return this.terminal(request.request_id, failedToolCall());
+        }
         const correctedVerified = await readVerifiedTurn(
           this.client, binding.chatSessionId, correctedResult, clientHeaders, turnSignal.signal,
         );
@@ -481,7 +484,7 @@ export class DeepSeekWebModelTurnAdapter implements WebModelTurnPort {
         } catch {
           return this.terminal(request.request_id, ambiguous('deepseek_chain_unverified'));
         }
-        return completed('tool_calls');
+        return completed(emittedToolCall ? 'tool_calls' : 'stop');
       }
 
       try {
@@ -625,18 +628,30 @@ export function serializeWebModelTurnPrompt(
 function serializeToolCorrectionPrompt(descriptors: readonly ToolDescriptor[]): string {
   return [
     'Your previous response clearly attempted a harness tool call, but it did not contain one valid executable tool tag.',
-    'Correct it once now. Return exactly one complete direct XML tool tag using an advertised name and a JSON object body.',
-    'Do not return bracket labels, prose, Markdown, or a fenced example. Only the XML tag executes the tool.',
+    'Correct it once now. If a tool is needed, return a complete direct XML tool tag using an advertised name and a JSON object body.',
+    'If no tool is needed, answer normally instead. Do not claim a tool ran without an actual tool result.',
+    'Bracket labels and fenced examples do not execute tools. Only a complete direct XML tool tag executes a tool.',
     renderToolSchemas(descriptors, 'en'),
   ].join('\n\n');
 }
 
 function isStandaloneMalformedToolMarker(text: string, toolNames: ReadonlySet<string>): boolean {
-  const lines = text.trim().split(/\r?\n/u).map((line) => line.trim()).filter(Boolean);
-  if (lines.length === 0) return false;
-  return lines.every((line) => {
-    const match = /^\[(?:调用|call)\s+([A-Za-z_][A-Za-z0-9_.:-]*)\]$/iu.exec(line);
-    return match !== null && toolNames.has(match[1]!);
+  // Recognize only a whole response made of advertised bracket markers and
+  // optional JSON object bodies. This is a correction signal, never a tool
+  // payload: only the existing XML parser may emit an executable call.
+  if (/^(?: {4}|\t).*\[(?:调用|call)\s+/imu.test(text)) return false;
+  const trimmed = text.trim();
+  const markers = [...trimmed.matchAll(/(?:^|\r?\n)[ \t]*\[(?:调用|call)\s+([A-Za-z_][A-Za-z0-9_.:-]*)\][ \t]*/giu)];
+  if (markers.length === 0 || markers[0]!.index !== 0) return false;
+  return markers.every((marker, index) => {
+    if (!toolNames.has(marker[1]!)) return false;
+    const body = trimmed.slice(marker.index! + marker[0].length, markers[index + 1]?.index).trim();
+    if (body === '') return true;
+    try {
+      return isJsonObject(JSON.parse(body));
+    } catch {
+      return false;
+    }
   });
 }
 

@@ -840,7 +840,13 @@ describe('DeepSeekWebModelTurnAdapter', () => {
     expect(client.readHistorySnapshot).toHaveBeenCalledTimes(1);
   });
 
-  it('corrects one standalone bracket marker into a formal tool call on the verified page chain', async () => {
+  it.each([
+    '[调用 local_agent_read]',
+    '[调用 local_agent_read] {"path":"README.md"}',
+    '[调用 local_agent_read]\n{"path":"README.md"}',
+    '[call local_agent_read]\r\n{\r\n  "path": "README.md",\r\n  "nested": {"values": ["a", "b"]}\r\n}',
+    '[调用 local_agent_read] {"path":"README.md"}\n[调用 local_agent_read]\n{"path":"other.md"}',
+  ])('corrects bracket intent into a formal tool call on the verified page chain: %s', async (text) => {
     const parents: Array<number | null> = [];
     const client = fakeClient({
       readHistorySnapshot: vi.fn(async (_chat, expected) => history(expected, {
@@ -850,7 +856,7 @@ describe('DeepSeekWebModelTurnAdapter', () => {
     const streamer: TestStreamer = vi.fn(async (input, callbacks) => {
       parents.push(input.parentMessageId);
       if (parents.length === 1) {
-        callbacks.onTextChunk?.('[调用 local_agent_read]', '');
+        for (const chunk of text) callbacks.onTextChunk?.(chunk, '');
         return turn();
       }
       callbacks.onTextChunk?.(
@@ -880,6 +886,13 @@ describe('DeepSeekWebModelTurnAdapter', () => {
     'The user wrote [调用 local_agent_read] in ordinary prose.',
     '```text\n[调用 local_agent_read]\n```',
     '[调用 unknown_tool]',
+    '[调用 unknown_tool] {"path":"README.md"}',
+    'Example:\n[调用 local_agent_read] {"path":"README.md"}',
+    '```json\n[调用 local_agent_read]\n{"path":"README.md"}\n```',
+    '> [调用 local_agent_read] {"path":"README.md"}',
+    '    [调用 local_agent_read] {"path":"README.md"}',
+    '[调用 local_agent_read] {"path":"README.md"}\nThis is an example.',
+    '[调用 local_agent_read] ["README.md"]',
   ])('keeps ordinary or unadvertised marker text as text without correction: %s', async (text) => {
     const streamer: TestStreamer = vi.fn(async (_input, callbacks) => {
       callbacks.onTextChunk?.(text, '');
@@ -893,6 +906,102 @@ describe('DeepSeekWebModelTurnAdapter', () => {
     });
     expect(streamer).toHaveBeenCalledOnce();
     expect(collected.text.map((event) => event.text).join('')).toBe(text);
+    expect(collected.tools).toHaveLength(0);
+  });
+
+  it.each(['No tool is needed; I can answer your question directly.', 'Here is a code example:\n```text\n[调用 local_agent_read]\n```'])('allows a normal corrected answer with verified history: %s', async (answer) => {
+    const client = fakeClient({
+      readHistorySnapshot: vi.fn(async (_chat, expected) => history(expected, {
+        messageCount: expected === 13 ? 4 : 2,
+      })),
+    });
+    let attempts = 0;
+    const streamer: TestStreamer = vi.fn(async (input, callbacks) => {
+      if (++attempts === 1) {
+        callbacks.onTextChunk?.('[调用 local_agent_read] {"path":"README.md"}', '');
+        return turn();
+      }
+      expect(input.prompt).toContain('If no tool is needed, answer normally instead.');
+      callbacks.onTextChunk?.(answer, '');
+      return turn({ requestMessageId: 12, responseMessageId: 13 });
+    });
+    const { adapter, sessions } = adapterWith(streamer, client);
+    const collected = collectCallbacks();
+    expect(await adapter.generate(request(), collected.callbacks)).toEqual({ type: 'completed', finish_reason: 'stop' });
+    expect(streamer).toHaveBeenCalledTimes(2);
+    expect(collected.tools).toHaveLength(0);
+    expect(collected.text.map((event) => event.text).join('')).toContain(answer);
+    expect(sessions.getSession('session-1')).toMatchObject({ parentMessageId: 13, messageCount: 4, quarantined: false });
+  });
+
+  it.each(['[调用 local_agent_read]', '[调用 local_agent_read]\n{"path":"README.md"}', ''])('rejects a still malformed or empty correction without a third request: %s', async (answer) => {
+    let attempts = 0;
+    const streamer: TestStreamer = vi.fn(async (_input, callbacks) => {
+      callbacks.onTextChunk?.(++attempts === 1 ? '[调用 local_agent_read]' : answer, '');
+      return turn();
+    });
+    const { adapter } = adapterWith(streamer);
+    const collected = collectCallbacks();
+    expect(await adapter.generate(request(), collected.callbacks)).toMatchObject({ type: 'failed', error: { code: 'TOOL_CALL_INVALID' } });
+    expect(streamer).toHaveBeenCalledTimes(2);
+    expect(collected.tools).toHaveLength(0);
+  });
+
+  it('does not correct bracket text after a formal tool call has already been emitted', async () => {
+    const streamer: TestStreamer = vi.fn(async (_input, callbacks) => {
+      callbacks.onTextChunk?.('<local_agent_read>{"path":"README.md"}</local_agent_read>\n[调用 local_agent_read] {"path":"other.md"}', '');
+      return turn();
+    });
+    const { adapter } = adapterWith(streamer);
+    const collected = collectCallbacks();
+    expect(await adapter.generate(request(), collected.callbacks)).toEqual({ type: 'completed', finish_reason: 'tool_calls' });
+    expect(streamer).toHaveBeenCalledOnce();
+    expect(collected.tools).toHaveLength(1);
+  });
+
+  it('does not accept a corrected normal answer without verified history', async () => {
+    const client = fakeClient({
+      readHistorySnapshot: vi.fn(async (_chat, expected) => expected === 11 ? history(11) : null),
+    });
+    let attempts = 0;
+    const streamer: TestStreamer = vi.fn(async (_input, callbacks) => {
+      if (++attempts === 1) {
+        callbacks.onTextChunk?.('[调用 local_agent_read] {"path":"README.md"}', '');
+        return turn();
+      }
+      callbacks.onTextChunk?.('No tool is needed.', '');
+      return turn({ requestMessageId: 12, responseMessageId: 13 });
+    });
+    const { adapter, sessions } = adapterWith(streamer, client);
+    const collected = collectCallbacks();
+    expect(await adapter.generate(request(), collected.callbacks)).toEqual({ type: 'ambiguous', reason: 'deepseek_chain_unverified' });
+    expect(streamer).toHaveBeenCalledTimes(2);
+    expect(collected.tools).toHaveLength(0);
+    expect(sessions.getSession('session-1')?.quarantined).toBe(true);
+  });
+
+  it('keeps correction options frozen and stops on cancellation without replay', async () => {
+    const controller = new AbortController();
+    let attempts = 0;
+    const streamer: TestStreamer = vi.fn(async (input, callbacks, context) => {
+      expect(input.modelType).toBe('expert');
+      expect(input.thinkingEnabled).toBe(true);
+      if (++attempts === 1) {
+        callbacks.onTextChunk?.('[调用 local_agent_read] {"path":"README.md"}', '');
+        return turn();
+      }
+      controller.abort();
+      expect(context.signal?.aborted).toBe(true);
+      throw new Error('cancelled');
+    });
+    const { adapter } = adapterWith(streamer);
+    const collected = collectCallbacks(true);
+    const result = await adapter.generate(request({ options: { model_type: 'expert', thinking_enabled: true, search_enabled: false } }), collected.callbacks, {
+      signal: controller.signal,
+      negotiatedCapabilities: { reasoning: true },
+    });
+    expect(result.type).toBe('ambiguous');
+    expect(streamer).toHaveBeenCalledTimes(2);
     expect(collected.tools).toHaveLength(0);
   });
 
