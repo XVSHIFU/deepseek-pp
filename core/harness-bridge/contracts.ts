@@ -1,11 +1,15 @@
 import type { HarnessBridgeClientState } from './state';
 
-export const HARNESS_BRIDGE_SETTINGS_VERSION = 1 as const;
+export const HARNESS_BRIDGE_SETTINGS_VERSION = 2 as const;
+export const DEFAULT_HARNESS_BRIDGE_MIN_REQUEST_INTERVAL_MS = 5_000;
+export const MIN_HARNESS_BRIDGE_REQUEST_INTERVAL_MS = 5_000;
+export const MAX_HARNESS_BRIDGE_REQUEST_INTERVAL_MS = 30_000;
 
 export interface PublicHarnessBridgeSettings {
   readonly version: typeof HARNESS_BRIDGE_SETTINGS_VERSION;
   readonly enabled: boolean;
   readonly port: number;
+  readonly minRequestIntervalMs: number;
   readonly pairingTokenConfigured: boolean;
 }
 

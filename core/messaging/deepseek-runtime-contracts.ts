@@ -10,7 +10,12 @@ import type {
 } from '../multimodal/media';
 import type { MultimodalSettingsStatus } from '../multimodal/settings-contracts';
 import type { MessageAction } from '../types';
-import type { HarnessBridgeStatusResult } from '../harness-bridge/contracts';
+import {
+  HARNESS_BRIDGE_SETTINGS_VERSION,
+  MAX_HARNESS_BRIDGE_REQUEST_INTERVAL_MS,
+  MIN_HARNESS_BRIDGE_REQUEST_INTERVAL_MS,
+  type HarnessBridgeStatusResult,
+} from '../harness-bridge/contracts';
 import type { HarnessBridgeSettingsPatch } from '../harness-bridge/settings';
 
 type DeclaredRuntimeRequest<TType extends MessageAction['type']> = Extract<
@@ -155,12 +160,17 @@ export function decodeHarnessBridgeStatusResult(value: unknown): HarnessBridgeSt
   if (root.ok !== true) invalidHarnessStatus();
   assertExactRuntimeKeys(root, ['ok', 'settings', 'state']);
   const settings = exactRecord(root.settings, [
-    'version', 'enabled', 'port', 'pairingTokenConfigured',
+    'version', 'enabled', 'port', 'minRequestIntervalMs', 'pairingTokenConfigured',
   ]);
-  if (settings.version !== 1 || typeof settings.enabled !== 'boolean' ||
+  if (settings.version !== HARNESS_BRIDGE_SETTINGS_VERSION || typeof settings.enabled !== 'boolean' ||
       typeof settings.pairingTokenConfigured !== 'boolean' ||
       !Number.isSafeInteger(settings.port) || (settings.port as number) < 1 ||
-      (settings.port as number) > 65_535) invalidHarnessStatus();
+      (settings.port as number) > 65_535 ||
+      !Number.isSafeInteger(settings.minRequestIntervalMs) ||
+      (settings.minRequestIntervalMs as number) < MIN_HARNESS_BRIDGE_REQUEST_INTERVAL_MS ||
+      (settings.minRequestIntervalMs as number) > MAX_HARNESS_BRIDGE_REQUEST_INTERVAL_MS) {
+    invalidHarnessStatus();
+  }
   const state = exactRecord(root.state, ['phase', 'attempt'], ['nextRetryAtMs', 'errorCode']);
   if (typeof state.phase !== 'string' || !HARNESS_BRIDGE_PHASES.has(state.phase) ||
       !Number.isSafeInteger(state.attempt) || (state.attempt as number) < 0 ||
@@ -173,9 +183,10 @@ export function decodeHarnessBridgeStatusResult(value: unknown): HarnessBridgeSt
   return Object.freeze({
     ok: true,
     settings: Object.freeze({
-      version: 1,
+      version: HARNESS_BRIDGE_SETTINGS_VERSION,
       enabled: settings.enabled,
       port: settings.port,
+      minRequestIntervalMs: settings.minRequestIntervalMs,
       pairingTokenConfigured: settings.pairingTokenConfigured,
     }),
     state: Object.freeze({

@@ -611,8 +611,8 @@ async function readCompletionStreamWithCallbacks(
     }
     : undefined;
   const onSseJson = diagnostic
-    ? (observation: { jsonParsed: boolean; parsed: unknown }): void => {
-      diagnostic.observeSseJson(observation.jsonParsed, observation.parsed);
+    ? (observation: { jsonParsed: boolean; parsed: unknown }, event: SSEEvent): void => {
+      diagnostic.observeSseJson(observation.jsonParsed, observation.parsed, event);
     }
     : undefined;
 
@@ -648,9 +648,13 @@ async function readCompletionStreamWithCallbacks(
     }
     speedTracker?.finish();
     callbacks.onFinished?.();
-    return diagnostic
-      ? { ...summary, completionDiagnostic: diagnostic.finish() }
-      : summary;
+    if (!diagnostic) return summary;
+    const completionFailure = diagnostic.completionFailure(summary.finished);
+    return {
+      ...summary,
+      completionDiagnostic: diagnostic.finish(),
+      ...(completionFailure ? { completionFailure } : {}),
+    };
   } catch (error) {
     try {
       speedTracker?.finish();
@@ -683,6 +687,7 @@ class CompletionDiagnosticCollector {
   private sseJsonEvents = 0;
   private sseEventKindMask = 0;
   private sseShapeMask = 0;
+  private sawRateLimitFailure = false;
   private code: number | null = null;
   private bizCode: number | null = null;
   private sseError = false;
@@ -714,9 +719,10 @@ class CompletionDiagnosticCollector {
     }
   }
 
-  observeSseJson(jsonParsed: boolean, parsed: unknown): void {
+  observeSseJson(jsonParsed: boolean, parsed: unknown, event: SSEEvent): void {
     if (jsonParsed) this.sseJsonEvents += 1;
     this.sseShapeMask |= classifySseShape(jsonParsed, parsed);
+    if (isRateLimitFailureHint(event, parsed)) this.sawRateLimitFailure = true;
   }
 
   observeParsed(parsed: unknown, event: SSEEvent): void {
@@ -757,6 +763,18 @@ class CompletionDiagnosticCollector {
       sseShapeMask: this.sseShapeMask,
     });
   }
+
+  completionFailure(finished: boolean): ModelTurn['completionFailure'] {
+    return !finished && this.sawRateLimitFailure ? 'rate_limit_reached' : undefined;
+  }
+}
+
+function isRateLimitFailureHint(event: SSEEvent, parsed: unknown): boolean {
+  return event.type === 'hint' &&
+    isPlainRecord(parsed) &&
+    parsed.type === 'error' &&
+    parsed.clear_response === true &&
+    parsed.finish_reason === 'rate_limit_reached';
 }
 
 function classifySseEventKind(value: string): number {

@@ -969,8 +969,19 @@ describe('Harness bridge settings subpage', () => {
     const sendMessage = vi.fn(async (message: { type: string; payload?: unknown }) => {
       if (message.type === 'GET_HARNESS_BRIDGE_STATUS') return bridgeStatus(false, false, 'stopped');
       if (message.type === 'UPDATE_HARNESS_BRIDGE_SETTINGS') {
-        const payload = message.payload as { enabled: boolean; port: number; pairingToken?: string };
-        return bridgeStatus(payload.enabled, payload.pairingToken !== undefined, 'connecting', payload.port);
+        const payload = message.payload as {
+          enabled: boolean;
+          port: number;
+          minRequestIntervalMs: number;
+          pairingToken?: string;
+        };
+        return bridgeStatus(
+          payload.enabled,
+          payload.pairingToken !== undefined,
+          'connecting',
+          payload.port,
+          payload.minRequestIntervalMs,
+        );
       }
       return null;
     });
@@ -983,11 +994,17 @@ describe('Harness bridge settings subpage', () => {
 
     const toggle = container.querySelector<HTMLButtonElement>('button[aria-pressed="false"]')!;
     const port = labelledInput('回环端口');
+    const interval = container.querySelector<HTMLInputElement>('input[type="range"]')!;
+    expect(interval.min).toBe('5');
+    expect(interval.max).toBe('30');
+    expect(interval.step).toBe('1');
     const tokenInput = labelledInput('配对令牌');
     await act(async () => {
       toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       setTextControlValue(port, '44001');
       port.dispatchEvent(new Event('input', { bubbles: true }));
+      setTextControlValue(interval, '9');
+      interval.dispatchEvent(new Event('input', { bubbles: true }));
       setTextControlValue(tokenInput, token);
       tokenInput.dispatchEvent(new Event('input', { bubbles: true }));
     });
@@ -996,7 +1013,12 @@ describe('Harness bridge settings subpage', () => {
 
     expect(sendMessage).toHaveBeenCalledWith({
       type: 'UPDATE_HARNESS_BRIDGE_SETTINGS',
-      payload: { enabled: true, port: 44_001, pairingToken: token },
+      payload: {
+        enabled: true,
+        port: 44_001,
+        minRequestIntervalMs: 9_000,
+        pairingToken: token,
+      },
     });
     expect(tokenInput.value).toBe('');
     expect(container.textContent).toContain('连接状态: 正在连接');
@@ -1026,7 +1048,7 @@ describe('Harness bridge settings subpage', () => {
     await flushPromises();
     expect(sendMessage).toHaveBeenLastCalledWith({
       type: 'UPDATE_HARNESS_BRIDGE_SETTINGS',
-      payload: { enabled: false, port: 43_123 },
+      payload: { enabled: false, port: 43_123, minRequestIntervalMs: 5_000 },
     });
     expect(container.textContent).toContain('连接状态: 已停止');
   });
@@ -1083,7 +1105,7 @@ describe('Harness bridge settings subpage', () => {
     await act(async () => {
       runtimeListeners[0]?.({
         type: 'HARNESS_BRIDGE_STATUS_CHANGED',
-        payload: bridgeStatus(true, true, 'ready', 44_001),
+        payload: bridgeStatus(true, true, 'ready', 44_001, 11_000),
       });
     });
     initial.resolve(bridgeStatus(false, false, 'stopped', 43_123));
@@ -1091,6 +1113,7 @@ describe('Harness bridge settings subpage', () => {
 
     expect(container.textContent).toContain('连接状态: 已连接');
     expect(labelledInput('回环端口').value).toBe('44001');
+    expect(container.querySelector<HTMLInputElement>('input[type="range"]')?.value).toBe('11');
   });
 
   it('shows corrupt/future configuration failures without rendering raw details', async () => {
@@ -1105,6 +1128,7 @@ describe('Harness bridge settings subpage', () => {
     expect(container.textContent).toContain('设置损坏或来自更高版本');
     expect(container.textContent).not.toContain('harness_bridge_settings_future_version');
     expect(labelledInput('回环端口').disabled).toBe(true);
+    expect(container.querySelector<HTMLInputElement>('input[type="range"]')?.disabled).toBe(true);
     expect(labelledInput('配对令牌').disabled).toBe(true);
     expect(buttonByText('保存').disabled).toBe(true);
     expect(buttonByText('刷新').disabled).toBe(false);
@@ -1189,10 +1213,17 @@ function bridgeStatus(
   pairingTokenConfigured: boolean,
   phase: 'stopped' | 'connecting' | 'ready' | 'protocol_error',
   port = 43_123,
+  minRequestIntervalMs = 5_000,
 ) {
   return {
     ok: true as const,
-    settings: { version: 1 as const, enabled, port, pairingTokenConfigured },
+    settings: {
+      version: 2 as const,
+      enabled,
+      port,
+      minRequestIntervalMs,
+      pairingTokenConfigured,
+    },
     state: { phase, attempt: phase === 'connecting' ? 1 : 0 },
   };
 }

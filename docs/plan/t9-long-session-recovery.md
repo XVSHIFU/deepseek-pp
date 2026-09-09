@@ -1,6 +1,6 @@
 # T9：长会话诊断、上下文传递与恢复
 
-状态：实施中。v2 已部署并再次复现：HTTP 200、311 字节、3 条合法 JSON 事件，类型恰为 ready、close 和一种未分类事件；尚缺该事件的真实内容。T9.4 隔离拒绝分类小切片已随 v2 部署，未单独做真实隔离拒绝验收，不代表首次故障已修复。
+状态：实施中。用户已提供失败请求的真实 `hint`：`type=error`、`clear_response=true`、`finish_reason=rate_limit_reached`，正文提示消息过于频繁；这次停止确认为网页端限流。正在实现提示识别、所有 Mode A 会话共享的请求间隔和冷却。仍不自动重放 ambiguous，不把本次限流解释为上下文超限。
 
 ## 授权与边界
 
@@ -41,7 +41,22 @@
 
 根据 T9.1 实测选择，而非同时堆叠所有补丁：
 
-- 2026-09-09 对照 DeepSeek 页面公开主脚本，确认 `toast` 和 `hint` 可带 `type/content/finish_reason`，hint 另有 `clear_response`；当前客户端会忽略这些提示的语义。但 v2 的 other 位尚不能证明真实第三事件是哪一种。下一步在扩展 Service Worker 的 Network 留存一条新诊断失败响应，不能再凭位图猜测上下文超限。原文只用于操作者侧取证，凭据/自由文本不进入产品诊断协议。
+### 已授权的限流修复切片（2026-09-09）
+
+- 真实证据：Service Worker 中最后一条短 completion 的响应含 `hint {type:"error", clear_response:true, finish_reason:"rate_limit_reached"}`，随后 `close {click_behavior:"retry", auto_resume:false}`。用户复制的提示正文为“消息发送过于频繁，请稍后重试”；原文不进入产品日志。用户没有复制 ready，不将贴文当作完整三事件原始样本；诊断位图与贴文分别保留。
+- 原客户端单次 SSE parsed 路径识别该固定 hint 组合。仅 Mode A 显式 opt-in 的 ModelTurn 携带固定枚举，不复制解析器，不透传 content，不把提示/close/EOF 当 FINISHED。未完成的限流响应经过原 ambiguous 终态，但提供明确中文限流提示和固定原因码。
+- 同一扩展内一个 Mode A 调度器覆盖各 Harness 会话和格式纠正请求；默认相邻 completion dispatch 至少 5 秒，设置中可调整至 5–30 秒。长请求已耗足间隔不再叠加固定等待。不能控制其他浏览器/profile、用户直接在网页发言或 Mode B，不宣称全账号统一限速。
+- 限流后冷却从 30 秒开始，连续限流延长至 60/120 秒并封顶；队列等待可取消，沿用本次 turn deadline。等待在 accepted 后、PoW 创建前，避免凭据过期或被 acceptTimeout 误报。串行许可直到当前 completion 结束才释放。
+- 已提交工具结果保持；原 ambiguous 请求和网页链隔离保持，不自动重放原请求、重跑工具或清除隔离。先通过官方新建/分支恢复；自动恢复必须另证网页链状态和 Harness 工具提交边界，不凭 `clear_response` 字段单独承诺安全重试。
+
+### 低频稳定性验证（不是固定限额测量）
+
+- 当前只能得到某账号、模式、时间窗口下的可用间隔参考，不能推导官方固定 RPM/TPM；已观察过约 1–2 秒一请求的连续调用后限流，但不是精确阈值。
+- 更新组件后先保持网页空闲至少 60 秒；确认 Network 已留存。使用隔离只读会话、人工数据和串行 glob，先在 5 秒设置下最多 12 次 completion；遇到第一次限流即停止本批，不重放失败链。
+- 如 5 秒仍限流，本轮不再加压；冷却至少 120 秒后，在新的只读会话以 10 秒设置做至多 6 次 completion。两批总量不超过 18 次，不测试更短间隔、不并发、不切换账号规避限制。
+- 记录实际 dispatch 时间间隔、请求次数、模型/思考设置和是否限流；抓到提示只报告该批观察，单次通过不等于长任务永久稳定。取消、跨会话排队、冷却递增主要以 fake clock 单元测试验证，不消耗真实网页配额。
+
+- 2026-09-09 对照 DeepSeek 页面公开主脚本，确认 `toast` 和 `hint` 可带 `type/content/finish_reason`，hint 另有 `clear_response`；旧客户端忽略这些提示的语义。后续用户提供的真实 hint 已确认本次限流，取证阶段结束。其他未知业务提示仍不能凭位图猜测含义；凭据/自由文本不进入产品诊断协议。
 
 - 上游明确业务拒绝：在原客户端中正确分类并向上呈现，不把“HTTP成功”当“模型开始/完成”的证据；仅在合同足以证明时声明本次未启动。
 - 完成事件格式遗漏：使用真实脱敏事件样本补原 stream-codec，保持 Mode B 兼容，不用任意 EOF 或 [DONE] 冒充成功。
@@ -63,7 +78,7 @@
 
 - 当前已实现切片：仅修正已证明未派发的新请求被 SESSION_QUARANTINED 拒绝时的分类和提示；不等同于实现同会话恢复、上下文同步或自动轮换。与尚待取证的 T9.2 分开验收。
 - 分类由具体阶段限定：cache reserve 拒绝必须 `!turnInvoked && !reserved`；adapter session-map reserve 拒绝必须尚未 accepted。同码若出现在较晚阶段仍保持 unknown。Host 记录本请求 not_started，LLM 给中文说明与官方新建/分支建议；不新增恢复按钮，不自动创建会话，旧请求仍可查询为 ambiguous。provider 的固定 maxRetries=0 保持不变。
-- 代码回归：四文件 170/170、compile、prompt freeze 7/7、插件 build、diff-check；当前运行诊断版仍为 89fce7b，未覆盖它，不将该小切片记为真实部署验收。
+- 代码回归：四文件 170/170、compile、prompt freeze 7/7、插件 build、diff-check；后续已随 bc29803 v2 部署，尚未单独做真实隔离提示验收，不将源码回归当作真实恢复验收。
 - 首先区分原请求状态与新请求的 admission：只有可证明被旧 session 隔离、且本次未发送的全新请求，才返回 not_started + retryable:false。DUPLICATE_REQUEST / REQUEST_IDENTITY_MISMATCH 不得一概改为 not_started。
 - 保留原 ambiguous 请求和旧链的隔离记录，禁止清除标记后重新发送原请求。
 - 恢复须先确认旧请求已停止，再核对 Harness 已提交工具结果。已成功工具不自动重跑；执行结果未知的副作用需要用户核实。

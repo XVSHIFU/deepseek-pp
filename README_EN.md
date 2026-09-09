@@ -88,6 +88,8 @@ Select your project workspace in the Harness sidebar; use **Add workspace** if i
 
 If prompted to sign in, refresh the signed-in DeepSeek page before sending the task again. If disconnected, check that `dsh web` is still running and save the connection settings in the extension's Local Harness panel. Reinstallation is unnecessary for these cases.
 
+In the extension's **Settings → Local Harness**, the minimum model request interval defaults to **5 seconds** and can be increased to **30 seconds**. Harness sessions connected through that extension share it. If DeepSeek reports too many requests, wait; repeated rate limits extend the cooldown. Completed tool results are retained. Check your progress before creating or branching a Harness session to continue; do not repeatedly resend a failed task.
+
 ## Model mode and thinking
 
 Under **Settings → Plugins → DeepSeek Web model → Web model**, select **Default** or **Expert** and independently enable or disable thinking. Select the option to make this provider the default for future sessions and save.

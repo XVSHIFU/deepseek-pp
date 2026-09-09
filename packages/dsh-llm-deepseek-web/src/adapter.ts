@@ -473,6 +473,9 @@ function errorFinish(code: string, message: string): StreamChunk {
 }
 
 function ambiguousFinish(reason?: string): StreamChunk {
+  if (reason === "deepseek_rate_limit_reached") {
+    return errorFinish("WEB_MODEL_RATE_LIMITED", "DeepSeek 网页提示消息发送过于频繁，本轮已暂停。请至少等待 30 秒；连续限流时等待会延长。已完成的工具结果保留，系统不会自动重放。当前网页链已隔离，请核对进度后在 Harness 中新建或分支会话继续。");
+  }
   if (reason === "generation_timeout" || reason === "accept_timeout" || reason === "request_timeout" || reason === "deepseek_turn_timeout") {
     return errorFinish("WEB_MODEL_TIMEOUT_AMBIGUOUS", "The web request timed out; its outcome is unknown. Do not replay automatically.");
   }

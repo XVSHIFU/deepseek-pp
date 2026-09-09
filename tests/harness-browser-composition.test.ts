@@ -56,7 +56,13 @@ it.each(['ready', 'missing-auth', 'host-restarted'] as const)('runs the actual b
       write: async (value) => { recoveryIndex = structuredClone(value); },
     },
     settings: {
-      read: async () => ({ version: 1, enabled: true, port: address.port, pairingToken: token }),
+      read: async () => ({
+        version: 2,
+        enabled: true,
+        port: address.port,
+        minRequestIntervalMs: 5_000,
+        pairingToken: token,
+      }),
       update: async () => { throw new Error('Not used'); },
     },
     turnPort: {
@@ -155,4 +161,4 @@ it.each(['ready', 'missing-auth', 'host-restarted'] as const)('runs the actual b
     expect(client.submitPromptStreaming).toHaveBeenCalledTimes(2);
     expect(turnErrors).toEqual([]);
   }
-});
+}, 15_000);

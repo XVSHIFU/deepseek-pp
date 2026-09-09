@@ -219,6 +219,94 @@ describe('DeepSeek web adapter streaming', () => {
     expect(JSON.stringify(turn.completionDiagnostic)).not.toMatch(/private-(event|path|value)-canary/);
   });
 
+  it('classifies the confirmed rate-limit hint without retaining its content', async () => {
+    const wire = [
+      'event: ready\ndata: {"request_message_id":10,"response_message_id":11}',
+      'event: hint\ndata: {"type":"error","content":"private-rate-limit-canary","clear_response":true,"finish_reason":"rate_limit_reached"}',
+      'event: close\ndata: {"click_behavior":"retry","auto_resume":false}',
+    ].join('\n\n');
+    const client = createDeepSeekAutomationClient({
+      fetchImpl: vi.fn<typeof fetch>(async () => createSseResponse(wire)),
+    });
+
+    const turn = await client.submitPromptStreaming(
+      createSubmitInput(),
+      {},
+      { completionDiagnostics: true },
+    );
+
+    expect(turn.finished).toBe(false);
+    expect(turn.completionFailure).toBe('rate_limit_reached');
+    expect(JSON.stringify(turn)).not.toContain('private-rate-limit-canary');
+  });
+
+  it('does not report a rate-limit failure when the same hint is followed by FINISHED', async () => {
+    const wire = [
+      'event: hint\ndata: {"type":"error","content":"private-finished-canary","clear_response":true,"finish_reason":"rate_limit_reached"}',
+      'data: {"p":"response/status","v":"FINISHED"}',
+    ].join('\n\n');
+    const client = createDeepSeekAutomationClient({
+      fetchImpl: vi.fn<typeof fetch>(async () => createSseResponse(wire)),
+    });
+
+    const turn = await client.submitPromptStreaming(
+      createSubmitInput(),
+      {},
+      { completionDiagnostics: true },
+    );
+
+    expect(turn.finished).toBe(true);
+    expect(turn.completionFailure).toBeUndefined();
+    expect(JSON.stringify(turn)).not.toContain('private-finished-canary');
+  });
+
+  it.each([
+    ['warning hint', 'hint', 'warning', true, 'rate_limit_reached'],
+    ['non-clearing hint', 'hint', 'error', false, 'rate_limit_reached'],
+    ['unknown finish reason', 'hint', 'error', true, 'private_finish_reason'],
+    ['same fields on another event', 'message', 'error', true, 'rate_limit_reached'],
+  ])('ignores $label for rate-limit classification', async (
+    _label,
+    eventType,
+    type,
+    clearResponse,
+    finishReason,
+  ) => {
+    const wire = `event: ${eventType}\ndata: ${JSON.stringify({
+      type,
+      content: 'private-ignored-canary',
+      clear_response: clearResponse,
+      finish_reason: finishReason,
+    })}`;
+    const client = createDeepSeekAutomationClient({
+      fetchImpl: vi.fn<typeof fetch>(async () => createSseResponse(wire)),
+    });
+
+    const turn = await client.submitPromptStreaming(
+      createSubmitInput(),
+      {},
+      { completionDiagnostics: true },
+    );
+
+    expect(turn.finished).toBe(false);
+    expect(turn.completionFailure).toBeUndefined();
+    expect(JSON.stringify(turn)).not.toContain('private-ignored-canary');
+  });
+
+  it('keeps the confirmed rate-limit hint out of the non-opt-in Mode B result', async () => {
+    const wire = 'event: hint\ndata: {"type":"error","content":"private-mode-b-canary","clear_response":true,"finish_reason":"rate_limit_reached"}';
+    const client = createDeepSeekAutomationClient({
+      fetchImpl: vi.fn<typeof fetch>(async () => createSseResponse(wire)),
+    });
+
+    const turn = await client.submitPromptStreaming(createSubmitInput(), {}, {});
+
+    expect(turn.finished).toBe(false);
+    expect(turn.completionDiagnostic).toBeUndefined();
+    expect(turn.completionFailure).toBeUndefined();
+    expect(JSON.stringify(turn)).not.toContain('private-mode-b-canary');
+  });
+
   it('retains full assistant text by default', async () => {
     vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => createSseResponse([
       'data: {"v":"Hello "}',

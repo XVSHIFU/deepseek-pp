@@ -38,8 +38,8 @@ describe('Harness bridge reconnect alarm', () => {
 
   it.each([
     { ok: false, error: 'harness_bridge_settings_corrupt' },
-    { ...waiting(), settings: { version: 1, enabled: false, port: 43123, pairingTokenConfigured: true } },
-    { ...waiting(), settings: { version: 1, enabled: true, port: 43123, pairingTokenConfigured: false } },
+    { ...waiting(), settings: { version: 2, enabled: false, port: 43123, minRequestIntervalMs: 5_000, pairingTokenConfigured: true } },
+    { ...waiting(), settings: { version: 2, enabled: true, port: 43123, minRequestIntervalMs: 5_000, pairingTokenConfigured: false } },
   ] satisfies HarnessBridgeStatusResult[])('clears disabled or unusable configuration %#', async (status) => {
     const fixture = makeFixture({ periodInMinutes: HARNESS_BRIDGE_RECONNECT_MINUTES });
     fixture.service.start();
@@ -149,7 +149,13 @@ function waiting(phase: 'offline' | 'connecting' | 'retry_wait' | 'ready' | 'nee
   'protocol_error' | 'handler_error' | 'stopped' = 'offline'): HarnessBridgeStatus {
   return {
     ok: true,
-    settings: { version: 1, enabled: true, port: 43123, pairingTokenConfigured: true },
+    settings: {
+      version: 2,
+      enabled: true,
+      port: 43123,
+      minRequestIntervalMs: 5_000,
+      pairingTokenConfigured: true,
+    },
     state: { phase, attempt: 6, ...(phase === 'offline' ? { errorCode: 'RETRY_EXHAUSTED' } : {}) },
   };
 }

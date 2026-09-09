@@ -8,6 +8,7 @@ import { useI18n } from '../../i18n';
 import { sidepanelRuntimeClient } from '../../runtime-client';
 import {
   SettingsSection,
+  Slider,
   StatusMessage,
   TextField,
   ToggleRow,
@@ -18,6 +19,7 @@ export default function HarnessBridgeSubPage() {
   const [status, setStatus] = useState<HarnessBridgeStatusResult | null>(null);
   const [enabled, setEnabled] = useState(false);
   const [port, setPort] = useState('43123');
+  const [minRequestIntervalSeconds, setMinRequestIntervalSeconds] = useState(5);
   const [pairingToken, setPairingToken] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
@@ -28,6 +30,7 @@ export default function HarnessBridgeSubPage() {
     if (next.ok) {
       setEnabled(next.settings.enabled);
       setPort(String(next.settings.port));
+      setMinRequestIntervalSeconds(next.settings.minRequestIntervalMs / 1_000);
     }
   }, []);
 
@@ -86,6 +89,7 @@ export default function HarnessBridgeSubPage() {
         payload: {
           enabled: nextEnabled,
           port: numericPort,
+          minRequestIntervalMs: minRequestIntervalSeconds * 1_000,
           ...(pairingToken ? { pairingToken } : {}),
         },
       }, { acceptFailure: true, decode: decodeHarnessBridgeStatusResult });
@@ -132,6 +136,21 @@ export default function HarnessBridgeSubPage() {
         disabled={busy || configurationBlocked}
         onChange={setPort}
       />
+      <div className="space-y-1">
+        <Slider
+          label={t('sidepanel.settings.harnessMinRequestInterval')}
+          value={minRequestIntervalSeconds}
+          min={5}
+          max={30}
+          step={1}
+          disabled={busy || configurationBlocked}
+          format={(value) => `${value}`}
+          onChange={setMinRequestIntervalSeconds}
+        />
+        <p className="text-[10px]" style={{ color: 'var(--ds-text-tertiary)' }}>
+          {t('sidepanel.settings.harnessMinRequestIntervalHint')}
+        </p>
+      </div>
       <TextField
         label={t('sidepanel.settings.harnessPairingToken')}
         hint={status?.ok && status.settings.pairingTokenConfigured

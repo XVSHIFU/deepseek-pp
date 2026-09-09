@@ -345,6 +345,8 @@ export const sidepanel = {
     harnessPort: '回环端口',
     harnessPortHint: '仅接受 127.0.0.1 端口，不接受远程主机或任意 URL。',
     harnessPortInvalid: '请输入 1 到 65535 之间的端口。',
+    harnessMinRequestInterval: '模型请求最小间隔（秒）',
+    harnessMinRequestIntervalHint: '可设为 5–30 秒，仅适用于此扩展代理的所有 Harness 会话，不影响其他浏览器、扩展副本或账号。',
     harnessPairingToken: '配对令牌',
     harnessTokenHint: '粘贴本机 Harness Host 输出的高熵令牌。',
     harnessTokenConfigured: '令牌已保存在浏览器本地存储中；留空可保持不变。',

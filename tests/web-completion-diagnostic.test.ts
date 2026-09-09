@@ -8,6 +8,16 @@ const v2Metadata = { ...metadata, contentKind: 'sse', bodyBytes: 311, sseEvents:
   code: null, bizCode: null, sseJsonEvents: 2, sseEventKindMask: 129, sseShapeMask: 8197 };
 
 describe('safe completion diagnostics across browser persistence and host display', () => {
+  it('preserves only the fixed rate-limit reason without promoting the original outcome', () => {
+    const event = { type: 'ambiguous', reason: 'deepseek_rate_limit_reached' } as const;
+    expect(recoveryTerminal(event)).toEqual(event);
+    expect(diagnosticSuffix('private-request', performance.now(), 'browser_terminal', event.reason))
+      .toContain('reason=deepseek_rate_limit_reached');
+    const injected = { ...event, reason: event.reason + ':private-content' };
+    expect(recoveryTerminal(injected)).toEqual({ type: 'ambiguous', reason: 'browser_recovery_failed' });
+    expect(diagnosticSuffix('private-request', performance.now(), 'browser_terminal', injected.reason))
+      .toContain('reason=unknown');
+  });
   it('round trips v2 masks through the existing persistence and diagnostic boundaries', () => {
     const reason = completionDiagnosticReason(v2Metadata);
     expect(reason).toBe('deepseek_stream_incomplete.v2:h200:sse:b311:e3:cn:bizn:j2:k129:s8197');

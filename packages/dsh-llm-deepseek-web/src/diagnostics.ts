@@ -4,7 +4,7 @@ import { isCompletionDiagnosticReason } from '@deepseek-pp/web-model-protocol';
 // These are fixed local reason codes, never upstream response messages.
 const REASONS = new Set([
   'browser_worker_restarted', 'browser_recovery_failed', 'consumer_callback_outcome_unknown',
-  'deepseek_turn_outcome_unknown', 'deepseek_stream_incomplete', 'response_message_id_missing',
+  'deepseek_turn_outcome_unknown', 'deepseek_stream_incomplete', 'deepseek_rate_limit_reached', 'response_message_id_missing',
   'request_message_id_missing', 'deepseek_chain_unverified', 'adapter_state_inconsistent',
   'deepseek_turn_timeout', 'deepseek_dispatch_abort_outcome_unknown', 'generation_timeout',
   'accept_timeout', 'request_timeout', 'browser_disconnected', 'connection_closed', 'connection_lost',

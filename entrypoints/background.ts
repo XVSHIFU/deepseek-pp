@@ -305,8 +305,9 @@ const REFRESH_AUTH_MESSAGE = { type: 'REFRESH_DEEPSEEK_AUTH' } as const;
 const AUTOMATION_AUTH_TOKEN_MISSING_MESSAGE =
   'DeepSeek login token is missing. Refresh chat.deepseek.com or sign in again, then retry the automation.';
 const deepSeekAutomationClient = createDeepSeekAutomationClient();
+const harnessBridgeSettings = createHarnessBridgeSettingsStore();
 const harnessBridgeCoordinator = new HarnessBridgeCoordinator({
-  settings: createHarnessBridgeSettingsStore(),
+  settings: harnessBridgeSettings,
   recoveryStorage: {
     async read() {
       const stored = await chrome.storage.local.get('harness_bridge_recovery_v1');
@@ -318,6 +319,7 @@ const harnessBridgeCoordinator = new HarnessBridgeCoordinator({
   },
   turnPort: createDeepSeekWebModelTurnAdapter({
     client: deepSeekAutomationClient,
+    getMinIntervalMs: async () => (await harnessBridgeSettings.read()).minRequestIntervalMs,
     loadClientHeaders: ({ signal }) => loadOrRefreshClientHeaders(undefined, signal),
   }),
   createClient(settings) {

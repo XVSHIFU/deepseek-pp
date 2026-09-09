@@ -34,7 +34,13 @@ beforeEach(() => {
         if (message.type === 'GET_HARNESS_BRIDGE_STATUS') {
           return {
             ok: true,
-            settings: { version: 1, enabled: false, port: 43_123, pairingTokenConfigured: false },
+            settings: {
+              version: 2,
+              enabled: false,
+              port: 43_123,
+              minRequestIntervalMs: 5_000,
+              pairingTokenConfigured: false,
+            },
             state: { phase: 'stopped', attempt: 0 },
           };
         }

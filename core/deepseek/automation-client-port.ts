@@ -6,6 +6,7 @@ export interface ModelTurn {
   requestMessageId: number | null;
   finished: boolean;
   completionDiagnostic?: DeepSeekCompletionDiagnostic;
+  completionFailure?: 'rate_limit_reached';
 }
 
 export type DeepSeekCompletionContentKind =

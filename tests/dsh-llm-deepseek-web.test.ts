@@ -388,6 +388,23 @@ describe("DeepSeek Web DSH adapter", () => {
     await ctx.fiber.dispose();
   });
 
+  it('reports an explicit web rate limit in Chinese without runtime retry', async () => {
+    const ctx = new Context();
+    await ctx.plugin(LlmRuntime);
+    const broker = new FakeBroker([{ type: 'ambiguous', reason: 'deepseek_rate_limit_reached' }]);
+    registerDeepSeekWebAdapter(ctx, broker);
+    const chunks = await collect(ctx.llm.stream(generateOptions()));
+    expect(chunks.at(-1)).toMatchObject({ reason: { kind: 'error', failure: {
+      code: 'WEB_MODEL_RATE_LIMITED', message: expect.stringContaining('消息发送过于频繁'),
+    } } });
+    const encoded = JSON.stringify(chunks);
+    expect(encoded).toContain('不会自动重放');
+    expect(encoded).toContain('新建或分支');
+    expect(encoded).toContain('reason=deepseek_rate_limit_reached');
+    expect(broker.requests).toHaveLength(1);
+    await ctx.fiber.dispose();
+  });
+
   it("keeps a remote failure with unknown outcome ambiguous", async () => {
     const broker = new ThrowingBroker(new BrokerError("DEEPSEEK_AUTH_REQUIRED", "unknown"));
     const adapter = new DeepSeekWebAdapter({ broker });

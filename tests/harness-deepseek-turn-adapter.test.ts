@@ -20,6 +20,7 @@ import {
   serializeWebModelTurnPrompt,
 } from '../core/harness-bridge/deepseek-turn-adapter';
 import { WebModelSessionMap } from '../core/harness-bridge/session-map';
+import { CompletionPacingGate, type CompletionPacing } from '../core/harness-bridge/request-pacing';
 import type {
   WebModelReasoningDelta,
   WebModelTextDelta,
@@ -149,10 +150,17 @@ type TestStreamer = (
   context: DeepSeekRequestContext,
 ) => Promise<ModelTurn>;
 
+const immediatePacing: CompletionPacing = Object.freeze({
+  acquire: async () => Object.freeze({ dispatched() {}, release() {} }),
+  noteRateLimit() {},
+  noteCompleted() {},
+});
+
 function adapterWith(
   streamer: TestStreamer,
   client = fakeClient(),
   sessions = new WebModelSessionMap(),
+  pacing: CompletionPacing = immediatePacing,
 ) {
   const connectedClient: DeepSeekAutomationClient = {
     ...client,
@@ -162,7 +170,12 @@ function adapterWith(
     }),
   };
   return {
-    adapter: createDeepSeekWebModelTurnAdapter({ client: connectedClient, sessions }),
+    // Existing adapter tests exercise turn semantics, not wall-clock pacing.
+    adapter: createDeepSeekWebModelTurnAdapter({
+      client: connectedClient,
+      sessions,
+      pacing,
+    }),
     client: connectedClient,
     sessions,
   };
@@ -696,7 +709,7 @@ describe('DeepSeekWebModelTurnAdapter', () => {
     });
   });
 
-  it('releases only proven pre-dispatch failures so the same request can be explicitly retried', async () => {
+  it('reports a post-accepted PoW failure without dispatching or replaying it', async () => {
     const createPowHeaders = vi.fn()
       .mockRejectedValueOnce(new Error('Authorization: Bearer browser-secret'))
       .mockResolvedValueOnce({ 'X-DS-PoW-Response': 'ok' });
@@ -704,22 +717,20 @@ describe('DeepSeekWebModelTurnAdapter', () => {
     const streamer: TestStreamer = vi.fn(async () => turn());
     const { adapter } = adapterWith(streamer, client);
 
-    let caught: unknown;
-    try {
-      await adapter.generate(request(), collectCallbacks().callbacks);
-    } catch (error) {
-      caught = error;
-    }
-    expect(caught).toBeInstanceOf(DeepSeekTurnAdapterError);
-    expect(caught).toMatchObject({
-      code: 'DEEPSEEK_PREPARATION_FAILED',
-      retryable: true,
-      externalOutcome: 'not_started',
-      message: 'DEEPSEEK_PREPARATION_FAILED',
+    const terminal = await adapter.generate(request(), collectCallbacks().callbacks);
+    expect(terminal).toEqual({
+      type: 'failed',
+      error: {
+        code: 'DEEPSEEK_DISPATCH_FAILED',
+        message: 'The DeepSeek request was not dispatched.',
+        retryable: false,
+        external_outcome: 'unknown',
+      },
     });
-    expect(JSON.stringify(caught)).not.toMatch(/browser-secret|Authorization|Bearer/i);
+    expect(JSON.stringify(terminal)).not.toMatch(/browser-secret|Authorization|Bearer/i);
+    expect(streamer).not.toHaveBeenCalled();
 
-    expect(await adapter.generate(request(), collectCallbacks().callbacks)).toEqual({
+    expect(await adapter.generate(request({ request_id: 'request-2', request_digest: DIGEST_B }), collectCallbacks().callbacks)).toEqual({
       type: 'completed', finish_reason: 'stop',
     });
     expect(streamer).toHaveBeenCalledTimes(1);
@@ -739,26 +750,60 @@ describe('DeepSeekWebModelTurnAdapter', () => {
       .not.toMatch(/browser-secret|Authorization/i);
   });
 
+  it('applies cooldown only to the explicit unfinished rate-limit completion and preserves ambiguity', async () => {
+    const permit = Object.freeze({ dispatched() {}, release() {} });
+    const pacing: CompletionPacing = {
+      acquire: vi.fn(async () => permit),
+      noteRateLimit: vi.fn(),
+      noteCompleted: vi.fn(),
+    };
+    const { adapter, sessions } = adapterWith(
+      vi.fn(async () => turn({ finished: false, completionFailure: 'rate_limit_reached' })),
+      fakeClient(),
+      new WebModelSessionMap(),
+      pacing,
+    );
+
+    expect(await adapter.generate(request(), collectCallbacks().callbacks)).toEqual({
+      type: 'ambiguous', reason: 'deepseek_rate_limit_reached',
+    });
+    expect(pacing.noteRateLimit).toHaveBeenCalledOnce();
+    expect(pacing.noteCompleted).not.toHaveBeenCalled();
+    expect(sessions.getSession('session-1')?.quarantined).toBe(true);
+  });
+
+  it('does not apply rate-limit cooldown to a finished completion', async () => {
+    const permit = Object.freeze({ dispatched() {}, release() {} });
+    const pacing: CompletionPacing = {
+      acquire: vi.fn(async () => permit),
+      noteRateLimit: vi.fn(),
+      noteCompleted: vi.fn(),
+    };
+    const { adapter } = adapterWith(vi.fn(async () => turn()), fakeClient(), new WebModelSessionMap(), pacing);
+
+    expect(await adapter.generate(request(), collectCallbacks().callbacks)).toEqual({ type: 'completed', finish_reason: 'stop' });
+    expect(pacing.noteCompleted).toHaveBeenCalledOnce();
+    expect(pacing.noteRateLimit).not.toHaveBeenCalled();
+  });
+
   it('cancels the active request with AbortSignal and cancellation remains idempotent', async () => {
     let signalSeen: AbortSignal | undefined;
+    let started!: () => void;
+    const startedPromise = new Promise<void>((resolve) => { started = resolve; });
     const streamer: TestStreamer = vi.fn((_input, _callbacks, context) => {
       signalSeen = context.signal;
+      started();
       return new Promise<ModelTurn>((_resolve, reject) => {
         context.signal?.addEventListener('abort', () => reject(context.signal?.reason), { once: true });
       });
     });
     const { adapter, sessions } = adapterWith(streamer);
-    let accepted!: () => void;
-    const acceptedPromise = new Promise<void>((resolve) => { accepted = resolve; });
     const callbacks = collectCallbacks().callbacks;
     const generating = adapter.generate(request(), {
       ...callbacks,
-      onAccepted(value) {
-        callbacks.onAccepted(value);
-        accepted();
-      },
+      onAccepted: callbacks.onAccepted,
     });
-    await acceptedPromise;
+    await startedPromise;
 
     expect(adapter.cancel({
       schema_version: 1,
@@ -806,24 +851,48 @@ describe('DeepSeekWebModelTurnAdapter', () => {
     }
   });
 
+  it('accepts before pacing but times out queued work without PoW or dispatch', async () => {
+    vi.useFakeTimers();
+    try {
+      const pacing = new CompletionPacingGate();
+      const held = await pacing.acquire(new AbortController().signal);
+      held.dispatched();
+      const client = fakeClient();
+      const accepted = vi.fn();
+      const { adapter } = adapterWith(vi.fn(async () => turn()), client, new WebModelSessionMap(), pacing);
+      const generating = adapter.generate(request({
+        options: { thinking_enabled: false, search_enabled: false, model_type: 'default', timeout_ms: 10 },
+      }), { ...collectCallbacks().callbacks, onAccepted: accepted });
+      for (let index = 0; index < 16 && accepted.mock.calls.length === 0; index += 1) await Promise.resolve();
+      expect(accepted).toHaveBeenCalledOnce();
+      expect(client.createPowHeaders).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(10);
+      expect(await generating).toEqual({ type: 'aborted', reason: 'request_cancelled_before_dispatch' });
+      expect(client.createPowHeaders).not.toHaveBeenCalled();
+      expect(client.submitPromptStreaming).not.toHaveBeenCalled();
+      held.release();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('reports an external AbortSignal after dispatch as ambiguous', async () => {
     const controller = new AbortController();
+    let started!: () => void;
+    const startedPromise = new Promise<void>((resolve) => { started = resolve; });
     const streamer: TestStreamer = vi.fn((_input, _callbacks, context) =>
       new Promise<ModelTurn>((_resolve, reject) => {
+        started();
         context.signal?.addEventListener('abort', () => reject(context.signal?.reason), { once: true });
       }));
     const { adapter, sessions } = adapterWith(streamer);
-    let accepted!: () => void;
-    const acceptedPromise = new Promise<void>((resolve) => { accepted = resolve; });
     const callbacks = collectCallbacks().callbacks;
     const generating = adapter.generate(request(), {
       ...callbacks,
-      onAccepted(value) {
-        callbacks.onAccepted(value);
-        accepted();
-      },
+      onAccepted: callbacks.onAccepted,
     }, { signal: controller.signal });
-    await acceptedPromise;
+    await startedPromise;
     controller.abort(new Error('host cancellation detail must not escape'));
 
     expect(await generating).toEqual({
@@ -834,11 +903,17 @@ describe('DeepSeekWebModelTurnAdapter', () => {
 
   it('fails after one bounded correction when an incomplete tool call remains malformed', async () => {
     const client = fakeClient();
+    const permit = Object.freeze({ dispatched() {}, release() {} });
+    const pacing: CompletionPacing = {
+      acquire: vi.fn(async () => permit),
+      noteRateLimit() {},
+      noteCompleted() {},
+    };
     const streamer: TestStreamer = vi.fn(async (_input, callbacks: StreamCallbacks) => {
       callbacks.onTextChunk?.('<local_agent_read>{"path":"README.md"}', '');
       return turn();
     });
-    const { adapter } = adapterWith(streamer, client);
+    const { adapter } = adapterWith(streamer, client, new WebModelSessionMap(), pacing);
 
     expect(await adapter.generate(request(), collectCallbacks().callbacks)).toEqual({
       type: 'failed',
@@ -850,6 +925,7 @@ describe('DeepSeekWebModelTurnAdapter', () => {
       },
     });
     expect(streamer).toHaveBeenCalledTimes(2);
+    expect(pacing.acquire).toHaveBeenCalledTimes(2);
     expect(client.readHistorySnapshot).toHaveBeenCalledTimes(1);
   });
 

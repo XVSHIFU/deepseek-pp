@@ -15,6 +15,7 @@ import {
   HarnessBridgeSettingsError,
   createHarnessBridgeSettingsStore,
   decodeHarnessBridgeSettings,
+  normalizeHarnessBridgeSettingsPatch,
   projectHarnessBridgeSettings,
   type HarnessBridgeSettings,
   type HarnessBridgeSettingsStorage,
@@ -36,41 +37,57 @@ describe('Harness bridge browser-local settings', () => {
     const settings = await store.read();
 
     expect(settings).toEqual({
-      version: 1,
+      version: 2,
       enabled: false,
       port: DEFAULT_HARNESS_BRIDGE_PORT,
+      minRequestIntervalMs: 5_000,
       pairingToken: null,
     });
     expect(fixture.set).not.toHaveBeenCalled();
     expect(projectHarnessBridgeSettings(settings)).toEqual({
-      version: 1,
+      version: 2,
       enabled: false,
       port: DEFAULT_HARNESS_BRIDGE_PORT,
+      minRequestIntervalMs: 5_000,
       pairingTokenConfigured: false,
     });
   });
 
-  it('migrates v0 deterministically in memory and writes v1 only after an authorized update', async () => {
-    const legacy = { version: 0, enabled: false, port: 40_001, pairingToken: TOKEN };
-    const fixture = storageFixture(legacy);
-    const store = createHarnessBridgeSettingsStore(fixture.port);
+  it.each([0, 1] as const)(
+    'migrates v%s deterministically in memory and writes v2 only after an authorized update',
+    async (version) => {
+      const legacy = { version, enabled: false, port: 40_001, pairingToken: TOKEN };
+      const fixture = storageFixture(legacy);
+      const store = createHarnessBridgeSettingsStore(fixture.port);
 
-    await expect(store.read()).resolves.toEqual({ ...legacy, version: 1 });
-    expect(fixture.set).not.toHaveBeenCalled();
-    await store.update({ enabled: true, port: 40_001 });
+      await expect(store.read()).resolves.toEqual({
+        ...legacy,
+        version: 2,
+        minRequestIntervalMs: 5_000,
+      });
+      expect(fixture.set).not.toHaveBeenCalled();
+      await store.update({ enabled: true, port: 40_001, minRequestIntervalMs: 9_000 });
 
-    expect(fixture.raw()).toEqual({ version: 1, enabled: true, port: 40_001, pairingToken: TOKEN });
-  });
+      expect(fixture.raw()).toEqual({
+        version: 2,
+        enabled: true,
+        port: 40_001,
+        minRequestIntervalMs: 9_000,
+        pairingToken: TOKEN,
+      });
+    },
+  );
 
   it.each([
-    ['corrupt', { version: 1, enabled: false, port: 43_123, pairingToken: null, extra: true }, 'harness_bridge_settings_corrupt'],
-    ['future', { version: 2, enabled: false, port: 43_123, pairingToken: null }, 'harness_bridge_settings_future_version'],
+    ['corrupt', { version: 2, enabled: false, port: 43_123, minRequestIntervalMs: 5_000, pairingToken: null, extra: true }, 'harness_bridge_settings_corrupt'],
+    ['future', { version: 3, enabled: false, port: 43_123, minRequestIntervalMs: 5_000, pairingToken: null }, 'harness_bridge_settings_future_version'],
   ])('rejects %s persisted data without overwriting it', async (_name, raw, code) => {
     const fixture = storageFixture(raw);
     const store = createHarnessBridgeSettingsStore(fixture.port);
 
     await expect(store.read()).rejects.toMatchObject({ name: HarnessBridgeSettingsError.name, code });
-    await expect(store.update({ enabled: false, port: 43_123 })).rejects.toMatchObject({ code });
+    await expect(store.update({ enabled: false, port: 43_123, minRequestIntervalMs: 5_000 }))
+      .rejects.toMatchObject({ code });
     expect(fixture.set).not.toHaveBeenCalled();
     expect(fixture.raw()).toBe(raw);
   });
@@ -78,25 +95,82 @@ describe('Harness bridge browser-local settings', () => {
   it('requires the protocol token shape before enabling and serializes concurrent updates', async () => {
     const fixture = storageFixture();
     const store = createHarnessBridgeSettingsStore(fixture.port);
-    await expect(store.update({ enabled: true, port: 43_123 }))
+    await expect(store.update({ enabled: true, port: 43_123, minRequestIntervalMs: 5_000 }))
       .rejects.toMatchObject({ code: 'harness_bridge_pairing_token_required' });
-    await expect(store.update({ enabled: false, port: 43_123, pairingToken: 'short' }))
+    await expect(store.update({ enabled: false, port: 43_123, minRequestIntervalMs: 5_000, pairingToken: 'short' }))
       .rejects.toMatchObject({ code: 'harness_bridge_settings_corrupt' });
 
     await Promise.all([
-      store.update({ enabled: false, port: 43_124, pairingToken: TOKEN }),
-      store.update({ enabled: true, port: 43_125 }),
+      store.update({ enabled: false, port: 43_124, minRequestIntervalMs: 8_000, pairingToken: TOKEN }),
+      store.update({ enabled: true, port: 43_125, minRequestIntervalMs: 12_000 }),
     ]);
-    expect(fixture.raw()).toEqual({ version: 1, enabled: true, port: 43_125, pairingToken: TOKEN });
+    expect(fixture.raw()).toEqual({
+      version: 2,
+      enabled: true,
+      port: 43_125,
+      minRequestIntervalMs: 12_000,
+      pairingToken: TOKEN,
+    });
   });
 
-  it('strictly rejects unknown patch fields and invalid ports', () => {
+  it('strictly rejects unknown patch fields, invalid ports, and invalid minimum intervals', () => {
     expect(() => decodeHarnessBridgeSettings({
-      version: 1,
+      version: 2,
       enabled: false,
       port: 0,
+      minRequestIntervalMs: 5_000,
       pairingToken: null,
     })).toThrowError(HarnessBridgeSettingsError);
+    expect(() => decodeHarnessBridgeSettings({
+      version: 2,
+      enabled: false,
+      port: 43_123,
+      minRequestIntervalMs: 4_999,
+      pairingToken: null,
+    })).toThrowError(HarnessBridgeSettingsError);
+    expect(() => decodeHarnessBridgeSettings({
+      version: 2,
+      enabled: false,
+      port: 43_123,
+      minRequestIntervalMs: 30_001,
+      pairingToken: null,
+    })).toThrowError(HarnessBridgeSettingsError);
+    expect(normalizeHarnessBridgeSettingsPatch({ enabled: false, port: 43_123 })).toEqual({
+      enabled: false,
+      port: 43_123,
+    });
+    expect(() => normalizeHarnessBridgeSettingsPatch({
+      enabled: false,
+      port: 43_123,
+      minRequestIntervalMs: 5_000.5,
+    })).toThrowError(HarnessBridgeSettingsError);
+    expect(() => normalizeHarnessBridgeSettingsPatch({
+      enabled: false,
+      port: 43_123,
+      minRequestIntervalMs: 5_000,
+      host: 'localhost',
+    })).toThrowError(HarnessBridgeSettingsError);
+  });
+
+  it('preserves the current minimum interval when a compatible patch omits it', async () => {
+    const fixture = storageFixture({
+      version: 2,
+      enabled: false,
+      port: 43_123,
+      minRequestIntervalMs: 13_000,
+      pairingToken: TOKEN,
+    });
+    const store = createHarnessBridgeSettingsStore(fixture.port);
+
+    await store.update({ enabled: true, port: 43_124 });
+
+    expect(fixture.raw()).toEqual({
+      version: 2,
+      enabled: true,
+      port: 43_124,
+      minRequestIntervalMs: 13_000,
+      pairingToken: TOKEN,
+    });
   });
 
   it('uses browser local storage only', async () => {
@@ -111,7 +185,12 @@ describe('Harness bridge browser-local settings', () => {
     vi.stubGlobal('chrome', { storage: { local, sync } });
 
     const store = createHarnessBridgeSettingsStore();
-    await store.update({ enabled: false, port: 43_123, pairingToken: TOKEN });
+    await store.update({
+      enabled: false,
+      port: 43_123,
+      minRequestIntervalMs: 5_000,
+      pairingToken: TOKEN,
+    });
 
     expect(local.get).toHaveBeenCalledWith(HARNESS_BRIDGE_SETTINGS_STORAGE_KEY);
     expect(local.set).toHaveBeenCalledOnce();
@@ -123,6 +202,19 @@ describe('Harness bridge browser-local settings', () => {
     ['unknown field', { ...safeStatus(), token: TOKEN }],
     ['invalid phase', { ...safeStatus(), state: { phase: 'secret_phase', attempt: 0 } }],
     ['invalid port', { ...safeStatus(), settings: { ...safeStatus().settings, port: 0 } }],
+    ['missing minimum interval', {
+      ...safeStatus(),
+      settings: {
+        version: 2,
+        enabled: false,
+        port: 43_123,
+        pairingTokenConfigured: false,
+      },
+    }],
+    ['invalid minimum interval', {
+      ...safeStatus(),
+      settings: { ...safeStatus().settings, minRequestIntervalMs: 30_001 },
+    }],
     ['raw capabilities', { ...safeStatus(), state: { ...safeStatus().state, capabilities: { reasoning: true } } }],
   ])('strictly rejects an unsafe status DTO: %s', (_name, value) => {
     expect(() => decodeHarnessBridgeStatusResult(value))
@@ -422,11 +514,12 @@ describe('Harness bridge background coordinator', () => {
     let stored = firstSettings;
     const store = {
       read: vi.fn(async () => stored),
-      update: vi.fn(async (patch: { enabled: boolean; port: number; pairingToken?: string }) => {
+      update: vi.fn(async (patch: { enabled: boolean; port: number; minRequestIntervalMs?: number; pairingToken?: string }) => {
         stored = {
-          version: 1,
+          version: 2,
           enabled: patch.enabled,
           port: patch.port,
+          minRequestIntervalMs: patch.minRequestIntervalMs ?? stored.minRequestIntervalMs,
           pairingToken: patch.pairingToken ?? stored.pairingToken,
         };
         return stored;
@@ -499,13 +592,25 @@ class FakeClient implements HarnessBridgeClientPort {
 }
 
 function enabledSettings(): HarnessBridgeSettings {
-  return { version: 1, enabled: true, port: 43_123, pairingToken: TOKEN };
+  return {
+    version: 2,
+    enabled: true,
+    port: 43_123,
+    minRequestIntervalMs: 5_000,
+    pairingToken: TOKEN,
+  };
 }
 
 function safeStatus() {
   return {
     ok: true as const,
-    settings: { version: 1 as const, enabled: false, port: 43_123, pairingTokenConfigured: false },
+    settings: {
+      version: 2 as const,
+      enabled: false,
+      port: 43_123,
+      minRequestIntervalMs: 5_000,
+      pairingTokenConfigured: false,
+    },
     state: { phase: 'stopped' as const, attempt: 0 },
   };
 }

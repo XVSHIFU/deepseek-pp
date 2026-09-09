@@ -1,5 +1,15 @@
 # Web Model Broker × Local DSH — Active Progress
 
+## 2026-09-09 T9 首因确认与限流修复
+
+- 用户在 Service Worker Network 提供真实失败响应：`hint` 的 `type=error`、`clear_response=true`、`finish_reason=rate_limit_reached`，正文提示“消息发送过于频繁，请稍后重试”，随后 `close/retry/auto_resume=false`。本次首次停止确认为网页端限流，不再以长输入本身或上下文超限作为已证实根因。此前 T9-Network 只读会话短输入完成 10 次 glob，随后失败请求散列 `740eda9c9590ab12`、368ms，与 v2 的 311 字节/3 事件形状一致。
+- 原 stream-codec 单次解析的观察路径精确识别该 hint 组合；Mode A opt-in 只获得固定 `completionFailure` 枚举，未保存/转发提示正文。正常 FINISHED、Mode B、工具解析不变。限流未完成流保留 ambiguous 和隔离，但 Host 显示中文 `WEB_MODEL_RATE_LIMITED`，固定原因可安全持久化，不再丢成 unknown。
+- Mode A adapter 单例内统一 completion gate：默认相邻实际 dispatch 至少 5 秒，包含多个 Harness 会话和纠正请求；submit 结束后才释放，长响应不额外叠加等待。accepted 后排队、取得许可后才创建 PoW；等待可取消且受原 turn deadline 限制。限流冷却 30/60/120 秒封顶，没有自动重放、解除隔离或重新执行旧工具。
+- 原扩展设置增加 5–30 秒可调间隔。v0/v1 确定性只读迁移为 v2 默认值，保存才写新版；未知/损坏数据不覆盖，旧 patch 省略间隔时保留当前值。Background 复用同一个 settings store 给 gate 读配置，未新增存储键、配对方式或权限。双语 README 补简短使用提示，复测操作见 `docs/verification/T9_限流修复复测.md`。
+- 主 agent 外层硬限 60 秒回归：客户端/单次解析/Host/安全原因四文件 **105/105**；gate/adapter 两文件最终 **86/86**；settings/runtime handlers/composition 三文件 **74/74**。另外 recovery/transport/reconnect 三文件通过；同批 composition 最初撞旧 5 秒测试时限（新增生产间隔为 5 秒），显式调至 15 秒后上述三文件回归通过，未跳过生产等待或扩大运行时超时。compile、prompt freeze **7/7**、官方插件 build、diff-check 通过。范围内独立只读复审未发现高/中风险。
+- UI 最终 Harness 定向 **7/7** 通过（2 文件按名称过滤，其余 27 项未执行），最终根 compile 通过。设置 agent 的较宽 UI 联合运行曾遇范围外 lazy-render/navigation 失败，未据定向通过宣称全仓绿色；本轮没有运行完整 CI。
+- 尚未部署这次限流修复到浏览器、未进行新的低频真实验证，不能宣称已测得限流阈值或 T9 整体完成。边界验证按计划最多两批共 18 次 completion，首次限流停止当批；不测更短间隔、不并发冲击、不切换账号。无 push、Release 或商店上传。
+
 ## 2026-09-09 T9 v2 已部署并复现相同短流
 
 - v2 源码 `bc29803`，用户重新加载后的扩展 100 文件散列匹配；Harness 插件官方安装 exit 0、运行文件散列匹配并重启服务，配对/会话/未发送草稿保留。详细组件散列与安装备份见 `docs/verification/T9_本机诊断说明.md`。

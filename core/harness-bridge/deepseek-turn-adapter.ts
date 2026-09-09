@@ -33,6 +33,10 @@ import {
   type VerifiedWebPageTurn,
   type WebPageSessionBinding,
 } from './session-map';
+import {
+  CompletionPacingGate,
+  type CompletionPacing,
+} from './request-pacing';
 
 export const WEB_MODEL_TURN_BUDGETS = Object.freeze({
   /** Below the existing 4 MiB active-completion response policy. */
@@ -47,6 +51,10 @@ export interface DeepSeekWebModelTurnAdapterDependencies {
   readonly client?: DeepSeekAutomationClient;
   readonly sessions?: WebModelSessionMap;
   readonly loadClientHeaders?: DeepSeekClientHeadersLoader;
+  /** Adapter-scoped gate; production shares it across every Harness session. */
+  readonly pacing?: CompletionPacing;
+  /** Reads the single authoritative request-pacing setting when a slot opens. */
+  readonly getMinIntervalMs?: () => number | Promise<number>;
 }
 
 export interface DeepSeekClientHeadersContext {
@@ -103,6 +111,7 @@ export class DeepSeekWebModelTurnAdapter implements WebModelTurnPort {
   readonly sessions: WebModelSessionMap;
   private readonly client: DeepSeekAutomationClient;
   private readonly loadClientHeaders: DeepSeekClientHeadersLoader;
+  private readonly pacing: CompletionPacing;
   private readonly active = new Map<string, ActiveTurn>();
 
   constructor(dependencies: DeepSeekWebModelTurnAdapterDependencies = {}) {
@@ -111,6 +120,9 @@ export class DeepSeekWebModelTurnAdapter implements WebModelTurnPort {
     this.loadClientHeaders = dependencies.loadClientHeaders ?? (async ({ signal }) => {
       if (signal.aborted) throw signal.reason ?? createSafeAbortReason('external');
       return this.client.createClientHeaders();
+    });
+    this.pacing = dependencies.pacing ?? new CompletionPacingGate({
+      getMinIntervalMs: dependencies.getMinIntervalMs,
     });
   }
 
@@ -168,9 +180,6 @@ export class DeepSeekWebModelTurnAdapter implements WebModelTurnPort {
         clientHeaders,
         turnSignal.signal,
       );
-      const powHeaders = await this.client.createPowHeaders(clientHeaders, { signal: turnSignal.signal });
-      if (turnSignal.signal.aborted) throw new DeepSeekTurnAdapterError('REQUEST_ABORTED');
-
       const acceptedValue: WebModelTurnAccepted = Object.freeze({
         request_id: request.request_id,
         request_digest: request.request_digest,
@@ -298,7 +307,10 @@ export class DeepSeekWebModelTurnAdapter implements WebModelTurnPort {
       };
 
       let result: ModelTurn;
+      const initialPermit = await this.pacing.acquire(turnSignal.signal);
       try {
+        const powHeaders = await this.client.createPowHeaders(clientHeaders, { signal: turnSignal.signal });
+        if (turnSignal.signal.aborted) throw new DeepSeekTurnAdapterError('REQUEST_ABORTED');
         result = await this.client.submitPromptStreaming({
           chatSessionId: binding.chatSessionId,
           parentMessageId: binding.parentMessageId,
@@ -315,8 +327,11 @@ export class DeepSeekWebModelTurnAdapter implements WebModelTurnPort {
           onDispatch: () => {
             this.sessions.markDispatched(request.request_id);
             dispatched = true;
+            initialPermit.dispatched();
           },
         });
+        if (dispatched && result.finished) this.pacing.noteCompleted();
+        else if (dispatched && completionRateLimited(result)) this.pacing.noteRateLimit();
       } catch {
         if (fault === 'budget') return this.terminal(request.request_id, failedBudget());
         if (fault === 'tool') return this.terminal(request.request_id, failedToolCall());
@@ -333,13 +348,17 @@ export class DeepSeekWebModelTurnAdapter implements WebModelTurnPort {
           request.request_id,
           dispatched ? ambiguous('deepseek_turn_outcome_unknown') : failedDispatch(),
         );
+      } finally {
+        initialPermit.release();
       }
 
       if (!dispatched) return this.terminal(request.request_id, failedDispatch());
       if (turnSignal.signal.aborted) {
         return this.terminal(request.request_id, terminalForAbort(turnSignal.signal, true));
       }
-      if (!result.finished) return this.terminal(request.request_id, ambiguous(completionDiagnosticReason(result.completionDiagnostic)));
+      if (!result.finished) return this.terminal(request.request_id, ambiguous(
+        completionRateLimited(result) ? 'deepseek_rate_limit_reached' : completionDiagnosticReason(result.completionDiagnostic),
+      ));
 
       try {
         consumeParsed(toolParser.flush());
@@ -372,14 +391,6 @@ export class DeepSeekWebModelTurnAdapter implements WebModelTurnPort {
       if (!firstVerified) return this.terminal(request.request_id, ambiguous('deepseek_chain_unverified'));
 
       if (correctionRequired) {
-        let correctionPowHeaders: Record<string, string>;
-        try {
-          correctionPowHeaders = await this.client.createPowHeaders(clientHeaders, { signal: turnSignal.signal });
-        } catch {
-          return this.terminal(request.request_id, turnSignal.signal.aborted
-            ? terminalForAbort(turnSignal.signal, true)
-            : failedToolCall());
-        }
         const correctionParser = createStreamingToolCallParser(descriptors, { strictToolCalls: true });
         const correctionText = createStreamingToolTextAccumulator(descriptors, { stopTextAtToolCall: true });
         let correctionVisibleText = '';
@@ -427,7 +438,10 @@ export class DeepSeekWebModelTurnAdapter implements WebModelTurnPort {
         };
         let correctionDispatched = false;
         let correctedResult: ModelTurn;
+        const correctionPermit = await this.pacing.acquire(turnSignal.signal);
         try {
+          const correctionPowHeaders = await this.client.createPowHeaders(clientHeaders, { signal: turnSignal.signal });
+          if (turnSignal.signal.aborted) throw new DeepSeekTurnAdapterError('REQUEST_ABORTED');
           correctedResult = await this.client.submitPromptStreaming({
             chatSessionId: binding.chatSessionId,
             parentMessageId: firstVerified.responseMessageId,
@@ -441,8 +455,13 @@ export class DeepSeekWebModelTurnAdapter implements WebModelTurnPort {
           }, correctionCallbacks, {
             completionDiagnostics: true,
             signal: turnSignal.signal,
-            onDispatch: () => { correctionDispatched = true; },
+            onDispatch: () => {
+              correctionDispatched = true;
+              correctionPermit.dispatched();
+            },
           });
+          if (correctionDispatched && correctedResult.finished) this.pacing.noteCompleted();
+          else if (correctionDispatched && completionRateLimited(correctedResult)) this.pacing.noteRateLimit();
         } catch {
           if (fault === 'budget') return this.terminal(request.request_id, failedBudget());
           if (fault === 'tool') return this.terminal(request.request_id, failedToolCall());
@@ -455,13 +474,17 @@ export class DeepSeekWebModelTurnAdapter implements WebModelTurnPort {
           return this.terminal(request.request_id, correctionDispatched
             ? ambiguous('deepseek_turn_outcome_unknown')
             : failedToolCall());
+        } finally {
+          correctionPermit.release();
         }
         if (!correctionDispatched) return this.terminal(request.request_id, failedToolCall());
         if (turnSignal.signal.aborted) {
           return this.terminal(request.request_id, terminalForAbort(turnSignal.signal, true));
         }
         if (!correctedResult.finished) {
-          return this.terminal(request.request_id, ambiguous(completionDiagnosticReason(correctedResult.completionDiagnostic)));
+          return this.terminal(request.request_id, ambiguous(
+            completionRateLimited(correctedResult) ? 'deepseek_rate_limit_reached' : completionDiagnosticReason(correctedResult.completionDiagnostic),
+          ));
         }
         try {
           consumeParsed(correctionParser.flush(), true);
@@ -887,6 +910,10 @@ function aborted(reason: string): WebModelTurnTerminal {
 
 function ambiguous(reason: string): WebModelTurnTerminal {
   return { type: 'ambiguous', reason };
+}
+
+function completionRateLimited(result: ModelTurn): boolean {
+  return !result.finished && (result as { completionFailure?: unknown }).completionFailure === 'rate_limit_reached';
 }
 
 function failedAcceptedCallback(): WebModelTurnTerminal {

@@ -1,12 +1,18 @@
 import { createSerialOperationQueue } from '../persistence/serial-operation-queue';
 import { validateHarnessBridgeClientConfig } from './client';
 import {
+  DEFAULT_HARNESS_BRIDGE_MIN_REQUEST_INTERVAL_MS,
   HARNESS_BRIDGE_SETTINGS_VERSION,
+  MAX_HARNESS_BRIDGE_REQUEST_INTERVAL_MS,
+  MIN_HARNESS_BRIDGE_REQUEST_INTERVAL_MS,
   type PublicHarnessBridgeSettings,
 } from './contracts';
 
 export {
+  DEFAULT_HARNESS_BRIDGE_MIN_REQUEST_INTERVAL_MS,
   HARNESS_BRIDGE_SETTINGS_VERSION,
+  MAX_HARNESS_BRIDGE_REQUEST_INTERVAL_MS,
+  MIN_HARNESS_BRIDGE_REQUEST_INTERVAL_MS,
   type PublicHarnessBridgeSettings,
 } from './contracts';
 
@@ -32,12 +38,15 @@ export interface HarnessBridgeSettings {
   readonly version: typeof HARNESS_BRIDGE_SETTINGS_VERSION;
   readonly enabled: boolean;
   readonly port: number;
+  readonly minRequestIntervalMs: number;
   readonly pairingToken: string | null;
 }
 
 export interface HarnessBridgeSettingsPatch {
   readonly enabled: boolean;
   readonly port: number;
+  /** Omit to preserve the existing minimum interval. */
+  readonly minRequestIntervalMs?: number;
   /** Omit to preserve the existing browser-local token. */
   readonly pairingToken?: string;
 }
@@ -56,6 +65,7 @@ const DEFAULT_SETTINGS: HarnessBridgeSettings = Object.freeze({
   version: HARNESS_BRIDGE_SETTINGS_VERSION,
   enabled: false,
   port: DEFAULT_HARNESS_BRIDGE_PORT,
+  minRequestIntervalMs: DEFAULT_HARNESS_BRIDGE_MIN_REQUEST_INTERVAL_MS,
   pairingToken: null,
 });
 
@@ -76,6 +86,7 @@ export function createHarnessBridgeSettingsStore(
         version: HARNESS_BRIDGE_SETTINGS_VERSION,
         enabled: normalized.enabled,
         port: normalized.port,
+        minRequestIntervalMs: normalized.minRequestIntervalMs ?? current.minRequestIntervalMs,
         pairingToken: normalized.pairingToken ?? current.pairingToken,
       });
       if (next.enabled && next.pairingToken === null) {
@@ -91,37 +102,50 @@ export function createHarnessBridgeSettingsStore(
 export function decodeHarnessBridgeSettings(value: unknown): HarnessBridgeSettings {
   if (value === undefined) return DEFAULT_SETTINGS;
   const record = strictRecord(value);
-  if (typeof record.version === 'number' && Number.isFinite(record.version) && record.version > 1) {
+  if (typeof record.version === 'number' && Number.isFinite(record.version) &&
+      record.version > HARNESS_BRIDGE_SETTINGS_VERSION) {
     throw new HarnessBridgeSettingsError('harness_bridge_settings_future_version');
   }
-  if (record.version !== 0 && record.version !== HARNESS_BRIDGE_SETTINGS_VERSION) corrupt();
-  assertExactKeys(record, ['version', 'enabled', 'port', 'pairingToken']);
+  if (record.version !== 0 && record.version !== 1 &&
+      record.version !== HARNESS_BRIDGE_SETTINGS_VERSION) corrupt();
+  const legacy = record.version === 0 || record.version === 1;
+  assertExactKeys(record, legacy
+    ? ['version', 'enabled', 'port', 'pairingToken']
+    : ['version', 'enabled', 'port', 'minRequestIntervalMs', 'pairingToken']);
   if (typeof record.enabled !== 'boolean') corrupt();
   const port = validatePort(record.port);
+  const minRequestIntervalMs = legacy
+    ? DEFAULT_HARNESS_BRIDGE_MIN_REQUEST_INTERVAL_MS
+    : validateHarnessBridgeMinRequestIntervalMs(record.minRequestIntervalMs);
   const pairingToken = record.pairingToken === null
     ? null
     : validateHarnessBridgePairingToken(record.pairingToken);
   if (record.enabled && pairingToken === null) {
     throw new HarnessBridgeSettingsError('harness_bridge_pairing_token_required');
   }
-  // Version 0 had the same persisted fields. Returning a fresh v1 value is a
-  // deterministic, side-effect-free migration; the next authorized update
-  // writes v1. Reads never overwrite legacy, corrupt, or future data.
+  // Versions 0 and 1 had the same persisted fields. Returning a fresh v2 value
+  // with the default interval is a deterministic, side-effect-free migration;
+  // the next authorized update writes v2. Reads never overwrite legacy,
+  // corrupt, or future data.
   return Object.freeze({
     version: HARNESS_BRIDGE_SETTINGS_VERSION,
     enabled: record.enabled,
     port,
+    minRequestIntervalMs,
     pairingToken,
   });
 }
 
 export function normalizeHarnessBridgeSettingsPatch(value: unknown): HarnessBridgeSettingsPatch {
   const record = strictRecord(value);
-  assertExactKeys(record, ['enabled', 'port'], ['pairingToken']);
+  assertExactKeys(record, ['enabled', 'port'], ['minRequestIntervalMs', 'pairingToken']);
   if (typeof record.enabled !== 'boolean') corrupt();
   return Object.freeze({
     enabled: record.enabled,
     port: validatePort(record.port),
+    ...(record.minRequestIntervalMs === undefined
+      ? {}
+      : { minRequestIntervalMs: validateHarnessBridgeMinRequestIntervalMs(record.minRequestIntervalMs) }),
     ...(record.pairingToken === undefined
       ? {}
       : { pairingToken: validateHarnessBridgePairingToken(record.pairingToken) }),
@@ -135,6 +159,7 @@ export function projectHarnessBridgeSettings(
     version: HARNESS_BRIDGE_SETTINGS_VERSION,
     enabled: settings.enabled,
     port: settings.port,
+    minRequestIntervalMs: settings.minRequestIntervalMs,
     pairingTokenConfigured: settings.pairingToken !== null,
   });
 }
@@ -152,6 +177,13 @@ function createBrowserLocalHarnessBridgeStorage(): HarnessBridgeSettingsStorage 
 
 function validatePort(value: unknown): number {
   if (!Number.isSafeInteger(value) || (value as number) < 1 || (value as number) > 65_535) corrupt();
+  return value as number;
+}
+
+export function validateHarnessBridgeMinRequestIntervalMs(value: unknown): number {
+  if (!Number.isSafeInteger(value) ||
+      (value as number) < MIN_HARNESS_BRIDGE_REQUEST_INTERVAL_MS ||
+      (value as number) > MAX_HARNESS_BRIDGE_REQUEST_INTERVAL_MS) corrupt();
   return value as number;
 }
 

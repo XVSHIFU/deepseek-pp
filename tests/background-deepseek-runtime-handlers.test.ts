@@ -105,7 +105,12 @@ describe('R4.3 DeepSeek runtime ownership', () => {
   it('strictly decodes extension-only bridge updates and never returns the pairing token', async () => {
     const dependencies = createHarnessBridgeDependencies();
     const handlers = createHarnessBridgeRuntimeHandlers(dependencies);
-    const payload = { enabled: true, port: 43_123, pairingToken: 'A'.repeat(43) };
+    const payload = {
+      enabled: true,
+      port: 43_123,
+      minRequestIntervalMs: 9_000,
+      pairingToken: 'A'.repeat(43),
+    };
 
     const response = await dispatch(handlers, { type: 'UPDATE_HARNESS_BRIDGE_SETTINGS', payload });
     expect(dependencies.coordinator.updateSettings).toHaveBeenCalledWith(payload);
@@ -855,15 +860,27 @@ function createHarnessBridgeDependencies() {
     coordinator: {
       getStatus: vi.fn(async () => ({
         ok: true as const,
-        settings: { version: 1 as const, enabled: false, port: 43_123, pairingTokenConfigured: false },
+        settings: {
+          version: 2 as const,
+          enabled: false,
+          port: 43_123,
+          minRequestIntervalMs: 5_000,
+          pairingTokenConfigured: false,
+        },
         state: { phase: 'stopped' as const, attempt: 0 },
       })),
-      updateSettings: vi.fn(async (patch: { enabled: boolean; port: number; pairingToken?: string }) => ({
+      updateSettings: vi.fn(async (patch: {
+        enabled: boolean;
+        port: number;
+        minRequestIntervalMs?: number;
+        pairingToken?: string;
+      }) => ({
         ok: true as const,
         settings: {
-          version: 1 as const,
+          version: 2 as const,
           enabled: patch.enabled,
           port: patch.port,
+          minRequestIntervalMs: patch.minRequestIntervalMs ?? 5_000,
           pairingTokenConfigured: patch.pairingToken !== undefined,
         },
         state: { phase: patch.enabled ? 'connecting' as const : 'stopped' as const, attempt: patch.enabled ? 1 : 0 },

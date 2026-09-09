@@ -358,7 +358,13 @@ function memoryStorage(initial?: unknown) {
 }
 
 async function setup(storage: HarnessBridgeRecoveryStorage, overrides: Partial<WebModelTurnPort> = {}) {
-  let settings: HarnessBridgeSettings = { version: 1, enabled: true, port: 43123, pairingToken: TOKEN };
+  let settings: HarnessBridgeSettings = {
+    version: 2,
+    enabled: true,
+    port: 43123,
+    minRequestIntervalMs: 5_000,
+    pairingToken: TOKEN,
+  };
   const created: FakeClient[] = [];
   const turn = {
     generate: vi.fn<WebModelTurnPort['generate']>(async () => { throw new Error('No generation expected'); }),

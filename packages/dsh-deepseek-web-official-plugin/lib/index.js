@@ -2177,6 +2177,7 @@ var REASONS = /* @__PURE__ */ new Set([
   "consumer_callback_outcome_unknown",
   "deepseek_turn_outcome_unknown",
   "deepseek_stream_incomplete",
+  "deepseek_rate_limit_reached",
   "response_message_id_missing",
   "request_message_id_missing",
   "deepseek_chain_unverified",
@@ -2667,6 +2668,9 @@ function errorFinish(code, message) {
   return { type: "finish", reason: { kind: "error", failure: { code, message } } };
 }
 function ambiguousFinish(reason) {
+  if (reason === "deepseek_rate_limit_reached") {
+    return errorFinish("WEB_MODEL_RATE_LIMITED", "DeepSeek \u7F51\u9875\u63D0\u793A\u6D88\u606F\u53D1\u9001\u8FC7\u4E8E\u9891\u7E41\uFF0C\u672C\u8F6E\u5DF2\u6682\u505C\u3002\u8BF7\u81F3\u5C11\u7B49\u5F85 30 \u79D2\uFF1B\u8FDE\u7EED\u9650\u6D41\u65F6\u7B49\u5F85\u4F1A\u5EF6\u957F\u3002\u5DF2\u5B8C\u6210\u7684\u5DE5\u5177\u7ED3\u679C\u4FDD\u7559\uFF0C\u7CFB\u7EDF\u4E0D\u4F1A\u81EA\u52A8\u91CD\u653E\u3002\u5F53\u524D\u7F51\u9875\u94FE\u5DF2\u9694\u79BB\uFF0C\u8BF7\u6838\u5BF9\u8FDB\u5EA6\u540E\u5728 Harness \u4E2D\u65B0\u5EFA\u6216\u5206\u652F\u4F1A\u8BDD\u7EE7\u7EED\u3002");
+  }
   if (reason === "generation_timeout" || reason === "accept_timeout" || reason === "request_timeout" || reason === "deepseek_turn_timeout") {
     return errorFinish("WEB_MODEL_TIMEOUT_AMBIGUOUS", "The web request timed out; its outcome is unknown. Do not replay automatically.");
   }

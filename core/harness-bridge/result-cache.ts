@@ -41,7 +41,7 @@ const RECOVERED_TERMINAL = Object.freeze({ type: 'ambiguous', reason: 'browser_w
 const SAFE_AMBIGUOUS_REASONS = new Set([
   'browser_worker_restarted', 'browser_recovery_failed',
   'consumer_callback_outcome_unknown', 'deepseek_turn_outcome_unknown',
-  'deepseek_stream_incomplete', 'response_message_id_missing', 'request_message_id_missing',
+  'deepseek_stream_incomplete', 'deepseek_rate_limit_reached', 'response_message_id_missing', 'request_message_id_missing',
   'deepseek_chain_unverified', 'adapter_state_inconsistent', 'deepseek_turn_timeout',
   'deepseek_dispatch_abort_outcome_unknown',
 ]);

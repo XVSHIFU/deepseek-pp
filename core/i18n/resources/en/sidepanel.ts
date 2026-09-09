@@ -345,6 +345,8 @@ export const sidepanel = {
     harnessPort: 'Loopback port',
     harnessPortHint: 'Port on 127.0.0.1. Remote hosts and arbitrary URLs are not accepted.',
     harnessPortInvalid: 'Enter a port from 1 to 65535.',
+    harnessMinRequestInterval: 'Minimum model request interval (seconds)',
+    harnessMinRequestIntervalHint: '5–30 seconds. Applies to every Harness session brokered by this extension only, not other browsers, extension copies, or accounts.',
     harnessPairingToken: 'Pairing token',
     harnessTokenHint: 'Paste the high-entropy token printed by the local Harness host.',
     harnessTokenConfigured: 'A token is stored in browser-local storage. Leave blank to keep it.',
