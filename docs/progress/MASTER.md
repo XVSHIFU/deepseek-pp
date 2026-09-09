@@ -5,6 +5,7 @@
 - 用户确认失败请求没有 Service Worker Network 留存。追加三个有界数值：成功 JSON 解析数、固定事件类别位图、根/直接 BATCH 的结构位图；合法 null/false/0 也计入 JSON 成功数。原 stream-codec 单次 JSON 解析处观察，未增加原始事件缓存、任意路径/正文透传、第二套 SSE 解析或新的完成条件。
 - v1 历史原因继续兼容；v2 必须同时包含三字段并通过 exact-key、数值上限及规范回编码验证。子 agent 实现客户端，主 agent 实现协议编码和观察器单元测试；另一次独立只读审查确认协议兼容及安全透传边界无阻断。
 - 主 agent 以外层硬限 60 秒执行：observer/client/protocol 三文件 **62/62**；reasoning/event-mapping/Harness adapter/protocol 四文件 **113/113**（包含交叉覆盖，不累计）。证明单次解析、异常传播、旧完成形状保持、未认可新 FINISHED 形状不冒充成功、Mode B 默认无新增摘要、未知事件内容不泄露。compile、prompt freeze **7/7**、官方插件 build 已通过；Chrome 专项诊断包待构建交接，不是首次故障修复或真实网页验收通过。
+- **Chrome v2 诊断包已构建：** 源码 `bc298032d0430b69dd112904577d6979659dbea8`，普通路径独立副本构建，ZIP 与目录内容由现有打包器回读一致性校验；主 agent 再核对 100 文件散列、59 文本 UTF-8/JS ASCII、manifest 不变。项目外目录 `deepseek-t9-diagnostic-v2-20260909` 含扩展、插件 TGZ、散列清单和短更新说明；准确散列见验证文档。未安装覆盖当前 v1 诊断环境，待用户重新加载后由主 agent 更新 Harness 插件；无新的真实请求、push 或发布。
 
 ## 2026-09-09 T9 首次失败已在诊断版复现
 
