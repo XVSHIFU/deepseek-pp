@@ -24,6 +24,9 @@ export interface DeepSeekCompletionDiagnostic {
   readonly sseEvents: number;
   readonly code: number | null;
   readonly bizCode: number | null;
+  readonly sseJsonEvents?: number;
+  readonly sseEventKindMask?: number;
+  readonly sseShapeMask?: number;
 }
 
 export interface DeepSeekHistorySnapshot {

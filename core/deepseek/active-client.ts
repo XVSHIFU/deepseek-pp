@@ -5,6 +5,7 @@ import {
   extractResponseUsageStatsFromParsed,
   extractResponseTextForTokenSpeed,
   isStreamFinishedFromParsed,
+  type DeepSeekSseJsonObservation,
   type SSEEvent,
 } from './stream-codec';
 import {
@@ -86,6 +87,34 @@ const FILE_READY_POLL_INTERVAL_MS = 500;
 const FILE_READY_TIMEOUT_MS = 15_000;
 const STREAM_CONSUMER_CANCEL_REASON = 'DEEPSEEK_STREAM_CONSUMER_FAILED';
 const COMPLETION_DIAGNOSTIC_JSON_MAX_BYTES = 64 * 1024;
+const SSE_EVENT_KIND = Object.freeze({
+  message: 1,
+  ready: 2,
+  updateSession: 4,
+  error: 8,
+  done: 16,
+  finish: 32,
+  close: 64,
+  other: 128,
+});
+const SSE_SHAPE = Object.freeze({
+  invalidJson: 1,
+  validNonObject: 2,
+  object: 4,
+  pathAbsent: 8,
+  responseStatusPath: 16,
+  quasiStatusPath: 32,
+  responsePath: 64,
+  otherPath: 128,
+  batchArray: 256,
+  stringValue: 512,
+  arrayValue: 1_024,
+  objectValue: 2_048,
+  otherValue: 4_096,
+  finishedValue: 8_192,
+  finishedBatchResponseStatus: 16_384,
+  finishedBatchQuasiStatus: 32_768,
+});
 // DeepSeek can return audit_result=unknown together with status=SUCCESS for usable image uploads.
 const ACCEPTED_FILE_AUDIT_RESULTS = new Set(['PASS', 'PASSED', 'SUCCESS', 'OK', 'UNKNOWN']);
 const REJECTED_FILE_AUDIT_RESULTS = new Set(['REJECT', 'REJECTED', 'FAIL', 'FAILED', 'ERROR', 'BLOCK', 'BLOCKED', 'DENY', 'DENIED']);
@@ -581,6 +610,11 @@ async function readCompletionStreamWithCallbacks(
       if (isStreamFinishedFromParsed(parsed)) speedTracker.finish();
     }
     : undefined;
+  const onSseJson = diagnostic
+    ? (observation: { jsonParsed: boolean; parsed: unknown }): void => {
+      diagnostic.observeSseJson(observation.jsonParsed, observation.parsed);
+    }
+    : undefined;
 
   try {
     while (true) {
@@ -593,6 +627,7 @@ async function readCompletionStreamWithCallbacks(
       const newText = consumeDeepSeekSseEvents(events, summary, {
         retainAssistantText,
         onParsed,
+        onSseJson,
         onReasoningChunk: callbacks.onReasoningChunk,
       });
       if (newText && callbacks.onTextChunk) {
@@ -605,6 +640,7 @@ async function readCompletionStreamWithCallbacks(
     const finalText = consumeDeepSeekSseEvents(finalEvents, summary, {
       retainAssistantText,
       onParsed,
+      onSseJson,
       onReasoningChunk: callbacks.onReasoningChunk,
     });
     if (finalText && callbacks.onTextChunk) {
@@ -644,6 +680,9 @@ class CompletionDiagnosticCollector {
   private jsonTooLarge = false;
   private bodyBytes = 0;
   private sseEvents = 0;
+  private sseJsonEvents = 0;
+  private sseEventKindMask = 0;
+  private sseShapeMask = 0;
   private code: number | null = null;
   private bizCode: number | null = null;
   private sseError = false;
@@ -668,9 +707,16 @@ class CompletionDiagnosticCollector {
 
   observeEvents(events: readonly SSEEvent[]): void {
     this.sseEvents += events.length;
-    if (events.some((event) => event.type.trim().toLowerCase() === 'error')) {
-      this.sseError = true;
+    for (const event of events) {
+      const eventKind = classifySseEventKind(event.type);
+      this.sseEventKindMask |= eventKind;
+      if (eventKind === SSE_EVENT_KIND.error) this.sseError = true;
     }
+  }
+
+  observeSseJson(jsonParsed: boolean, parsed: unknown): void {
+    if (jsonParsed) this.sseJsonEvents += 1;
+    this.sseShapeMask |= classifySseShape(jsonParsed, parsed);
   }
 
   observeParsed(parsed: unknown, event: SSEEvent): void {
@@ -706,8 +752,65 @@ class CompletionDiagnosticCollector {
       sseEvents: this.sseEvents,
       code: this.code,
       bizCode: this.bizCode,
+      sseJsonEvents: this.sseJsonEvents,
+      sseEventKindMask: this.sseEventKindMask,
+      sseShapeMask: this.sseShapeMask,
     });
   }
+}
+
+function classifySseEventKind(value: string): number {
+  switch (value.trim().toLowerCase()) {
+    case '':
+    case 'default':
+    case 'message': return SSE_EVENT_KIND.message;
+    case 'ready': return SSE_EVENT_KIND.ready;
+    case 'update_session': return SSE_EVENT_KIND.updateSession;
+    case 'error': return SSE_EVENT_KIND.error;
+    case 'done': return SSE_EVENT_KIND.done;
+    case 'finish': return SSE_EVENT_KIND.finish;
+    case 'close': return SSE_EVENT_KIND.close;
+    default: return SSE_EVENT_KIND.other;
+  }
+}
+
+function classifySseShape(jsonParsed: boolean, parsed: unknown): number {
+  if (!jsonParsed) return SSE_SHAPE.invalidJson;
+  if (!isPlainRecord(parsed)) return SSE_SHAPE.validNonObject;
+
+  let mask = SSE_SHAPE.object;
+  if (!Object.prototype.hasOwnProperty.call(parsed, 'p')) {
+    mask |= SSE_SHAPE.pathAbsent;
+  } else if (parsed.p === 'response/status') {
+    mask |= SSE_SHAPE.responseStatusPath;
+  } else if (parsed.p === 'quasi_status') {
+    mask |= SSE_SHAPE.quasiStatusPath;
+  } else if (parsed.p === 'response') {
+    mask |= SSE_SHAPE.responsePath;
+  } else {
+    mask |= SSE_SHAPE.otherPath;
+  }
+
+  if (typeof parsed.v === 'string') {
+    mask |= SSE_SHAPE.stringValue;
+  } else if (Array.isArray(parsed.v)) {
+    mask |= SSE_SHAPE.arrayValue;
+  } else if (isPlainRecord(parsed.v)) {
+    mask |= SSE_SHAPE.objectValue;
+  } else {
+    mask |= SSE_SHAPE.otherValue;
+  }
+  if (parsed.v === 'FINISHED') mask |= SSE_SHAPE.finishedValue;
+
+  if (parsed.o === 'BATCH' && Array.isArray(parsed.v)) {
+    mask |= SSE_SHAPE.batchArray;
+    for (const child of parsed.v) {
+      if (!isPlainRecord(child) || child.v !== 'FINISHED') continue;
+      if (child.p === 'response/status') mask |= SSE_SHAPE.finishedBatchResponseStatus;
+      if (child.p === 'quasi_status') mask |= SSE_SHAPE.finishedBatchQuasiStatus;
+    }
+  }
+  return mask;
 }
 
 function readJsonCompletionErrorSignal(

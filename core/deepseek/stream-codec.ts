@@ -50,6 +50,11 @@ export interface DeepSeekSseFrameDecoder {
   finish(): DeepSeekSseFrame[];
 }
 
+export interface DeepSeekSseJsonObservation {
+  readonly jsonParsed: boolean;
+  readonly parsed: unknown;
+}
+
 export function createDeepSeekStreamSummary(): DeepSeekStreamSummary {
   return {
     assistantText: '',
@@ -132,13 +137,17 @@ export function consumeDeepSeekSseEvents(
   options: {
     retainAssistantText?: boolean;
     onParsed?: (parsed: unknown, event: SSEEvent) => void;
+    onSseJson?: (observation: DeepSeekSseJsonObservation, event: SSEEvent) => void;
     onReasoningChunk?: (reasoning: string, fullReasoning: string) => void;
   } = {},
 ): string {
   const appendedText: string[] = [];
 
   for (const event of events) {
-    const parsed = parseSSEData(event.data);
+    const observation = parseSSEDataObservation(event.data);
+    options.onSseJson?.(observation, event);
+    if (!observation.jsonParsed) continue;
+    const parsed = observation.parsed;
     if (!parsed) continue;
     consumeParsedDeepSeekSseEvent(parsed, event, summary, options, appendedText);
   }
@@ -244,10 +253,15 @@ function consumeParsedDeepSeekSseEvent(
 }
 
 export function parseSSEData(data: string): unknown | null {
+  const observation = parseSSEDataObservation(data);
+  return observation.jsonParsed ? observation.parsed : null;
+}
+
+function parseSSEDataObservation(data: string): DeepSeekSseJsonObservation {
   try {
-    return JSON.parse(data);
+    return { jsonParsed: true, parsed: JSON.parse(data) };
   } catch {
-    return null;
+    return { jsonParsed: false, parsed: null };
   }
 }
 

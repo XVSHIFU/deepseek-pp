@@ -59,7 +59,7 @@ describe('DeepSeek web adapter streaming', () => {
       response: () => jsonResponse({ code: 0, data: { biz_code: 40001, error: 'redacted' } }),
       expected: {
         httpStatus: 200, contentKind: 'json_error', bodyBytes: 55, sseEvents: 0,
-        code: 0, bizCode: 40001,
+        code: 0, bizCode: 40001, sseJsonEvents: 0, sseEventKindMask: 0, sseShapeMask: 0,
       },
     },
     {
@@ -67,7 +67,7 @@ describe('DeepSeek web adapter streaming', () => {
       response: () => createSseResponse(''),
       expected: {
         httpStatus: 200, contentKind: 'empty', bodyBytes: 0, sseEvents: 0,
-        code: null, bizCode: null,
+        code: null, bizCode: null, sseJsonEvents: 0, sseEventKindMask: 0, sseShapeMask: 0,
       },
     },
     {
@@ -75,7 +75,7 @@ describe('DeepSeek web adapter streaming', () => {
       response: () => createSseResponse('event: error\ndata: {"code":50001}'),
       expected: {
         httpStatus: 200, contentKind: 'sse_error', bodyBytes: 33, sseEvents: 1,
-        code: 50001, bizCode: null,
+        code: 50001, bizCode: null, sseJsonEvents: 1, sseEventKindMask: 8, sseShapeMask: 4_108,
       },
     },
     {
@@ -83,7 +83,7 @@ describe('DeepSeek web adapter streaming', () => {
       response: () => createSseResponse('data: {"v":"partial"}'),
       expected: {
         httpStatus: 200, contentKind: 'sse', bodyBytes: 21, sseEvents: 1,
-        code: null, bizCode: null,
+        code: null, bizCode: null, sseJsonEvents: 1, sseEventKindMask: 1, sseShapeMask: 524,
       },
     },
   ])('provides bounded opt-in diagnostics for $label', async ({ response, expected }) => {
@@ -139,8 +139,84 @@ describe('DeepSeek web adapter streaming', () => {
       sseEvents: 0,
       code: null,
       bizCode: null,
+      sseJsonEvents: 0,
+      sseEventKindMask: 0,
+      sseShapeMask: 0,
     });
     expect(JSON.stringify(turn.completionDiagnostic)).not.toContain('private-canary');
+  });
+
+  it.each([
+    {
+      label: 'malformed JSON and DONE sentinel',
+      wire: 'data: {bad}\n\ndata: [DONE]',
+      expectedFinished: false,
+      expected: { sseEvents: 2, sseJsonEvents: 0, sseEventKindMask: 1, sseShapeMask: 1 },
+    },
+    {
+      label: 'valid JSON primitives',
+      wire: 'data: null\n\ndata: false\n\ndata: 0',
+      expectedFinished: false,
+      expected: { sseEvents: 3, sseJsonEvents: 3, sseEventKindMask: 1, sseShapeMask: 2 },
+    },
+    {
+      label: 'recognized response status',
+      wire: 'data: {"p":"response/status","v":"FINISHED"}',
+      expectedFinished: true,
+      expected: { sseEvents: 1, sseJsonEvents: 1, sseEventKindMask: 1, sseShapeMask: 8_724 },
+    },
+    {
+      label: 'recognized batch quasi status',
+      wire: 'data: {"p":"response","o":"BATCH","v":[{"p":"quasi_status","v":"FINISHED"}]}',
+      expectedFinished: true,
+      expected: { sseEvents: 1, sseJsonEvents: 1, sseEventKindMask: 1, sseShapeMask: 34_116 },
+    },
+    {
+      label: 'unrecognized root quasi status',
+      wire: 'data: {"p":"quasi_status","v":"FINISHED"}',
+      expectedFinished: false,
+      expected: { sseEvents: 1, sseJsonEvents: 1, sseEventKindMask: 1, sseShapeMask: 8_740 },
+    },
+    {
+      label: 'unrecognized batch response status',
+      wire: 'data: {"p":"response","o":"BATCH","v":[{"p":"response/status","v":"FINISHED"}]}',
+      expectedFinished: false,
+      expected: { sseEvents: 1, sseJsonEvents: 1, sseEventKindMask: 1, sseShapeMask: 17_732 },
+    },
+  ])('classifies bounded SSE shapes for $label', async ({ wire, expectedFinished, expected }) => {
+    const client = createDeepSeekAutomationClient({
+      fetchImpl: vi.fn<typeof fetch>(async () => createSseResponse(wire)),
+    });
+
+    const turn = await client.submitPromptStreaming(
+      createSubmitInput(),
+      {},
+      { completionDiagnostics: true },
+    );
+
+    expect(turn.finished).toBe(expectedFinished);
+    expect(turn.completionDiagnostic).toMatchObject(expected);
+  });
+
+  it('reduces unknown event and patch names to fixed mask bits without leaking canaries', async () => {
+    const wire = 'event: private-event-canary\ndata: {"p":"private-path-canary","v":"private-value-canary"}';
+    const client = createDeepSeekAutomationClient({
+      fetchImpl: vi.fn<typeof fetch>(async () => createSseResponse(wire)),
+    });
+
+    const turn = await client.submitPromptStreaming(
+      createSubmitInput(),
+      {},
+      { completionDiagnostics: true },
+    );
+
+    expect(turn.completionDiagnostic).toMatchObject({
+      sseEvents: 1,
+      sseJsonEvents: 1,
+      sseEventKindMask: 128,
+      sseShapeMask: 644,
+    });
+    expect(JSON.stringify(turn.completionDiagnostic)).not.toMatch(/private-(event|path|value)-canary/);
   });
 
   it('retains full assistant text by default', async () => {

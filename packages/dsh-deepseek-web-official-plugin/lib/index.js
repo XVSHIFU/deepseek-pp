@@ -859,24 +859,35 @@ function sameOptionalTerminal(left, right) {
 var PREFIX = "deepseek_stream_incomplete";
 var KINDS = /* @__PURE__ */ new Set(["empty", "json_error", "json", "sse_error", "sse", "other"]);
 var FIELDS = ["bodyBytes", "bizCode", "code", "contentKind", "httpStatus", "sseEvents"].sort().join(",");
+var V2_FIELDS = [...FIELDS.split(","), "sseJsonEvents", "sseEventKindMask", "sseShapeMask"].sort().join(",");
 var boundedInteger = (value, min = 0, max = Number.MAX_SAFE_INTEGER) => typeof value === "number" && Number.isSafeInteger(value) && value >= min && value <= max;
 function completionDiagnosticReason(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return PREFIX;
   const record2 = value;
-  if (Object.keys(record2).sort().join(",") !== FIELDS || !boundedInteger(record2.httpStatus, 100, 599) || typeof record2.contentKind !== "string" || !KINDS.has(record2.contentKind) || !boundedInteger(record2.bodyBytes, 0, 4 * 1024 * 1024) || !boundedInteger(record2.sseEvents, 0, 4 * 1024 * 1024) || record2.code !== null && !boundedInteger(record2.code, 0, 999999) || record2.bizCode !== null && !boundedInteger(record2.bizCode, 0, 999999)) return PREFIX;
-  return `${PREFIX}.v1:h${record2.httpStatus}:${record2.contentKind}:b${record2.bodyBytes}:e${record2.sseEvents}:c${record2.code ?? "n"}:biz${record2.bizCode ?? "n"}`;
+  const keys = Object.keys(record2).sort().join(",");
+  const isV2 = keys === V2_FIELDS;
+  if (keys !== FIELDS && !isV2 || !boundedInteger(record2.httpStatus, 100, 599) || typeof record2.contentKind !== "string" || !KINDS.has(record2.contentKind) || !boundedInteger(record2.bodyBytes, 0, 4 * 1024 * 1024) || !boundedInteger(record2.sseEvents, 0, 4 * 1024 * 1024) || record2.code !== null && !boundedInteger(record2.code, 0, 999999) || record2.bizCode !== null && !boundedInteger(record2.bizCode, 0, 999999)) return PREFIX;
+  if (isV2 && (!boundedInteger(record2.sseJsonEvents, 0, record2.sseEvents) || !boundedInteger(record2.sseEventKindMask, 0, 255) || !boundedInteger(record2.sseShapeMask, 0, 65535))) return PREFIX;
+  const base = `${PREFIX}.v${isV2 ? 2 : 1}:h${record2.httpStatus}:${record2.contentKind}:b${record2.bodyBytes}:e${record2.sseEvents}:c${record2.code ?? "n"}:biz${record2.bizCode ?? "n"}`;
+  return isV2 ? `${base}:j${record2.sseJsonEvents}:k${record2.sseEventKindMask}:s${record2.sseShapeMask}` : base;
 }
 function isCompletionDiagnosticReason(value) {
   if (typeof value !== "string" || value.length > 220) return false;
-  const match = /^deepseek_stream_incomplete\.v1:h([0-9]{3}):(empty|json_error|json|sse_error|sse|other):b([0-9]{1,7}):e([0-9]{1,7}):c(n|[0-9]{1,6}):biz(n|[0-9]{1,6})$/.exec(value);
+  const match = /^deepseek_stream_incomplete\.v([12]):h([0-9]{3}):(empty|json_error|json|sse_error|sse|other):b([0-9]{1,7}):e([0-9]{1,7}):c(n|[0-9]{1,6}):biz(n|[0-9]{1,6})(?::j([0-9]{1,7}):k([0-9]{1,3}):s([0-9]{1,5}))?$/.exec(value);
   if (!match) return false;
+  if (match[1] === "2" !== (match[8] !== void 0)) return false;
   return completionDiagnosticReason({
-    httpStatus: Number(match[1]),
-    contentKind: match[2],
-    bodyBytes: Number(match[3]),
-    sseEvents: Number(match[4]),
-    code: match[5] === "n" ? null : Number(match[5]),
-    bizCode: match[6] === "n" ? null : Number(match[6])
+    httpStatus: Number(match[2]),
+    contentKind: match[3],
+    bodyBytes: Number(match[4]),
+    sseEvents: Number(match[5]),
+    code: match[6] === "n" ? null : Number(match[6]),
+    bizCode: match[7] === "n" ? null : Number(match[7]),
+    ...match[1] === "2" ? {
+      sseJsonEvents: Number(match[8]),
+      sseEventKindMask: Number(match[9]),
+      sseShapeMask: Number(match[10])
+    } : {}
   }) === value;
 }
 

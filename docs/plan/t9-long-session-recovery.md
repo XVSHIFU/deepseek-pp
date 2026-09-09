@@ -29,6 +29,7 @@
 - 使用现有协议 reason 编码固定版本、枚举和受限数值，并在浏览器持久化及 Host 显示处通过同一严格校验器。没有新 wire 字段或存储 schema。
 - 保持 finished、工具提交、隔离和重试判定不变。HTTP 200 JSON 业务错误只能被更准确地描述，不能被当成 completed。
 - Host 对 unknown outcome 保留已经允许的固定 remoteCode，并补齐原有内部 reason；任意上游文本仍不透传。
+- 311 字节/3 事件的失败没有 Network 留存，追加 v2 固定数值摘要：成功 JSON 解析数（含 null/false/0）、事件名类别 bitmask、根/直接 BATCH 的结构 bitmask。在原 stream-codec 单次解析处观察，不复制 SSE/JSON 解析器，不缓存事件正文，不递归输出任意 p/v。v1 持久原因继续兼容，v2 经同一编码器验证；不把新观察到的 FINISHED 形状自动接受为成功。
 
 ### 退出条件
 

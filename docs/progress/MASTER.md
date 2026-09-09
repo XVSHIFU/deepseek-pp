@@ -1,5 +1,11 @@
 # Web Model Broker × Local DSH — Active Progress
 
+## 2026-09-09 T9 v2 事件形状诊断
+
+- 用户确认失败请求没有 Service Worker Network 留存。追加三个有界数值：成功 JSON 解析数、固定事件类别位图、根/直接 BATCH 的结构位图；合法 null/false/0 也计入 JSON 成功数。原 stream-codec 单次 JSON 解析处观察，未增加原始事件缓存、任意路径/正文透传、第二套 SSE 解析或新的完成条件。
+- v1 历史原因继续兼容；v2 必须同时包含三字段并通过 exact-key、数值上限及规范回编码验证。子 agent 实现客户端，主 agent 实现协议编码和观察器单元测试；另一次独立只读审查确认协议兼容及安全透传边界无阻断。
+- 主 agent 以外层硬限 60 秒执行：observer/client/protocol 三文件 **62/62**；reasoning/event-mapping/Harness adapter/protocol 四文件 **113/113**（包含交叉覆盖，不累计）。证明单次解析、异常传播、旧完成形状保持、未认可新 FINISHED 形状不冒充成功、Mode B 默认无新增摘要、未知事件内容不泄露。compile、prompt freeze **7/7**、官方插件 build 已通过；Chrome 专项诊断包待构建交接，不是首次故障修复或真实网页验收通过。
+
 ## 2026-09-09 T9 首次失败已在诊断版复现
 
 - 用户续测后，主 agent 读取同一官方会话 `session-39a7d0c5-6eaf-46bc-9f06-be5b80b3fe8d` 的完整持久日志确认第三轮前 5 次 glob/结果成功，第 6 模型步在 263ms 失败。安全诊断为 `request=8f3559785a3dc6b3`、`deepseek_stream_incomplete.v1:h200:sse:b311:e3:cn:bizn`。运行版本仍是 89fce7b；后续 e4c95e5 分类修正未安装。
