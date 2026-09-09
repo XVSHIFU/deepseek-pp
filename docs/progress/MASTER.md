@@ -2,6 +2,7 @@
 
 ## 2026-09-09 T9 首因确认与限流修复
 
+- 限流修复源码 `ec596e695849f4f4846732e9a96162137befee10` 已在普通路径副本完成三浏览器与配套插件构建；组件校验、34 文件 ZIP 回读、manifest policy、177 文本文件 UTF-8/JS ASCII 检查通过。整包位于项目外 `C:/Users/worker/Documents/deepseek-t9-rate-limit-20260909/deepseek-web-harness-t9-rate-limit.zip`，SHA-256 `361c1c88f171de420a65d24d144e977eec945a2d6e8fe62885bd9a53060fddc9`；插件 TGZ SHA-256 `195cf1ea716cf7bdf7c8509e07553410a64f44926158a0be8d14e2e694ded20e`。可供原位复制的 Chrome 目录为该输出根下 `build-chrome/chrome-mv3`。当前仍未更新安装环境；待用户备份、覆盖并重新加载扩展后，编排 agent 安装配套插件并执行有界低频验证。不推送、不发布、不把构建通过当作真实限流边界验证。
 - 用户在 Service Worker Network 提供真实失败响应：`hint` 的 `type=error`、`clear_response=true`、`finish_reason=rate_limit_reached`，正文提示“消息发送过于频繁，请稍后重试”，随后 `close/retry/auto_resume=false`。本次首次停止确认为网页端限流，不再以长输入本身或上下文超限作为已证实根因。此前 T9-Network 只读会话短输入完成 10 次 glob，随后失败请求散列 `740eda9c9590ab12`、368ms，与 v2 的 311 字节/3 事件形状一致。
 - 原 stream-codec 单次解析的观察路径精确识别该 hint 组合；Mode A opt-in 只获得固定 `completionFailure` 枚举，未保存/转发提示正文。正常 FINISHED、Mode B、工具解析不变。限流未完成流保留 ambiguous 和隔离，但 Host 显示中文 `WEB_MODEL_RATE_LIMITED`，固定原因可安全持久化，不再丢成 unknown。
 - Mode A adapter 单例内统一 completion gate：默认相邻实际 dispatch 至少 5 秒，包含多个 Harness 会话和纠正请求；submit 结束后才释放，长响应不额外叠加等待。accepted 后排队、取得许可后才创建 PoW；等待可取消且受原 turn deadline 限制。限流冷却 30/60/120 秒封顶，没有自动重放、解除隔离或重新执行旧工具。
