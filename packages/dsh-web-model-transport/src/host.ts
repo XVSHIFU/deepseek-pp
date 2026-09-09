@@ -534,7 +534,8 @@ export class DeepSeekWebModelHost implements DeepSeekWebBroker {
         this.updateRecord(operation.identity.requestId, { type: "not_started" });
         operation.deferred.reject(error);
       } else {
-        this.settleGenerationAmbiguous("remote_outcome_unknown");
+        // Preserve a validated fixed reason; the old request outcome still stays unknown.
+        this.settleGenerationAmbiguous(error.remoteCode ?? "remote_outcome_unknown");
         operation.deferred.resolve();
       }
       return;

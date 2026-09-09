@@ -855,6 +855,31 @@ function sameOptionalTerminal(left, right) {
   return sameTerminal(left, right);
 }
 
+// ../web-model-protocol/src/completion-diagnostic.ts
+var PREFIX = "deepseek_stream_incomplete";
+var KINDS = /* @__PURE__ */ new Set(["empty", "json_error", "json", "sse_error", "sse", "other"]);
+var FIELDS = ["bodyBytes", "bizCode", "code", "contentKind", "httpStatus", "sseEvents"].sort().join(",");
+var boundedInteger = (value, min = 0, max = Number.MAX_SAFE_INTEGER) => typeof value === "number" && Number.isSafeInteger(value) && value >= min && value <= max;
+function completionDiagnosticReason(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return PREFIX;
+  const record2 = value;
+  if (Object.keys(record2).sort().join(",") !== FIELDS || !boundedInteger(record2.httpStatus, 100, 599) || typeof record2.contentKind !== "string" || !KINDS.has(record2.contentKind) || !boundedInteger(record2.bodyBytes, 0, 4 * 1024 * 1024) || !boundedInteger(record2.sseEvents, 0, 4 * 1024 * 1024) || record2.code !== null && !boundedInteger(record2.code, 0, 999999) || record2.bizCode !== null && !boundedInteger(record2.bizCode, 0, 999999)) return PREFIX;
+  return `${PREFIX}.v1:h${record2.httpStatus}:${record2.contentKind}:b${record2.bodyBytes}:e${record2.sseEvents}:c${record2.code ?? "n"}:biz${record2.bizCode ?? "n"}`;
+}
+function isCompletionDiagnosticReason(value) {
+  if (typeof value !== "string" || value.length > 220) return false;
+  const match = /^deepseek_stream_incomplete\.v1:h([0-9]{3}):(empty|json_error|json|sse_error|sse|other):b([0-9]{1,7}):e([0-9]{1,7}):c(n|[0-9]{1,6}):biz(n|[0-9]{1,6})$/.exec(value);
+  if (!match) return false;
+  return completionDiagnosticReason({
+    httpStatus: Number(match[1]),
+    contentKind: match[2],
+    bodyBytes: Number(match[3]),
+    sseEvents: Number(match[4]),
+    code: match[5] === "n" ? null : Number(match[5]),
+    bizCode: match[6] === "n" ? null : Number(match[6])
+  }) === value;
+}
+
 // ../dsh-web-model-transport/src/host.ts
 import WebSocket, { WebSocketServer } from "ws";
 
@@ -1281,12 +1306,12 @@ var DeepSeekWebModelHost = class {
     assertPairingToken(options.pairingToken);
     this.pairingToken = options.pairingToken;
     this.allowedOrigins = assertAllowedOrigins(options.allowedOrigins);
-    this.configuredPort = boundedInteger(options.port ?? 0, 0, 65535, "INVALID_PORT");
-    this.authenticationTimeoutMs = boundedInteger(options.authenticationTimeoutMs ?? DEFAULT_AUTH_TIMEOUT_MS, 10, 6e5, "INVALID_TIMEOUT");
-    this.heartbeatTimeoutMs = boundedInteger(options.heartbeatTimeoutMs ?? DEFAULT_HEARTBEAT_TIMEOUT_MS, 10, 6e5, "INVALID_TIMEOUT");
-    this.rpcTimeoutMs = boundedInteger(options.rpcTimeoutMs ?? DEFAULT_RPC_TIMEOUT_MS, 10, 6e5, "INVALID_TIMEOUT");
-    this.maxBufferedEvents = boundedInteger(options.maxBufferedEvents ?? DEFAULT_MAX_BUFFERED_EVENTS, 1, 4096, "INVALID_LIMIT");
-    this.maxEventsPerGeneration = boundedInteger(options.maxEventsPerGeneration ?? DEFAULT_MAX_EVENTS, 1, 65536, "INVALID_LIMIT");
+    this.configuredPort = boundedInteger2(options.port ?? 0, 0, 65535, "INVALID_PORT");
+    this.authenticationTimeoutMs = boundedInteger2(options.authenticationTimeoutMs ?? DEFAULT_AUTH_TIMEOUT_MS, 10, 6e5, "INVALID_TIMEOUT");
+    this.heartbeatTimeoutMs = boundedInteger2(options.heartbeatTimeoutMs ?? DEFAULT_HEARTBEAT_TIMEOUT_MS, 10, 6e5, "INVALID_TIMEOUT");
+    this.rpcTimeoutMs = boundedInteger2(options.rpcTimeoutMs ?? DEFAULT_RPC_TIMEOUT_MS, 10, 6e5, "INVALID_TIMEOUT");
+    this.maxBufferedEvents = boundedInteger2(options.maxBufferedEvents ?? DEFAULT_MAX_BUFFERED_EVENTS, 1, 4096, "INVALID_LIMIT");
+    this.maxEventsPerGeneration = boundedInteger2(options.maxEventsPerGeneration ?? DEFAULT_MAX_EVENTS, 1, 65536, "INVALID_LIMIT");
     this.journal = new RequestJournal(options.journalPath, options.maxJournalRecords);
     this.durableJournal = options.journalPath !== void 0;
   }
@@ -1683,7 +1708,7 @@ var DeepSeekWebModelHost = class {
         this.updateRecord(operation.identity.requestId, { type: "not_started" });
         operation.deferred.reject(error);
       } else {
-        this.settleGenerationAmbiguous("remote_outcome_unknown");
+        this.settleGenerationAmbiguous(error.remoteCode ?? "remote_outcome_unknown");
         operation.deferred.resolve();
       }
       return;
@@ -1881,7 +1906,7 @@ function identityKey(requestId, requestDigest2) {
 function newRpcId() {
   return `rpc-${randomBytes2(16).toString("hex")}`;
 }
-function boundedInteger(value, minimum, maximum, code) {
+function boundedInteger2(value, minimum, maximum, code) {
   if (!Number.isSafeInteger(value) || value < minimum || value > maximum) throw new Error(code);
   return value;
 }
@@ -2155,6 +2180,9 @@ var REASONS = /* @__PURE__ */ new Set([
   "host_stopped",
   "send_outcome_unknown",
   "stream_limit_exceeded",
+  "remote_outcome_unknown",
+  "consumer_closed",
+  "status_without_stream",
   "DEEPSEEK_AUTH_REQUIRED",
   "DEEPSEEK_PREPARATION_FAILED",
   "MODEL_PREPARATION_FAILED",
@@ -2184,7 +2212,8 @@ var REASONS = /* @__PURE__ */ new Set([
 function diagnosticSuffix(requestId, startedAt, stage, reason) {
   const request = createHash5("sha256").update(requestId).digest("hex").slice(0, 16);
   const elapsed = Math.max(0, Math.floor(performance.now() - startedAt));
-  return ` [web-diag:v1 request=${request} stage=${stage} reason=${reason && REASONS.has(reason) ? reason : "unknown"} elapsed_ms=${elapsed}]`;
+  const safeReason = reason && (REASONS.has(reason) || isCompletionDiagnosticReason(reason)) ? reason : "unknown";
+  return ` [web-diag:v1 request=${request} stage=${stage} reason=${safeReason} elapsed_ms=${elapsed}]`;
 }
 
 // ../dsh-llm-deepseek-web/src/request-budget.ts

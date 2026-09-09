@@ -1,4 +1,5 @@
 import {
+  isCompletionDiagnosticReason,
   validateWebModelFrame,
   type ModelRequestCheckpoint,
   type ModelTerminalEvent,
@@ -58,7 +59,8 @@ export function recoveryTerminal(event: ModelTerminalEvent): ModelTerminalEvent 
   if (event.type === 'aborted') return { type: 'aborted', reason: 'request_cancelled_before_dispatch' };
   if (event.type === 'ambiguous') return {
     type: 'ambiguous',
-    reason: SAFE_AMBIGUOUS_REASONS.has(event.reason) ? event.reason : 'browser_recovery_failed',
+    reason: SAFE_AMBIGUOUS_REASONS.has(event.reason) || isCompletionDiagnosticReason(event.reason)
+      ? event.reason : 'browser_recovery_failed',
   };
   const code = Object.hasOwn(SAFE_FAILURE_MESSAGES, event.error.code) ? event.error.code : 'WEB_MODEL_FAILED';
   return { type: 'failed', error: {

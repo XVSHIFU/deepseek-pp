@@ -50,6 +50,97 @@ describe('DeepSeek web adapter streaming', () => {
       assistantText: '',
       finished: true,
     });
+    expect(turn.completionDiagnostic).toBeUndefined();
+  });
+
+  it.each([
+    {
+      label: 'HTTP 200 JSON business error',
+      response: () => jsonResponse({ code: 0, data: { biz_code: 40001, error: 'redacted' } }),
+      expected: {
+        httpStatus: 200, contentKind: 'json_error', bodyBytes: 55, sseEvents: 0,
+        code: 0, bizCode: 40001,
+      },
+    },
+    {
+      label: 'empty stream',
+      response: () => createSseResponse(''),
+      expected: {
+        httpStatus: 200, contentKind: 'empty', bodyBytes: 0, sseEvents: 0,
+        code: null, bizCode: null,
+      },
+    },
+    {
+      label: 'SSE error event',
+      response: () => createSseResponse('event: error\ndata: {"code":50001}'),
+      expected: {
+        httpStatus: 200, contentKind: 'sse_error', bodyBytes: 33, sseEvents: 1,
+        code: 50001, bizCode: null,
+      },
+    },
+    {
+      label: 'SSE without FINISHED',
+      response: () => createSseResponse('data: {"v":"partial"}'),
+      expected: {
+        httpStatus: 200, contentKind: 'sse', bodyBytes: 21, sseEvents: 1,
+        code: null, bizCode: null,
+      },
+    },
+  ])('provides bounded opt-in diagnostics for $label', async ({ response, expected }) => {
+    const client = createDeepSeekAutomationClient({ fetchImpl: vi.fn<typeof fetch>(async () => response()) });
+
+    const turn = await client.submitPromptStreaming(
+      createSubmitInput(),
+      {},
+      { completionDiagnostics: true },
+    );
+
+    expect(turn.finished).toBe(false);
+    expect(turn.completionDiagnostic).toEqual(expected);
+    expect(JSON.stringify(turn.completionDiagnostic)).not.toContain('redacted');
+  });
+
+  it('omits untrusted or unbounded diagnostic codes', async () => {
+    const client = createDeepSeekAutomationClient({
+      fetchImpl: vi.fn<typeof fetch>(async () => jsonResponse({
+        code: '40001',
+        data: { biz_code: 1_000_000, error: true },
+      })),
+    });
+
+    const turn = await client.submitPromptStreaming(
+      createSubmitInput(),
+      {},
+      { completionDiagnostics: true },
+    );
+
+    expect(turn.completionDiagnostic).toMatchObject({
+      contentKind: 'json_error', code: null, bizCode: null,
+    });
+  });
+
+  it('does not retain or parse a diagnostic JSON body above 64 KiB', async () => {
+    const body = { error: 'private-canary-' + 'x'.repeat(64 * 1024) };
+    const bodyBytes = new TextEncoder().encode(JSON.stringify(body)).byteLength;
+    const client = createDeepSeekAutomationClient({
+      fetchImpl: vi.fn<typeof fetch>(async () => jsonResponse(body)),
+    });
+
+    const turn = await client.submitPromptStreaming(
+      createSubmitInput(),
+      {},
+      { completionDiagnostics: true },
+    );
+
+    expect(turn.completionDiagnostic).toEqual({
+      httpStatus: 200,
+      contentKind: 'other',
+      bodyBytes,
+      sseEvents: 0,
+      code: null,
+      bizCode: null,
+    });
+    expect(JSON.stringify(turn.completionDiagnostic)).not.toContain('private-canary');
   });
 
   it('retains full assistant text by default', async () => {

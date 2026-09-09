@@ -123,6 +123,23 @@ describe("DSH web model loopback host", () => {
     await assertion;
   });
 
+  it.each(['SESSION_QUARANTINED', 'PRIVATE_UPSTREAM_VALUE'])("preserves a safe unknown-outcome rejection without replay: %s", async remoteCode => {
+    const { host, address } = await startHost();
+    const browser = await connectAndAuthenticate(address);
+    const result = collect(host.generate(generateInput()));
+    const request = await nextFrame(browser);
+    if (!("method" in request) || request.method !== "model.generate") throw new Error("EXPECTED_GENERATE");
+    browser.send(encodeWebModelFrame({
+      jsonrpc: '2.0', id: request.id, error: {
+        code: -32_000, message: 'Private upstream response must not become a reason.',
+        data: { schema_version: 1, error_code: remoteCode, retryable: false, external_outcome: 'unknown',
+          request_id: request.params.request_id, request_digest: request.params.request_digest },
+      },
+    }));
+    await expect(result).resolves.toEqual([{ type: 'ambiguous',
+      reason: remoteCode === 'SESSION_QUARANTINED' ? remoteCode : 'remote_outcome_unknown' }]);
+  });
+
   it("rejects an invalid local generate before sending and permits a corrected retry", async () => {
     const { host, address } = await startHost();
     const browser = await connectAndAuthenticate(address);

@@ -49,6 +49,8 @@ import {
 } from './errors';
 import type {
   DeepSeekAutomationClient,
+  DeepSeekCompletionContentKind,
+  DeepSeekCompletionDiagnostic,
   DeepSeekHistorySnapshot,
   DeepSeekRequestContext,
   ModelTurn,
@@ -64,6 +66,8 @@ export {
 } from './errors';
 export type {
   DeepSeekAutomationClient,
+  DeepSeekCompletionContentKind,
+  DeepSeekCompletionDiagnostic,
   DeepSeekHistorySnapshot,
   DeepSeekRequestContext,
   ModelTurn,
@@ -81,6 +85,7 @@ const TOKEN_SPEED_EMIT_INTERVAL_MS = 250;
 const FILE_READY_POLL_INTERVAL_MS = 500;
 const FILE_READY_TIMEOUT_MS = 15_000;
 const STREAM_CONSUMER_CANCEL_REASON = 'DEEPSEEK_STREAM_CONSUMER_FAILED';
+const COMPLETION_DIAGNOSTIC_JSON_MAX_BYTES = 64 * 1024;
 // DeepSeek can return audit_result=unknown together with status=SUCCESS for usable image uploads.
 const ACCEPTED_FILE_AUDIT_RESULTS = new Set(['PASS', 'PASSED', 'SUCCESS', 'OK', 'UNKNOWN']);
 const REJECTED_FILE_AUDIT_RESULTS = new Set(['REJECT', 'REJECTED', 'FAIL', 'FAILED', 'ERROR', 'BLOCK', 'BLOCKED', 'DENY', 'DENIED']);
@@ -409,7 +414,7 @@ async function submitPromptWithContext(
     throw new DeepSeekPayloadError('DeepSeek completion response did not include a stream body.', { retryable: true });
   }
 
-  return readCompletionStream(response);
+  return readCompletionStream(response, context.completionDiagnostics === true);
 }
 
 export async function submitPromptStreaming(
@@ -448,7 +453,11 @@ async function submitPromptStreamingWithContext(
     }
     : callbacks;
 
-  return readCompletionStreamWithCallbacks(response, decoratedCallbacks);
+  return readCompletionStreamWithCallbacks(
+    response,
+    decoratedCallbacks,
+    context.completionDiagnostics === true,
+  );
 }
 
 async function requestCompletion(
@@ -539,17 +548,22 @@ export function buildDeepSeekSessionUrl(chatSessionId: string): string {
   return buildDeepSeekWebSessionUrl(chatSessionId);
 }
 
-async function readCompletionStream(response: Response): Promise<ModelTurn> {
-  return readCompletionStreamWithCallbacks(response, {});
+async function readCompletionStream(
+  response: Response,
+  collectDiagnostics = false,
+): Promise<ModelTurn> {
+  return readCompletionStreamWithCallbacks(response, {}, collectDiagnostics);
 }
 
 async function readCompletionStreamWithCallbacks(
   response: Response,
   callbacks: StreamCallbacks,
+  collectDiagnostics = false,
 ): Promise<ModelTurn> {
   const reader = response.body!.getReader();
   const decoder = createDeepSeekSseByteDecoder();
   const summary = createDeepSeekStreamSummary();
+  const diagnostic = collectDiagnostics ? new CompletionDiagnosticCollector(response) : null;
   const retainAssistantText = callbacks.retainAssistantText !== false;
   const speedTracker = callbacks.onTokenSpeed
     ? createResponseTokenSpeedTracker((progress) => callbacks.onTokenSpeed?.({
@@ -557,8 +571,10 @@ async function readCompletionStreamWithCallbacks(
       assistantMessageId: summary.responseMessageId,
     }), TOKEN_SPEED_EMIT_INTERVAL_MS)
     : null;
-  const onParsed = speedTracker
+  const onParsed = speedTracker || diagnostic
     ? (parsed: unknown, event: SSEEvent) => {
+      diagnostic?.observeParsed(parsed, event);
+      if (!speedTracker) return;
       speedTracker.updateServerStats(extractResponseUsageStatsFromParsed(parsed, event.type));
       const tokenText = extractResponseTextForTokenSpeed(parsed);
       if (tokenText) speedTracker.append(tokenText);
@@ -571,7 +587,10 @@ async function readCompletionStreamWithCallbacks(
       const { done, value } = await reader.read();
       if (done) break;
 
-      const newText = consumeDeepSeekSseEvents(decoder.push(value), summary, {
+      diagnostic?.observeBytes(value);
+      const events = decoder.push(value);
+      diagnostic?.observeEvents(events);
+      const newText = consumeDeepSeekSseEvents(events, summary, {
         retainAssistantText,
         onParsed,
         onReasoningChunk: callbacks.onReasoningChunk,
@@ -581,7 +600,9 @@ async function readCompletionStreamWithCallbacks(
       }
     }
 
-    const finalText = consumeDeepSeekSseEvents(decoder.finish(), summary, {
+    const finalEvents = decoder.finish();
+    diagnostic?.observeEvents(finalEvents);
+    const finalText = consumeDeepSeekSseEvents(finalEvents, summary, {
       retainAssistantText,
       onParsed,
       onReasoningChunk: callbacks.onReasoningChunk,
@@ -591,7 +612,9 @@ async function readCompletionStreamWithCallbacks(
     }
     speedTracker?.finish();
     callbacks.onFinished?.();
-    return summary;
+    return diagnostic
+      ? { ...summary, completionDiagnostic: diagnostic.finish() }
+      : summary;
   } catch (error) {
     try {
       speedTracker?.finish();
@@ -611,6 +634,129 @@ async function readCompletionStreamWithCallbacks(
       // Lock release is best-effort cleanup and must not replace stream errors.
     }
   }
+}
+
+class CompletionDiagnosticCollector {
+  private readonly httpStatus: number;
+  private readonly declaredJson: boolean;
+  private readonly declaredSse: boolean;
+  private readonly jsonChunks: Uint8Array[] = [];
+  private jsonTooLarge = false;
+  private bodyBytes = 0;
+  private sseEvents = 0;
+  private code: number | null = null;
+  private bizCode: number | null = null;
+  private sseError = false;
+
+  constructor(response: Response) {
+    this.httpStatus = response.status;
+    const contentType = response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase() ?? '';
+    this.declaredJson = contentType === 'application/json' || contentType.endsWith('+json');
+    this.declaredSse = contentType === 'text/event-stream';
+  }
+
+  observeBytes(bytes: Uint8Array): void {
+    this.bodyBytes += bytes.byteLength;
+    if (!this.declaredJson || this.jsonTooLarge) return;
+    if (this.bodyBytes > COMPLETION_DIAGNOSTIC_JSON_MAX_BYTES) {
+      this.jsonChunks.length = 0;
+      this.jsonTooLarge = true;
+      return;
+    }
+    this.jsonChunks.push(bytes.slice());
+  }
+
+  observeEvents(events: readonly SSEEvent[]): void {
+    this.sseEvents += events.length;
+    if (events.some((event) => event.type.trim().toLowerCase() === 'error')) {
+      this.sseError = true;
+    }
+  }
+
+  observeParsed(parsed: unknown, event: SSEEvent): void {
+    const signal = readCompletionErrorSignal(parsed);
+    this.code ??= signal.code;
+    this.bizCode ??= signal.bizCode;
+    if (event.type.trim().toLowerCase() === 'error' || signal.isError) this.sseError = true;
+  }
+
+  finish(): DeepSeekCompletionDiagnostic {
+    let contentKind: DeepSeekCompletionContentKind;
+    if (this.bodyBytes === 0) {
+      contentKind = 'empty';
+    } else if (this.declaredJson) {
+      if (this.jsonTooLarge) {
+        contentKind = 'other';
+      } else {
+        const signal = readJsonCompletionErrorSignal(this.jsonChunks, this.bodyBytes);
+        this.code ??= signal.code;
+        this.bizCode ??= signal.bizCode;
+        contentKind = signal.parsed ? (signal.isError ? 'json_error' : 'json') : 'other';
+      }
+    } else if (this.declaredSse || this.sseEvents > 0) {
+      contentKind = this.sseError ? 'sse_error' : 'sse';
+    } else {
+      contentKind = 'other';
+    }
+
+    return Object.freeze({
+      httpStatus: this.httpStatus,
+      contentKind,
+      bodyBytes: this.bodyBytes,
+      sseEvents: this.sseEvents,
+      code: this.code,
+      bizCode: this.bizCode,
+    });
+  }
+}
+
+function readJsonCompletionErrorSignal(
+  chunks: readonly Uint8Array[],
+  byteLength: number,
+): ReturnType<typeof readCompletionErrorSignal> & { parsed: boolean } {
+  try {
+    const body = new Uint8Array(byteLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+      body.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return { ...readCompletionErrorSignal(JSON.parse(new TextDecoder().decode(body))), parsed: true };
+  } catch {
+    return { code: null, bizCode: null, isError: false, parsed: false };
+  }
+}
+
+function readCompletionErrorSignal(value: unknown): {
+  code: number | null;
+  bizCode: number | null;
+  isError: boolean;
+} {
+  const record = isPlainRecord(value) ? value : null;
+  const data = record && isPlainRecord(record.data) ? record.data : null;
+  const code = readDiagnosticCode(record?.code);
+  const bizCode = readDiagnosticCode(data?.biz_code);
+  const hasError = Boolean(
+    record && Object.prototype.hasOwnProperty.call(record, 'error') && record.error !== null && record.error !== false ||
+    data && Object.prototype.hasOwnProperty.call(data, 'error') && data.error !== null && data.error !== false
+  );
+  return {
+    code,
+    bizCode,
+    isError: hasError || code !== null && code !== 0 || bizCode !== null && bizCode !== 0,
+  };
+}
+
+function readDiagnosticCode(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 999_999
+    ? value
+    : null;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
 
 function normalizeHistoryMessage(raw: unknown): DeepSeekHistoryMessage {

@@ -436,6 +436,19 @@ describe('DeepSeekWebModelTurnAdapter', () => {
     }
   });
 
+  it('reports safe HTTP 200 business-error metadata while keeping the page quarantined', async () => {
+    const result = turn({ finished: false, completionDiagnostic: {
+      httpStatus: 200, contentKind: 'json_error', bodyBytes: 124, sseEvents: 0, code: 0, bizCode: 40001,
+    } });
+    const { adapter, sessions, client } = adapterWith(vi.fn(async () => result));
+    const terminal = await adapter.generate(request(), collectCallbacks().callbacks);
+    expect(terminal).toEqual({
+      type: 'ambiguous', reason: 'deepseek_stream_incomplete.v1:h200:json_error:b124:e0:c0:biz40001',
+    });
+    expect(sessions.getSession('session-1')).toMatchObject({ parentMessageId: null, quarantined: true });
+    expect(client.readHistorySnapshot).not.toHaveBeenCalled();
+  });
+
   it('requires the history snapshot to prove the exact continuous page chain', async () => {
     const client = fakeClient({
       readHistorySnapshot: vi.fn(async () => history(11, { assistantMessageId: 12 })),

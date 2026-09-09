@@ -5,6 +5,25 @@ export interface ModelTurn {
   responseMessageId: number | null;
   requestMessageId: number | null;
   finished: boolean;
+  completionDiagnostic?: DeepSeekCompletionDiagnostic;
+}
+
+export type DeepSeekCompletionContentKind =
+  | 'empty'
+  | 'json_error'
+  | 'json'
+  | 'sse_error'
+  | 'sse'
+  | 'other';
+
+/** Bounded, content-free metadata for diagnosing an incomplete completion stream. */
+export interface DeepSeekCompletionDiagnostic {
+  readonly httpStatus: number;
+  readonly contentKind: DeepSeekCompletionContentKind;
+  readonly bodyBytes: number;
+  readonly sseEvents: number;
+  readonly code: number | null;
+  readonly bizCode: number | null;
 }
 
 export interface DeepSeekHistorySnapshot {
@@ -43,6 +62,8 @@ export interface DeepSeekRequestContext {
   readonly deadlineAt?: number;
   readonly fetchImpl?: typeof fetch;
   readonly onDispatch?: () => void;
+  /** Opt in to bounded, content-free completion metadata for Mode A diagnostics. */
+  readonly completionDiagnostics?: boolean;
 }
 
 export interface DeepSeekAutomationClient {

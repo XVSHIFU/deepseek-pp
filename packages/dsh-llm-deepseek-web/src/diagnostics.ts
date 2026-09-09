@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { isCompletionDiagnosticReason } from '@deepseek-pp/web-model-protocol';
 
 // These are fixed local reason codes, never upstream response messages.
 const REASONS = new Set([
@@ -8,6 +9,7 @@ const REASONS = new Set([
   'deepseek_turn_timeout', 'deepseek_dispatch_abort_outcome_unknown', 'generation_timeout',
   'accept_timeout', 'request_timeout', 'browser_disconnected', 'connection_closed', 'connection_lost',
   'host_stopped', 'send_outcome_unknown', 'stream_limit_exceeded',
+  'remote_outcome_unknown', 'consumer_closed', 'status_without_stream',
   'DEEPSEEK_AUTH_REQUIRED', 'DEEPSEEK_PREPARATION_FAILED', 'MODEL_PREPARATION_FAILED',
   'BROKER_BUSY', 'SESSION_QUARANTINED', 'SESSION_BUSY', 'CAPACITY_EXCEEDED',
   'REQUEST_CAPACITY_EXCEEDED', 'DUPLICATE_REQUEST', 'REQUEST_IDENTITY_MISMATCH',
@@ -22,5 +24,6 @@ export function diagnosticSuffix(requestId: string, startedAt: number,
   stage: 'browser_terminal' | 'broker_error' | 'cancel_settlement', reason?: string): string {
   const request = createHash('sha256').update(requestId).digest('hex').slice(0, 16);
   const elapsed = Math.max(0, Math.floor(performance.now() - startedAt));
-  return ` [web-diag:v1 request=${request} stage=${stage} reason=${reason && REASONS.has(reason) ? reason : 'unknown'} elapsed_ms=${elapsed}]`;
+  const safeReason = reason && (REASONS.has(reason) || isCompletionDiagnosticReason(reason)) ? reason : 'unknown';
+  return ` [web-diag:v1 request=${request} stage=${stage} reason=${safeReason} elapsed_ms=${elapsed}]`;
 }

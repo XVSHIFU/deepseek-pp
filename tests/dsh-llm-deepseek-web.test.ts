@@ -374,7 +374,8 @@ describe("DeepSeek Web DSH adapter", () => {
     expect(broker.generateCount).toBe(1);
   });
 
-  it.each(['deepseek_chain_unverified', 'browser_worker_restarted', 'private-cookie-canary'])('retains only safe terminal diagnostics: %s', async reason => {
+  it.each(['deepseek_chain_unverified', 'browser_worker_restarted', 'SESSION_QUARANTINED',
+    'deepseek_stream_incomplete.v1:h200:json_error:b124:e0:c0:biz40001', 'private-cookie-canary'])('retains only safe terminal diagnostics: %s', async reason => {
     const broker = new FakeBroker([{ type: 'ambiguous', reason }]);
     const adapter = new DeepSeekWebAdapter({ broker, createRequestId: () => 'request-private-canary' });
     const chunks = await collect(adapter.stream(generateOptions()));

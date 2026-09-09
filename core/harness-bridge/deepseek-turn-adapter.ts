@@ -1,4 +1,5 @@
 import {
+  completionDiagnosticReason,
   encodeWebModelFrame,
   validateWebModelFrame,
   type JsonObject,
@@ -309,6 +310,7 @@ export class DeepSeekWebModelTurnAdapter implements WebModelTurnPort {
           clientHeaders,
           powHeaders,
         }, streamCallbacks, {
+          completionDiagnostics: true,
           signal: turnSignal.signal,
           onDispatch: () => {
             this.sessions.markDispatched(request.request_id);
@@ -337,7 +339,7 @@ export class DeepSeekWebModelTurnAdapter implements WebModelTurnPort {
       if (turnSignal.signal.aborted) {
         return this.terminal(request.request_id, terminalForAbort(turnSignal.signal, true));
       }
-      if (!result.finished) return this.terminal(request.request_id, ambiguous('deepseek_stream_incomplete'));
+      if (!result.finished) return this.terminal(request.request_id, ambiguous(completionDiagnosticReason(result.completionDiagnostic)));
 
       try {
         consumeParsed(toolParser.flush());
@@ -437,6 +439,7 @@ export class DeepSeekWebModelTurnAdapter implements WebModelTurnPort {
             clientHeaders,
             powHeaders: correctionPowHeaders,
           }, correctionCallbacks, {
+            completionDiagnostics: true,
             signal: turnSignal.signal,
             onDispatch: () => { correctionDispatched = true; },
           });
@@ -458,7 +461,7 @@ export class DeepSeekWebModelTurnAdapter implements WebModelTurnPort {
           return this.terminal(request.request_id, terminalForAbort(turnSignal.signal, true));
         }
         if (!correctedResult.finished) {
-          return this.terminal(request.request_id, ambiguous('deepseek_stream_incomplete'));
+          return this.terminal(request.request_id, ambiguous(completionDiagnosticReason(correctedResult.completionDiagnostic)));
         }
         try {
           consumeParsed(correctionParser.flush(), true);

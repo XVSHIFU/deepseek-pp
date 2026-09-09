@@ -1,5 +1,14 @@
 # Web Model Broker × Local DSH — Active Progress
 
+## 2026-09-09 T9 长会话诊断启动
+
+- 用户批准先诊断再修复，并授权最多三位并发子 agent。当前两位分别审查流处理与上下文/恢复，主 agent 汇总；执行边界与分阶段合同见 `docs/plan/t9-long-session-recovery.md`。
+- 真实 r2 只读对照已复现：短输入连续 10 次 glob 成功；原会话追加 42,952 字符合成文本后立即失败；新会话相同输入连续 8 次 glob 成功；原失败会话一句短消息仍失败。没有读取用户项目内容或修改项目文件。首次服务端直接原因仍未确认。
+- 代码确认两个缺口：HTTP 200 JSON 业务错误会落入 SSE EOF/finished=false 通用路径；旧 ambiguous 隔离新请求后，具体 SESSION_QUARANTINED 又在 Host 路径丢失。正在制作 opt-in、无原始正文/凭据的最小诊断补丁，不改变完成、隔离和自动重试策略。
+- 侧边栏可操作且控制台无相关 error/warn，但无 Network 接口；工具拒绝访问 Chrome 扩展管理页，更新/重新加载须用户完成，不绕过限制。本阶段未改变已安装版本、配对、正式 Release 或远端仓库。
+- T9.1 诊断补丁：Mode A 显式 opt-in 的完成摘要通过固定 reason 编码贯穿浏览器持久化与 Host 显示；只包含枚举/受限数字，JSON 临时缓存最多 64 KiB，数字 code/bizCode 限 0..999999。原 4 MiB completion 网络限制仍生效；审查所提“无限读取”并不成立，但诊断缓存另行收紧。没有改变 finished、隔离或重试判定。Host 对 unknown outcome 保留已允许的固定 remoteCode，不再把 SESSION_QUARANTINED 丢成通用原因。
+- 已执行：Host/模型 adapter/诊断编码三文件 **94/94**，浏览器 adapter/恢复/诊断编码三文件 **116/116**（两批含交叉覆盖）；客户端组由子 agent 验证 **115/115**。根 compile、prompt freeze **7/7**、官方插件 build 和 diff-check 通过。诊断版真实网页响应取证待原位更新后进行；此处不能宣称首次故障原因或 T9 已修复。
+
 ## 2026-09-08 另一台 Windows 停止问题：格式修复与诊断包
 
 - 用户日志证实两条问题路径：带 `name` 属性的 `<tool_call>` 被当作普通文字后 completed；另有 `TOOL_CALL_INVALID` 和低于一秒的 `WEB_MODEL_AMBIGUOUS`。后两者的具体网页侧原因仍需出错电脑复测，不归因为权限或旧十秒超时。
