@@ -36,7 +36,7 @@ npm install --global @deepseek-ai/dsh@0.1.2-rc.1
 
 Follow the [Windows / Linux installation instructions](README.md#首次安装) to install prerequisites, load the browser extension, and install the DSH plugin with its companion dependencies. Browser extension builds and Harness plugin builds are separate steps; when using a matching prebuilt package, source compilation is unnecessary.
 
-In the Assets section of [GitHub Releases](https://github.com/XVSHIFU/deepseek-pp/releases), choose the complete installation archive **`deepseek-web-harness-20260908-r2.zip`**, or use that archive if you already have it. No separate extension patch is needed. Do not choose the generated Source code archives. Extract it and enter `deepseek-web-harness-20260908-r2`, containing `README.md`, `extensions`, `plugin`, and `vendor`. Run package installation and upgrade commands from that directory.
+In the Assets section of [GitHub Releases](https://github.com/XVSHIFU/deepseek-pp/releases), choose the complete installation archive **`deepseek-web-harness-20260909.zip`**, or use that archive if you already have it. No separate extension patch is needed. Do not choose the generated Source code archives. Extract it and enter `deepseek-web-harness-20260909`, containing `README.md`, `extensions`, `plugin`, and `vendor`. Run package installation and upgrade commands from that directory.
 
 Install the Harness plugin and companion dependencies:
 
@@ -123,6 +123,8 @@ dsh plugin --profile web add ./vendor/*.tgz ./plugin/*.tgz --force --allow-build
 ```
 
 After the command succeeds, back up the currently loaded extension folder and copy the new browser ZIP's extracted files into that same folder. Reload the extension and refresh the signed-in DeepSeek page, then run `dsh web` again. Keeping the original Chrome/Edge extension path preserves its ID and pairing. Firefox temporary loading may change the origin and require pairing again. Installation and upgrades may need internet access.
+
+Existing settings receive a default 5-second request interval without pairing again. To roll back, restore the pre-upgrade extension settings and matching components together; do not use an old extension with the new settings format.
 
 ## Commands and data
 

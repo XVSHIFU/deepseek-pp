@@ -1,5 +1,12 @@
 # Web Model Broker × Local DSH — Active Progress
 
+## 2026-09-09 限流修复发布准备
+
+- 用户明确授权推送与发布正式发行版；目标为 `XVSHIFU/deepseek-pp` / `feature/web-harness`，新标签 `web-harness-20260909`，不操作上游和 Harness fork。现有 20260908-r2 正式版保留供历史下载，不覆盖原资产。
+- 用户 Network 截图补齐 5 秒样本：11 次 completion 均 HTTP 200，上方时间轴约每 5 秒一个请求，响应耗时 1.16–1.99 秒；与 11 步 completed 日志相符。说明节流工作，不代表固定限流上限。原始会话、配对备份、临时目录不上传。
+- 中英文 README 更新整包名称、节流及配置回退提示，保留已有图片；发行说明见 `docs/releases/web-harness-20260909.md`。本轮没有更改已验收运行时代码。
+- 发布闭环尝试 `npm run ci:quality`（外层 60 秒硬限），在首项 verify:workflows 因本机缺少 actionlint 退出 1；后续全仓项目未执行，不宣称完整 CI 通过。此前定向验证和三浏览器构建、真实只读样本证据仍有效。更新文档后的正式整包待构建与组件一致性校验；本条不是发布成功记录。
+
 ## 2026-09-09 T9 首因确认与限流修复
 
 - **5 秒档真实串行只读样本已完成：** 用户确认间隔与 Network 准备后，空工作区 Default/Thinking off/read-only 会话 `session-b680aaf4-5250-4795-abd2-f6a9539880c4` 完成 10 次 glob、10 个非错误空结果、11 个模型步骤，turn/end=completed，终答 `10`，耗时 54,862ms，没有 error 或工作区内容变化。停止本批，不追加压测；另有标题请求意图记录，网络 completion 总数及实际开始间隔待用户瀑布图确认，不拿 step/start 冒充 dispatch。原始逐帧验证与日志散列见 `docs/verification/T9_限流修复复测.md`；没有测得固定限流阈值，没有在新版真实触发限流/冷却路径，不宣称 T9 全部完成。

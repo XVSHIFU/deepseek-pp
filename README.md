@@ -82,9 +82,9 @@ npm install --global @deepseek-ai/dsh@0.1.2-rc.1
 
 这两项是不同的软件：**浏览器扩展安装到浏览器，DSH 插件安装到本机 Harness。**
 
-从 [GitHub Releases](https://github.com/XVSHIFU/deepseek-pp/releases) 的附件（Assets）中选择 **完整安装包 `deepseek-web-harness-20260908-r2.zip`**，不需要另找扩展补丁。已经拿到这份整包时，直接解压使用，不必再次下载。不要选择 GitHub 自动生成的 **Source code**。
+从 [GitHub Releases](https://github.com/XVSHIFU/deepseek-pp/releases) 的附件（Assets）中选择 **完整安装包 `deepseek-web-harness-20260909.zip`**，不需要另找扩展补丁。已经拿到这份整包时，直接解压使用，不必再次下载。不要选择 GitHub 自动生成的 **Source code**。
 
-解压整包后，进入 **`deepseek-web-harness-20260908-r2`** 文件夹，里面同时有 **`README.md`、`extensions`、`plugin`、`vendor`**。以下称这一层为“安装包目录”，安装和升级命令都在这一层执行。
+解压整包后，进入 **`deepseek-web-harness-20260909`** 文件夹，里面同时有 **`README.md`、`extensions`、`plugin`、`vendor`**。以下称这一层为“安装包目录”，安装和升级命令都在这一层执行。
 
 使用配套安装包时，解压到准备长期保留的目录。浏览器 ZIP 位于 `extensions/`，DSH 插件位于 `plugin/`，配套依赖位于 `vendor/`；无需执行下面的源码构建。
 
@@ -341,6 +341,8 @@ Linux-wsl-ubuntu:
 3. 解压新包中的浏览器扩展 ZIP。**先备份原来加载的扩展文件夹**，再将新扩展文件复制到原文件夹内并覆盖同名文件；让浏览器继续使用原路径，不要先卸载扩展。
 4. 在 `chrome://extensions` 或 `edge://extensions` 点击该扩展的“重新加载”，然后刷新已经登录的 DeepSeek 网页。Firefox 重新临时加载后，如扩展地址变化，需在 Harness 中更新并配对。
 5. 回到项目目录运行 `dsh web`。原路径与扩展 ID 没变时，已有配对可继续使用；在设置中确认“已连接”。
+
+旧配置会自动补足默认的 5 秒请求间隔，无需重新配对。若要回退版本，请同时恢复升级前备份的扩展配置及配套组件；不要直接用旧扩展读取新版配置。
 
 ## 数据与权限
 
