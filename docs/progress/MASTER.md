@@ -2,6 +2,9 @@
 
 ## 2026-09-09 命令示例误判修复
 
+- **已更新原正式 Release：** `web-harness-20260909` 标签和 target 指向修复提交 `e658439affc5e037a518b701218e1fad667ce8ab`，仍为 Latest、非草稿/非预发布。原 ZIP 和校验附件已替换（Release ID 385208835 不变），远端 digest 回读一致：`087abacb6594b82aad6182b475638318919c817fee70dde700a811416dac2370`，28,421,223 字节、33 文件。旧 ZIP 本地保留于 `C:/Users/worker/Documents/deepseek-release-20260909/`，可恢复，GitHub 不再提供原同名附件。
+- 普通路径干净克隆经 npm ci、官方插件及 Chrome/Edge/Firefox 构建通过，组件散列和整包 ZIP 回读通过，manifest policy、177 文本资源 UTF-8/ASCII 通过。新包位于 `C:/Users/worker/Documents/deepseek-release-hotfix-20260909/`，不包含运行日志或登录/配对数据。没有改动用户已安装的浏览器扩展及 Harness 服务。
+- 额外 sidepanel chunk 检查未通过：初始壳 raw 384682 > 384043（gzip 117516 <= 117568）。对首次发布 `8f01f90` 的原始构建只读复核得到完全相同指标，确认是既有预算未同步，不是本修复引入的体积回退；本次未放宽预算，未据其他检查通过掩盖此失败。
 - 真实验收报告中的反引号示例 `update <ID> [-t "标题"]` 被 strict parser 误认为未知工具 `ID` 加数组参数，导致同轮有效 write 调用随 TOOL_CALL_INVALID 终态被丢弃。离线读取日志并复现；单元测试曾真实通过，但演示失败且 demo.py 未落地，未重放被拒绝的命令或修改用户任务。
 - 复用唯一 streaming parser，以跨分帧的反引号上下文排除示例中的未知占位符；已声明工具解析、未知工具在示例外的拦截、权限和失败终态保持不变。新增任意二分帧、多反引号、逐字符输入、完整报告后有效 write 的回归。
 - 定向 parser/adapter **101/101**；文本过滤/原 parser/复杂度/打包 **32/32**；compile、prompt freeze **7/7**、diff check 通过。未用离线结果宣称新的真实网页验收通过。
