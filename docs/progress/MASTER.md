@@ -2,6 +2,7 @@
 
 ## 2026-09-09 T9 首因确认与限流修复
 
+- 用户确认重新加载后，原 Chrome 加载目录 100 文件与 `ec596e6` 构建逐一散列匹配。编排 agent 将 web profile 顶层配置备份至更新包输出根的 `before-install/`，精确停止原 3080/43123 服务，官方插件安装 exit 0（pnpm 1.4 秒），安装 lib SHA-256 `3d0419db5ce45c3864fcfdd79cf2f306c0f302741f3061cde6324eb6af7017b6` 与候选源码构建一致。已在原空工作区重启 Harness（3080/43123），保留配对与会话；浏览器新建页设置为仅可查看、Default/Thinking off。尚未发送本批真实请求，等待用户确认扩展 5 秒设置及 Service Worker Network 留存，以免丢失实际请求间隔证据。
 - 限流修复源码 `ec596e695849f4f4846732e9a96162137befee10` 已在普通路径副本完成三浏览器与配套插件构建；组件校验、34 文件 ZIP 回读、manifest policy、177 文本文件 UTF-8/JS ASCII 检查通过。整包位于项目外 `C:/Users/worker/Documents/deepseek-t9-rate-limit-20260909/deepseek-web-harness-t9-rate-limit.zip`，SHA-256 `361c1c88f171de420a65d24d144e977eec945a2d6e8fe62885bd9a53060fddc9`；插件 TGZ SHA-256 `195cf1ea716cf7bdf7c8509e07553410a64f44926158a0be8d14e2e694ded20e`。可供原位复制的 Chrome 目录为该输出根下 `build-chrome/chrome-mv3`。当前仍未更新安装环境；待用户备份、覆盖并重新加载扩展后，编排 agent 安装配套插件并执行有界低频验证。不推送、不发布、不把构建通过当作真实限流边界验证。
 - 用户在 Service Worker Network 提供真实失败响应：`hint` 的 `type=error`、`clear_response=true`、`finish_reason=rate_limit_reached`，正文提示“消息发送过于频繁，请稍后重试”，随后 `close/retry/auto_resume=false`。本次首次停止确认为网页端限流，不再以长输入本身或上下文超限作为已证实根因。此前 T9-Network 只读会话短输入完成 10 次 glob，随后失败请求散列 `740eda9c9590ab12`、368ms，与 v2 的 311 字节/3 事件形状一致。
 - 原 stream-codec 单次解析的观察路径精确识别该 hint 组合；Mode A opt-in 只获得固定 `completionFailure` 枚举，未保存/转发提示正文。正常 FINISHED、Mode B、工具解析不变。限流未完成流保留 ambiguous 和隔离，但 Host 显示中文 `WEB_MODEL_RATE_LIMITED`，固定原因可安全持久化，不再丢成 unknown。
