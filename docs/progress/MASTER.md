@@ -1,5 +1,11 @@
 # Web Model Broker × Local DSH — Active Progress
 
+## 2026-09-09 正式发行版已发布
+
+- 源码及中英文 README 已推送 `XVSHIFU/deepseek-pp` / `feature/web-harness`。正式标签 `web-harness-20260909` 指向 `8f01f90896e241a3ea444fb8b64fda1889771589`，GitHub 回读确认 `draft=false`、`prerelease=false`，Latest 为该标签；默认展示分支不变。旧 r2 正式版未删除或覆盖。
+- 发行页：<https://github.com/XVSHIFU/deepseek-pp/releases/tag/web-harness-20260909>。完整包 `deepseek-web-harness-20260909.zip`，33 文件、28,419,258 字节，SHA-256 `b748f807a7f34d80f21d38c9745f3d10f6f43d669ee1d06faae6cc824a65bd1b`；ZIP 与 `.zip.sha256` 均 uploaded，远端 digest 与本地一致。未上传运行会话、Network 原始载荷、配对备份或本地测试目录。
+- 本次仅更新说明后重建三浏览器及插件；Chrome 目录 100 文件逐一散列与 `ec596e6` 实测包完全一致，插件 TGZ 也逐字节一致。打包回读及组件校验通过，manifest policy、177 个 UTF-8/JS ASCII 文本文件检查通过；打包定向 2 文件 **19/19** 通过。完整 CI 因缺少 actionlint 未启动后续检查，不能称全仓 CI 通过；真实样本证据范围仍为默认模式/思考关闭下的串行只读链。
+
 ## 2026-09-09 限流修复发布准备
 
 - 用户明确授权推送与发布正式发行版；目标为 `XVSHIFU/deepseek-pp` / `feature/web-harness`，新标签 `web-harness-20260909`，不操作上游和 Harness fork。现有 20260908-r2 正式版保留供历史下载，不覆盖原资产。
