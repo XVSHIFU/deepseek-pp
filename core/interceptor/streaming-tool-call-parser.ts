@@ -59,6 +59,9 @@ class XmlStreamingToolCallParser implements StreamingToolCallParser {
   private state: 'NORMAL' | 'SUPPRESSING' | 'UNKNOWN_TAG' = 'NORMAL';
   private unknownTag: { name: string; raw: string } | null = null;
   private pendingNormal = '';
+  // Strict unknown-tag detection must not interpret CLI placeholders inside
+  // backtick examples as tool intent. Keep delimiter runs across SSE chunks.
+  private readonly codeSpans = new BacktickCodeContext();
   private pendingSuppressed = '';
   private current: {
     id: string;
@@ -117,6 +120,7 @@ class XmlStreamingToolCallParser implements StreamingToolCallParser {
     this.pendingSuppressed = '';
     this.current = null;
     this.unknownTag = null;
+    this.codeSpans.reset();
     return event;
   }
 
@@ -129,8 +133,15 @@ class XmlStreamingToolCallParser implements StreamingToolCallParser {
     if (!found) {
       const tailLength = getPartialXmlToolTagTailLength(text, scannedNames, { closing: false });
       this.pendingNormal = tailLength > 0 ? text.slice(-tailLength) : '';
+      if (this.strictToolCalls) this.codeSpans.append(text.slice(0, text.length - tailLength));
       return '';
     }
+
+    if (this.strictToolCalls) this.codeSpans.append(text.slice(0, found.index));
+    const quotedUnknown = this.strictToolCalls && !this.invocationNames.has(found.name)
+      && this.codeSpans.inside;
+    if (this.strictToolCalls) this.codeSpans.append(found.raw);
+    if (quotedUnknown) return text.slice(found.endIndex);
 
     if (!this.invocationNames.has(found.name)) {
       this.state = 'UNKNOWN_TAG';
@@ -422,6 +433,43 @@ function createToolParseError(code: string, invocationName: string, message: str
     retryable: false,
     details: { invocationName },
   };
+}
+
+/** Tracks only backtick quoting, not tool bodies or arbitrary Markdown syntax. */
+class BacktickCodeContext {
+  private delimiter = 0;
+  private run = 0;
+  private escaped = false;
+
+  get inside(): boolean {
+    this.finishRun();
+    return this.delimiter > 0;
+  }
+
+  append(text: string): void {
+    for (const char of text) {
+      if (char === '`' && !this.escaped) {
+        this.run += 1;
+        continue;
+      }
+      this.finishRun();
+      // Backslashes only escape opening delimiters outside a code span.
+      this.escaped = this.delimiter === 0 && char === '\\' && !this.escaped;
+    }
+  }
+
+  reset(): void {
+    this.delimiter = 0;
+    this.run = 0;
+    this.escaped = false;
+  }
+
+  private finishRun(): void {
+    if (this.run === 0) return;
+    if (this.delimiter === 0) this.delimiter = this.run;
+    else if (this.delimiter === this.run) this.delimiter = 0;
+    this.run = 0;
+  }
 }
 
 function isExternalizableInvocation(invocationName: string): boolean {

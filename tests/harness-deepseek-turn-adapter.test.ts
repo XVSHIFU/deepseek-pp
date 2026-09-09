@@ -976,7 +976,29 @@ describe('DeepSeekWebModelTurnAdapter', () => {
     });
   });
 
+  it.each([1, 7, 4096])('keeps an acceptance report and its valid write call (chunk size %i)', async (size) => {
+    const report = '| 更新任务 | `update <ID> [-t "标题"] [-d "描述"] [--complete]` |\n\n';
+    const args = { file_path: 'demo.py', content: 'print("demo")\n' };
+    const output = report + '<write>' + JSON.stringify(args) + '</write>';
+    const streamer: TestStreamer = vi.fn(async (_input, callbacks) => {
+      for (let i = 0; i < output.length; i += size) callbacks.onTextChunk?.(output.slice(i, i + size), '');
+      return turn();
+    });
+    const { adapter, sessions } = adapterWith(streamer);
+    const collected = collectCallbacks();
+    const input = request({ tools: [{ name: 'write', description: 'Write a file.', input_schema: {
+      type: 'object', properties: { file_path: { type: 'string' }, content: { type: 'string' } },
+      required: ['file_path', 'content'],
+    } }] });
+    expect(await adapter.generate(input, collected.callbacks)).toEqual({ type: 'completed', finish_reason: 'tool_calls' });
+    expect(streamer).toHaveBeenCalledOnce();
+    expect(collected.tools).toEqual([expect.objectContaining({ name: 'write', arguments: args })]);
+    expect(collected.text.map(event => event.text).join('')).toBe(report);
+    expect(sessions.getSession('session-1')?.quarantined).toBe(false);
+  });
+
   it.each([
+    '`update <ID> [-t "标题"]`',
     'The user wrote [调用 local_agent_read] in ordinary prose.',
     '```text\n[调用 local_agent_read]\n```',
     '[调用 unknown_tool]',

@@ -9,6 +9,34 @@ import type { ToolDescriptor } from '../core/tool/types';
 describe('createStreamingToolCallParser', () => {
   const descriptors = createArtifactToolDescriptors('en');
 
+  it.each([
+    '`update <ID> [-t "标题"] [-d "描述"] [--complete]`',
+    '``update <ID> [--complete] `literal` ``',
+    '```text\nupdate <ID> [--complete]\n```',
+    '| 更新 | `update <ID> [-t "标题"]` |',
+  ])('does not reject quoted CLI placeholders across any SSE split: %s', (text) => {
+    for (let split = 0; split <= text.length; split += 1) {
+      const parser = createStreamingToolCallParser(descriptors, { strictToolCalls: true });
+      const events = [parser.append(text.slice(0, split)), parser.append(text.slice(split)), parser.flush()];
+      expect(events.flatMap(event => event.failed)).toEqual([]);
+      expect(events.flatMap(event => event.completed)).toEqual([]);
+    }
+  });
+
+  it.each([
+    '<unknown>{"path":"README.md"}</unknown>',
+    '`update <ID> [-t title]`\n<unknown>{"path":"README.md"}</unknown>',
+    '``example ` nested``\n<unknown>[]</unknown>',
+    '\\`<unknown>{}</unknown>',
+  ])('still rejects unquoted unknown tool intent: %s', (text) => {
+    const parser = createStreamingToolCallParser(descriptors, { strictToolCalls: true });
+    const events = [...text].map(char => parser.append(char));
+    events.push(parser.flush());
+    expect(events.flatMap(event => event.failed)).toEqual([
+      expect.objectContaining({ parseError: expect.objectContaining({ code: 'tool_call_unknown' }) }),
+    ]);
+  });
+
   it('emits a start event before a large artifact body completes', () => {
     const parser = createStreamingToolCallParser(descriptors);
 

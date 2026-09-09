@@ -1,5 +1,13 @@
 # Web Model Broker × Local DSH — Active Progress
 
+## 2026-09-09 命令示例误判修复
+
+- 真实验收报告中的反引号示例 `update <ID> [-t "标题"]` 被 strict parser 误认为未知工具 `ID` 加数组参数，导致同轮有效 write 调用随 TOOL_CALL_INVALID 终态被丢弃。离线读取日志并复现；单元测试曾真实通过，但演示失败且 demo.py 未落地，未重放被拒绝的命令或修改用户任务。
+- 复用唯一 streaming parser，以跨分帧的反引号上下文排除示例中的未知占位符；已声明工具解析、未知工具在示例外的拦截、权限和失败终态保持不变。新增任意二分帧、多反引号、逐字符输入、完整报告后有效 write 的回归。
+- 定向 parser/adapter **101/101**；文本过滤/原 parser/复杂度/打包 **32/32**；compile、prompt freeze **7/7**、diff check 通过。未用离线结果宣称新的真实网页验收通过。
+- 完整 CI 尝试在首项因本机缺少 actionlint 退出 1，后续全仓检查未执行，不宣称全仓 CI 通过。
+- 用户授权在原 `web-harness-20260909` 正式 Release 替换完整包及校验文件、更新标签和说明；不创建第二个 Release，不改变上游或 Harness fork。三浏览器重新构建与发布结果另记，以下旧散列为首次发布历史记录。
+
 ## 2026-09-09 正式发行版已发布
 
 - 源码及中英文 README 已推送 `XVSHIFU/deepseek-pp` / `feature/web-harness`。正式标签 `web-harness-20260909` 指向 `8f01f90896e241a3ea444fb8b64fda1889771589`，GitHub 回读确认 `draft=false`、`prerelease=false`，Latest 为该标签；默认展示分支不变。旧 r2 正式版未删除或覆盖。
