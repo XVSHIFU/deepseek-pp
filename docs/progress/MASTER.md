@@ -1,5 +1,12 @@
 # Web Model Broker × Local DSH — Active Progress
 
+## 2026-09-09 T9 v2 已部署并复现相同短流
+
+- v2 源码 `bc29803`，用户重新加载后的扩展 100 文件散列匹配；Harness 插件官方安装 exit 0、运行文件散列匹配并重启服务，配对/会话/未发送草稿保留。详细组件散列与安装备份见 `docs/verification/T9_本机诊断说明.md`。
+- 新会话 `session-0a4f50e7-160f-4b6c-b276-473a65252bef` 完成 10 次 glob / 11 模型步；同会话追加 42,952 字符合成输入后，下一轮首模型步在 444ms 失败，无新增工具调用。持久日志确认 completed → error。诊断 `request=b749b7bc8065d8ea`，`deepseek_stream_incomplete.v2:h200:sse:b311:e3:cn:bizn:j3:k194:s4108`。
+- 三条事件均为合法 JSON 对象，类型恰为 ready、close、一个未分类事件。已排除本次 JSON 解析失败及所检查 FINISHED 形状漏认，仍未证实上下文超限。对照页面公开主脚本发现现客户端忽略 toast/hint 提示语义；只能证明代码缺口，尚不能把 other 事件定性为某条业务拒绝。
+- 下一步由用户在扩展 Service Worker 打开 Network/Preserve log 后，主 agent 发起新的只读诊断，读取失败响应三事件；不重放旧 ambiguous，不再先做盲目诊断版本。当前本机 Harness 保持运行，无 push/发布。T9.4 分类小切片随 v2 部署，但没有单独真实验收新隔离提示。
+
 ## 2026-09-09 T9 v2 事件形状诊断
 
 - 用户确认失败请求没有 Service Worker Network 留存。追加三个有界数值：成功 JSON 解析数、固定事件类别位图、根/直接 BATCH 的结构位图；合法 null/false/0 也计入 JSON 成功数。原 stream-codec 单次 JSON 解析处观察，未增加原始事件缓存、任意路径/正文透传、第二套 SSE 解析或新的完成条件。
