@@ -1,5 +1,10 @@
 # Web Model Broker × Local DSH — Active Progress
 
+## 2026-09-09 T9 首次失败已在诊断版复现
+
+- 用户续测后，主 agent 读取同一官方会话 `session-39a7d0c5-6eaf-46bc-9f06-be5b80b3fe8d` 的完整持久日志确认第三轮前 5 次 glob/结果成功，第 6 模型步在 263ms 失败。安全诊断为 `request=8f3559785a3dc6b3`、`deepseek_stream_incomplete.v1:h200:sse:b311:e3:cn:bizn`。运行版本仍是 89fce7b；后续 e4c95e5 分类修正未安装。
+- 已缩小到 HTTP 200 的短 SSE 未识别完成路径：311 字节/3 事件，不是本轮本地工具失败或生成预算耗尽。null 数字码不是无业务错误的证明，当前不能判断具体事件含义或宣称上下文超限。该样本没有保留原始 SSE，下一步检查 Service Worker Network 是否有现存响应记录；没有则准备有界事件形状补充取证。未对失败链继续发送或自动重试。
+
 ## 2026-09-09 T9 诊断版原位更新与真实只读复测
 
 - 用户确认重新加载 Chrome；其提供的加载来源目录 100 个文件与 `89fce7b` 诊断构建散列一致。主 agent 更新 Harness 插件并重启 3080 服务，保留配对、会话及安装前 profile 配置备份；未操作浏览器扩展管理页、未 push 或发布。
