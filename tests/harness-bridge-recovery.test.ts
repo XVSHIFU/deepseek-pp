@@ -8,7 +8,7 @@ import type { HarnessBridgeClientState } from '../core/harness-bridge/state';
 import type { WebModelTurnCallbacks, WebModelTurnPort } from '../core/harness-bridge/model-turn-port';
 import {
   HarnessBridgeResultCache, MAX_HARNESS_BRIDGE_RECOVERY_RECORDS,
-  decodeHarnessBridgeRecoveryIndex, harnessBridgeAuthorityDigest,
+  HarnessBridgeRecoveryError, decodeHarnessBridgeRecoveryIndex, harnessBridgeAuthorityDigest,
   type HarnessBridgeRecoveryIndex, type HarnessBridgeRecoveryRecord, type HarnessBridgeRecoveryStorage,
 } from '../core/harness-bridge/result-cache';
 import type { HarnessBridgeSettings } from '../core/harness-bridge/settings';
@@ -248,22 +248,47 @@ describe('browser metadata recovery index', () => {
     await vi.waitFor(() => expect(fixture.client.sent.at(-1)).toMatchObject({ error: { data: { external_outcome: 'unknown', retryable: false } } }));
     expect(storage.index().records[0]).toMatchObject({ request_id: 'request-2', status: 'ambiguous' });
     expect(JSON.stringify(storage.raw())).not.toContain('PRIVATE_ERROR');
+    fixture.client.receive(query('request-2'));
+    await vi.waitFor(() => expect(fixture.client.sent.at(-1)).toMatchObject({ result: { status: 'ambiguous' } }));
     fixture.client.receive(generate('request-3'));
-    await vi.waitFor(() => expect(fixture.client.sent.at(-1)).toMatchObject({ error: { data: { error_code: 'SESSION_QUARANTINED', external_outcome: 'unknown' } } }));
+    await vi.waitFor(() => expect(fixture.client.sent.at(-1)).toMatchObject({ error: { data: {
+      error_code: 'SESSION_QUARANTINED', external_outcome: 'not_started', retryable: false,
+    } } }));
     expect(fixture.turn.generate).toHaveBeenCalledTimes(2);
+    expect(storage.index().records).toEqual([expect.objectContaining({ request_id: 'request-2', status: 'ambiguous' })]);
   });
 
-  it('preserves the adapter quarantine reason without unquarantining or replaying', async () => {
+  it('releases only the new adapter reservation when session-map quarantines it before dispatch', async () => {
     const storage = memoryStorage();
     const fixture = await setup(storage, {
       generate: vi.fn().mockRejectedValue(new DeepSeekTurnAdapterError('SESSION_QUARANTINED')),
     });
     fixture.client.receive(generate());
     await vi.waitFor(() => expect(fixture.client.sent.at(-1)).toMatchObject({ error: { data: {
+      error_code: 'SESSION_QUARANTINED', external_outcome: 'not_started', retryable: false,
+    } } }));
+    expect(storage.index().records).toEqual([]);
+    expect(fixture.turn.generate).toHaveBeenCalledOnce();
+  });
+
+  it('does not classify the same code as not_started after the adapter accepted', async () => {
+    const storage = memoryStorage();
+    const fixture = await setup(storage, {
+      generate: vi.fn<WebModelTurnPort['generate']>(async (_request, callbacks) => {
+        callbacks.onAccepted(accepted());
+        throw new HarnessBridgeRecoveryError('SESSION_QUARANTINED');
+      }),
+    });
+    fixture.client.receive(generate());
+    await vi.waitFor(() => expect(fixture.client.sent.at(-1)).toMatchObject({ error: { data: {
       error_code: 'SESSION_QUARANTINED', external_outcome: 'unknown', retryable: false,
     } } }));
-    expect(storage.index().records[0]).toMatchObject({ status: 'ambiguous' });
-    expect(fixture.turn.generate).toHaveBeenCalledOnce();
+    expect(storage.index().records).toEqual([expect.objectContaining({ status: 'accepted' })]);
+
+    fixture.coordinator.stop();
+    const reopened = await setup(storage);
+    reopened.client.receive(query());
+    await vi.waitFor(() => expect(reopened.client.sent.at(-1)).toMatchObject({ result: { status: 'ambiguous' } }));
   });
 
   it('retains old authority tombstones across pairing changes and fences a late old terminal', async () => {
@@ -393,8 +418,8 @@ function generate(requestId = 'request-1'): HarnessBridgeHostRequest {
     tools: [], options: { thinking_enabled: true, search_enabled: false, model_type: 'default' },
   } };
 }
-function query(): HarnessBridgeHostRequest {
-  return { jsonrpc: '2.0', id: 'query-1', method: 'model.query', params: { schema_version: 1, request_id: 'request-1', request_digest: DIGEST } };
+function query(requestId = 'request-1'): HarnessBridgeHostRequest {
+  return { jsonrpc: '2.0', id: `query-${requestId}`, method: 'model.query', params: { schema_version: 1, request_id: requestId, request_digest: DIGEST } };
 }
 function cancel(): HarnessBridgeHostRequest {
   return { jsonrpc: '2.0', id: 'cancel-1', method: 'model.cancel', params: { schema_version: 1, request_id: 'request-1', request_digest: DIGEST, reason: 'cancelled' } };

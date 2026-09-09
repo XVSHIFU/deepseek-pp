@@ -331,7 +331,13 @@ export class HarnessBridgeCoordinator {
     } catch (error) {
       if (terminalCommitted || active.authorityEpoch !== this.authorityEpoch) return;
       if (error instanceof HarnessBridgeRecoveryError) {
-        if (['DUPLICATE_REQUEST', 'REQUEST_IDENTITY_MISMATCH', 'REQUEST_CAPACITY_EXCEEDED', 'SESSION_QUARANTINED'].includes(error.code)) {
+        if (error.code === 'SESSION_QUARANTINED' && !turnInvoked && !reserved) {
+          // reserve() rejected this request before the adapter was invoked. The
+          // older ambiguous record remains quarantined, but this request did
+          // not reach the webpage and must not be reported as ambiguous.
+          this.sendError(binding, request.id, active.requestId, active.requestDigest, error.code,
+            'not_started', false);
+        } else if (['DUPLICATE_REQUEST', 'REQUEST_IDENTITY_MISMATCH', 'REQUEST_CAPACITY_EXCEEDED', 'SESSION_QUARANTINED'].includes(error.code)) {
           this.sendError(binding, request.id, active.requestId, active.requestDigest, error.code,
             error.code === 'REQUEST_CAPACITY_EXCEEDED' ? 'not_started' : 'unknown');
         } else this.recoveryFailed(error);
@@ -342,8 +348,12 @@ export class HarnessBridgeCoordinator {
         this.recoveryFailed(active.deliveryError);
         return;
       }
+      // The concrete adapter calls session-map.reserve() before it can invoke
+      // onAccepted or dispatch to the page. Its SESSION_QUARANTINED error is
+      // therefore a proved pre-dispatch refusal; leave the old quarantine in
+      // place while releasing only this new cache reservation.
       const provenUnstarted = !turnInvoked || (!adapterAccepted && error instanceof DeepSeekTurnAdapterError &&
-        error.code !== 'DUPLICATE_REQUEST' && error.code !== 'REQUEST_IDENTITY_MISMATCH' && error.code !== 'SESSION_QUARANTINED');
+        error.code !== 'DUPLICATE_REQUEST' && error.code !== 'REQUEST_IDENTITY_MISMATCH');
       if (reserved && provenUnstarted) await this.records.releaseUnstarted(authorityDigest, active.requestId);
       else if (reserved) {
         const record = await this.records.advance(authorityDigest, active.requestId, { type: 'ambiguous', reason: 'browser_recovery_failed' });
@@ -352,13 +362,15 @@ export class HarnessBridgeCoordinator {
         }
       }
       if (this.binding === binding && !adapterAccepted && !controller.signal.aborted) {
+        const errorCode = safePreparationErrorCode(error);
         this.sendError(
           binding,
           request.id,
           request.params.request_id,
           request.params.request_digest,
-          safePreparationErrorCode(error),
+          errorCode,
           provenUnstarted ? 'not_started' : 'unknown',
+          errorCode === 'SESSION_QUARANTINED' ? false : undefined,
         );
       }
     } finally {
@@ -469,6 +481,7 @@ export class HarnessBridgeCoordinator {
     requestDigest: string,
     errorCode: string,
     externalOutcome: 'not_started' | 'unknown' = 'not_started',
+    retryable = externalOutcome === 'not_started',
   ): void {
     if (this.binding !== binding) return;
     const frame: JsonRpcErrorResponse = {
@@ -480,7 +493,7 @@ export class HarnessBridgeCoordinator {
         data: {
           schema_version: 1,
           error_code: errorCode,
-          retryable: externalOutcome === 'not_started',
+          retryable,
           external_outcome: externalOutcome,
           request_id: requestId,
           request_digest: requestDigest,

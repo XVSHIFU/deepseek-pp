@@ -530,6 +530,8 @@ function normalizeAdapterError(error: unknown, signal?: AbortSignal): Error {
       case "DEEPSEEK_PREPARATION_FAILED":
       case "MODEL_PREPARATION_FAILED":
         return new LlmError("The DeepSeek web model could not prepare the request before generation.", error.code, { cause: error });
+      case "SESSION_QUARANTINED":
+        return new LlmError("上一网页请求的结果未确认，当前网页链已隔离；本次请求尚未发送到网页。请在 Harness 中新建或分支一个会话，并先核对已完成的操作；系统不会自动重放原请求。", error.code, { cause: error });
       case "REQUEST_TIMEOUT":
         return new LlmError("The DeepSeek Web browser broker timed out.", "TIMEOUT", { cause: error });
       case "PROTOCOL_VIOLATION":

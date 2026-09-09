@@ -367,6 +367,27 @@ describe("DeepSeek Web DSH adapter", () => {
     expect(broker.cancelRequests).toHaveLength(0);
   });
 
+  it("tells the user how to recover a pre-dispatch quarantined session without replaying", async () => {
+    const ctx = new Context();
+    await ctx.plugin(LlmRuntime);
+    const broker = new ThrowingBroker(new BrokerError("SESSION_QUARANTINED", "not_started"));
+    registerDeepSeekWebAdapter(ctx, broker);
+
+    const chunks = await collect(ctx.llm.stream(generateOptions()));
+
+    expect(chunks).toEqual([{
+      type: "finish",
+      reason: { kind: "error", failure: {
+        code: "SESSION_QUARANTINED",
+        message: expect.stringContaining("新建或分支一个会话"),
+      } },
+    }]);
+    expect(chunks.at(-1)).toMatchObject({ reason: { failure: { message: expect.stringContaining("不会自动重放") } } });
+    expect(broker.generateCount).toBe(1);
+    expect(broker.cancelRequests).toHaveLength(0);
+    await ctx.fiber.dispose();
+  });
+
   it("keeps a remote failure with unknown outcome ambiguous", async () => {
     const broker = new ThrowingBroker(new BrokerError("DEEPSEEK_AUTH_REQUIRED", "unknown"));
     const adapter = new DeepSeekWebAdapter({ broker });

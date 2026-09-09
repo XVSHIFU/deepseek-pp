@@ -91,7 +91,7 @@ describe("DSH web model loopback host", () => {
     ["MODEL_PREPARATION_FAILED", "MODEL_PREPARATION_FAILED"],
     ["BROKER_BUSY", "BROKER_BUSY"],
     ["PRIVATE_UPSTREAM_VALUE", "PROTOCOL_VIOLATION"],
-    ["SESSION_QUARANTINED", "PROTOCOL_VIOLATION"],
+    ["SESSION_QUARANTINED", "SESSION_QUARANTINED"],
   ])("preserves only the safe pre-start remote error %s", async (remoteCode, expectedCode) => {
     const { host, address } = await startHost();
     const browser = await connectAndAuthenticate(address);
@@ -100,7 +100,6 @@ describe("DSH web model loopback host", () => {
       code: expectedCode,
       message: expectedCode,
       externalOutcome: "not_started",
-      ...(remoteCode === 'SESSION_QUARANTINED' ? { remoteCode } : {}),
     });
     const request = await nextFrame(browser);
     if (!("method" in request) || request.method !== "model.generate") throw new Error("EXPECTED_GENERATE");
@@ -121,6 +120,17 @@ describe("DSH web model loopback host", () => {
       },
     }));
     await assertion;
+    if (remoteCode === "SESSION_QUARANTINED") {
+      // This is an explicit caller retry, not an automatic replay. Its new
+      // generate frame proves the journal recorded failed/not_started rather
+      // than quarantining this new request as ambiguous.
+      const retry = collect(host.generate(generateInput()));
+      const retryRequest = await nextFrame(browser);
+      if (!("method" in retryRequest) || retryRequest.method !== "model.generate") throw new Error("EXPECTED_RETRY_GENERATE");
+      sendAccepted(browser, retryRequest);
+      sendEvent(browser, 1, { type: "completed", finish_reason: "stop" });
+      await expect(retry).resolves.toEqual([{ type: "completed", finish_reason: "stop" }]);
+    }
   });
 
   it.each(['SESSION_QUARANTINED', 'PRIVATE_UPSTREAM_VALUE'])("preserves a safe unknown-outcome rejection without replay: %s", async remoteCode => {

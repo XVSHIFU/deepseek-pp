@@ -1,5 +1,14 @@
 # Web Model Broker × Local DSH — Active Progress
 
+## 2026-09-09 T9 诊断版原位更新与真实只读复测
+
+- 用户确认重新加载 Chrome；其提供的加载来源目录 100 个文件与 `89fce7b` 诊断构建散列一致。主 agent 更新 Harness 插件并重启 3080 服务，保留配对、会话及安装前 profile 配置备份；未操作浏览器扩展管理页、未 push 或发布。
+- pnpm 打印 Done 后未退出，外层 60 秒硬限清理安装进程树。独立核对插件已安装运行文件散列、依赖路径和原 bundle 列表正确后启动新服务，不能记为安装命令正常退出。包管理器挂起的原因与模型请求故障分别处理。
+- 官方完整持久日志确认：会话 `session-39a7d0c5-6eaf-46bc-9f06-be5b80b3fe8d` 在 Default / Thinking off、仅可查看下，先 10 次 glob / 11 模型步，再 42,952 字符合成输入后 8 次 glob / 9 模型步；18 个工具结果无错误，两个 turn/end 均 completed。日志 SHA-256 与验证边界见 `docs/verification/T9_本机诊断说明.md`。
+- 本次未复现首次中断，不宣称上下文超限已证实或 T9 已修复。继续实施独立可确认的 T9.4 小切片：新请求未派发即遭旧链隔离时报告 not_started + retryable:false，保留旧 ambiguous、禁止自动重放；首次故障继续等待有效诊断证据。
+- **上述 T9.4 小切片已完成源码修正：** cache reserve 拒绝限于 `!turnInvoked && !reserved`，adapter session-map 拒绝限于未 accepted；后阶段同码保守保持 unknown，duplicate/identity 不变。Host 保留固定码并将新请求记为 not_started；中文说明“本次请求尚未发送到网页”，建议通过官方新建/分支核对已完成操作，没有新增自动恢复或清除旧记录。原 provider maxRetries=0 不变。
+- 子 agent 实现后主 agent 复审并独立以外层硬限 60 秒执行：`harness-bridge-recovery`、`dsh-web-model-transport`、`dsh-llm-deepseek-web`、`harness-deepseek-turn-adapter` 四文件 **170/170**（14.86 秒）；此前 adapter/诊断两文件 93/93 与本批有交叉，不累计。最终根 compile、prompt freeze **7/7**、插件 build 和 diff-check 通过。该小切片未打包浏览器、未安装到用户当前环境、未真实网页复验；服务仍运行 89fce7b 诊断版，保留供取证使用。
+
 ## 2026-09-09 T9 长会话诊断启动
 
 - 用户批准先诊断再修复，并授权最多三位并发子 agent。当前两位分别审查流处理与上下文/恢复，主 agent 汇总；执行边界与分阶段合同见 `docs/plan/t9-long-session-recovery.md`。

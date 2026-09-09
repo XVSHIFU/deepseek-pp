@@ -808,6 +808,7 @@ function preStartRemoteError(frame: JsonRpcErrorResponse): BrokerError {
       case "DEEPSEEK_PREPARATION_FAILED":
       case "MODEL_PREPARATION_FAILED":
       case "BROKER_BUSY":
+      case "SESSION_QUARANTINED":
         return new BrokerError(frame.error.data.error_code, outcome);
     }
   }

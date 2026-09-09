@@ -1,6 +1,6 @@
 # T9：长会话诊断、上下文传递与恢复
 
-状态：实施中，当前仅 T9.1 取证补丁；首次失败的上游直接原因尚未确认。
+状态：实施中。T9.1 诊断版已安装并完成两轮真实只读测试，本次未复现首次失败；T9.4 隔离拒绝分类小切片已实现并通过定向回归，尚未部署，不代表首次故障已修复。
 
 ## 授权与边界
 
@@ -17,6 +17,7 @@
 4. 客户端对 HTTP 200 / 有 body 的 completion 按 SSE 读取，即使 body 是 JSON 业务错误；EOF 不等于模型成功完成，缺少受识别 FINISHED 时会统一成为 stream_incomplete。现有日志不能区分 JSON 业务拒绝、空流、SSE error 或完成格式遗漏。
 5. dispatched/streaming 后结果不明会隔离 session-map；持久 result-cache 也会在下一次 reserve 时按逻辑 sessionId 拒绝新请求。coordinator 将 SESSION_QUARANTINED 投影为 unknown，Host 又丢弃具体安全原因。这解释了后续快速失败的代码路径。
 6. 侧边栏支持 DOM 和控制台日志读取，本次控制台 error/warn 为空；没有可用的 F12 Network 工具。Chrome 扩展管理页被工具安全策略禁止访问，必须由用户手动更新/重新加载，不能用其他控制方式绕过。
+7. 2026-09-09 用户原位重新加载诊断扩展，加载来源目录的 100 个产物散列与诊断构建一致。更新 Harness 插件并重启后，同一新会话先后完成短输入 10 次 glob、42,952 字符合成输入 8 次 glob，共 20 个模型步，均有持久化 completed。这次成功不能推翻旧故障，也不能证明上下文阈值或首次原因；诊断代码没有改变完成判定。
 
 ## T9.1：最小取证与原因传递（当前）
 
@@ -56,6 +57,9 @@
 
 ## T9.4：明确错误与可用恢复
 
+- 当前已实现切片：仅修正已证明未派发的新请求被 SESSION_QUARANTINED 拒绝时的分类和提示；不等同于实现同会话恢复、上下文同步或自动轮换。与尚待取证的 T9.2 分开验收。
+- 分类由具体阶段限定：cache reserve 拒绝必须 `!turnInvoked && !reserved`；adapter session-map reserve 拒绝必须尚未 accepted。同码若出现在较晚阶段仍保持 unknown。Host 记录本请求 not_started，LLM 给中文说明与官方新建/分支建议；不新增恢复按钮，不自动创建会话，旧请求仍可查询为 ambiguous。provider 的固定 maxRetries=0 保持不变。
+- 代码回归：四文件 170/170、compile、prompt freeze 7/7、插件 build、diff-check；当前运行诊断版仍为 89fce7b，未覆盖它，不将该小切片记为真实部署验收。
 - 首先区分原请求状态与新请求的 admission：只有可证明被旧 session 隔离、且本次未发送的全新请求，才返回 not_started + retryable:false。DUPLICATE_REQUEST / REQUEST_IDENTITY_MISMATCH 不得一概改为 not_started。
 - 保留原 ambiguous 请求和旧链的隔离记录，禁止清除标记后重新发送原请求。
 - 恢复须先确认旧请求已停止，再核对 Harness 已提交工具结果。已成功工具不自动重跑；执行结果未知的副作用需要用户核实。

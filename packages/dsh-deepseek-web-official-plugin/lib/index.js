@@ -1964,6 +1964,7 @@ function preStartRemoteError(frame) {
       case "DEEPSEEK_PREPARATION_FAILED":
       case "MODEL_PREPARATION_FAILED":
       case "BROKER_BUSY":
+      case "SESSION_QUARANTINED":
         return new BrokerError(frame.error.data.error_code, outcome);
     }
   }
@@ -2706,6 +2707,8 @@ function normalizeAdapterError(error, signal) {
       case "DEEPSEEK_PREPARATION_FAILED":
       case "MODEL_PREPARATION_FAILED":
         return new LlmError3("The DeepSeek web model could not prepare the request before generation.", error.code, { cause: error });
+      case "SESSION_QUARANTINED":
+        return new LlmError3("\u4E0A\u4E00\u7F51\u9875\u8BF7\u6C42\u7684\u7ED3\u679C\u672A\u786E\u8BA4\uFF0C\u5F53\u524D\u7F51\u9875\u94FE\u5DF2\u9694\u79BB\uFF1B\u672C\u6B21\u8BF7\u6C42\u5C1A\u672A\u53D1\u9001\u5230\u7F51\u9875\u3002\u8BF7\u5728 Harness \u4E2D\u65B0\u5EFA\u6216\u5206\u652F\u4E00\u4E2A\u4F1A\u8BDD\uFF0C\u5E76\u5148\u6838\u5BF9\u5DF2\u5B8C\u6210\u7684\u64CD\u4F5C\uFF1B\u7CFB\u7EDF\u4E0D\u4F1A\u81EA\u52A8\u91CD\u653E\u539F\u8BF7\u6C42\u3002", error.code, { cause: error });
       case "REQUEST_TIMEOUT":
         return new LlmError3("The DeepSeek Web browser broker timed out.", "TIMEOUT", { cause: error });
       case "PROTOCOL_VIOLATION":
