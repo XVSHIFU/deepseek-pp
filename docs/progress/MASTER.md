@@ -8,6 +8,7 @@
 - 侧边栏可操作且控制台无相关 error/warn，但无 Network 接口；工具拒绝访问 Chrome 扩展管理页，更新/重新加载须用户完成，不绕过限制。本阶段未改变已安装版本、配对、正式 Release 或远端仓库。
 - T9.1 诊断补丁：Mode A 显式 opt-in 的完成摘要通过固定 reason 编码贯穿浏览器持久化与 Host 显示；只包含枚举/受限数字，JSON 临时缓存最多 64 KiB，数字 code/bizCode 限 0..999999。原 4 MiB completion 网络限制仍生效；审查所提“无限读取”并不成立，但诊断缓存另行收紧。没有改变 finished、隔离或重试判定。Host 对 unknown outcome 保留已允许的固定 remoteCode，不再把 SESSION_QUARANTINED 丢成通用原因。
 - 已执行：Host/模型 adapter/诊断编码三文件 **94/94**，浏览器 adapter/恢复/诊断编码三文件 **116/116**（两批含交叉覆盖）；客户端组由子 agent 验证 **115/115**。根 compile、prompt freeze **7/7**、官方插件 build 和 diff-check 通过。诊断版真实网页响应取证待原位更新后进行；此处不能宣称首次故障原因或 T9 已修复。
+- 诊断源码提交 `89fce7b4b2f0a4ca93f83d45fe83e2c9dc9a0588`。本机 Chrome 专项构建放在项目外 `deepseek-t9-diagnostic-20260909/`：100 文件复制散列、59 个文本文件 UTF-8/JS ASCII 检查通过；Chrome ZIP SHA-256 `fe5ea4182fb69b8c9950d5fea9d72566e9ea83696a0cd41d3872a6b6bf4608dc`，插件 TGZ SHA-256 `ed79b5821d5a592a17ac1f74fc1e9a53e80004c257a7825ccc584c4c5db85dfd`。只构建 Chrome 诊断包，不冒充三浏览器/完整 CI 验收；未安装覆盖用户环境、未 push/发布。待用户提供原扩展加载来源目录并手动重新加载后，由主 agent 更新 Harness 插件、复现实测并收敛后续实现方案。
 
 ## 2026-09-08 另一台 Windows 停止问题：格式修复与诊断包
 
